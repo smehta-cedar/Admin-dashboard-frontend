@@ -1,1 +1,13 @@
 @import "tailwindcss";
+
+@layer base {
+  html {
+    /* Keep #hash targets clear of the sticky navbar (h-14). */
+    scroll-padding-top: 3.5rem;
+  }
+
+  /* Stop the page scrolling behind the open mobile drawer. */
+  html:has(dialog[open]:modal) {
+    overflow: hidden;
+  }
+}
