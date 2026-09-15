@@ -40,7 +40,7 @@ Shared pieces (extracted when Carriers landed — use these, don't copy):
 | `components/status-badge.tsx` | `StatusBadge` |
 | `components/modal-dialog.tsx` | `useModalDialog(open)` → `{ dialogRef, close }`, `ModalDialog` |
 | `components/classes.ts` | `INPUT_CLASS`, `PRIMARY_BUTTON_CLASS`, `GHOST_BUTTON_CLASS`, `ROW_BUTTON_CLASS` |
-| `lib/change-notes.ts` | `nextId`, `fieldText`, `diffValues(FIELDS, before, after)`, `FieldChange<F>` |
+| `lib/change-notes.ts` | `nextId`, `fieldText`, `diffValues(FIELDS, before, after, redact?)`, `FieldChange<F>` |
 
 Constants a client view needs from an entity (like `LINES_OF_BUSINESS`) go in
 a separate client-safe module such as `lib/lines-of-business.ts`, not in the
@@ -112,7 +112,8 @@ Table  — or EmptyState with the same Add button when the list is empty
 - IDs and codes: `font-mono text-gray-600`. Secondary text: `text-gray-600`.
   Primary name: `text-gray-900`, `whitespace-nowrap`.
 - Status badge: `rounded-md px-2 py-0.5 text-xs font-medium capitalize` +
-  `active: bg-green-50 text-green-700`, `inactive: bg-gray-100 text-gray-600`.
+  `active: bg-green-50 text-green-700`, `inactive: bg-gray-100 text-gray-600`
+  (and `pending: bg-amber-50 text-amber-700`, used only by Logins).
 - Row action: text button `Edit` with sr-only entity name
   (`Edit<span className="sr-only"> {name}</span>`), right-aligned.
 - Secondary/list data (aliases, notes) does **not** go in the main row — see §7.
@@ -217,3 +218,138 @@ adds two variations on the Agents form: a required checkbox group
 (`<fieldset>` + `<legend>`, "at least one" checked in `onSubmit`, error on
 each checkbox via `aria-invalid`/`aria-describedby`), and a name uniqueness
 check against other carriers' names *and* aliases, ignoring case.
+
+### Logins
+
+Files: [lib/logins.ts](../lib/logins.ts),
+[app/(dashboard)/logins/page.tsx](../app/(dashboard)/logins/page.tsx),
+[app/(dashboard)/logins/logins-view.tsx](../app/(dashboard)/logins/logins-view.tsx),
+[app/(dashboard)/logins/credential-value.tsx](../app/(dashboard)/logins/credential-value.tsx).
+
+Logins is the first entity that points at other entities. A login is one
+agent's access at one carrier.
+
+| Field | Required | Type | Notes |
+| --- | --- | --- | --- |
+| `agentId` | yes | string | Shown by agent name. |
+| `carrierId` | yes | string | Shown by carrier name. One login per agent + carrier. |
+| `writingNumber` | yes | string | Producer ID the carrier assigned. Unique within a carrier, ignoring case. |
+| `username` | yes | string | Portal username. |
+| `portalPassword` | yes | string | Portal password, stored exactly as typed. Dummy values only (see Security). |
+| `status` | yes | `"active" \| "pending" \| "inactive"` | Default `"active"` on add. |
+
+**Loading.** `page.tsx` loads logins, notes, agents and carriers, and passes
+slim `{ id, name, status }` options; the form's agent and carrier `<select>`s
+are sorted by name with inactive ones marked "(inactive)". `page.tsx` also
+calls `await connection()` so the route renders per request: the view reads
+`?carrier=` with `useSearchParams`, and on a prerendered page that needs a
+Suspense boundary (or the build fails) and would render the table on the
+client. `getLogins()` returns ID order; a record missing `portalPassword`
+loads as `""`, and a missing or unknown `status` loads as `"active"` with a
+`console.warn` naming the login ID (server log, not the browser).
+
+**Status.** `LoginStatus` in `lib/logins.ts` adds `pending`; it is
+Logins-only. The Agent and Carrier status types are unchanged
+(`active | inactive`). `StatusBadge` accepts all three (pending is amber, §6).
+
+**Table.**
+
+- Columns: **Agent, Carrier, Writing number, Portal username, Password, Status, [actions]**.
+  No ID column; agent and carrier show names.
+- Default sort: agent name, then carrier name. Rows are rebuilt from state on
+  every render, so an add or edit lands in its sorted place at once.
+- The agent name is the expand button (§7). The expanded row shows Notes only
+  (no aliases). Several rows can be open at once (`Set` of login IDs).
+
+**Carrier filter.**
+
+- A `<select>` in `PageHeader` actions, left of Add login. Styled as
+  `INPUT_CLASS` without `mt-1` and `w-full`; sr-only label "Filter by carrier".
+  Options: "All carriers", then every carrier sorted by name (including ones
+  with no logins), with " (inactive)" after inactive carriers.
+- Stored as `?carrier=<carrierId>`. The value is React state seeded from the
+  URL on first render, so the server and first client render agree (no flash
+  of all logins, no hydration mismatch). A change sets state and calls
+  `window.history.replaceState`: no reload, no refetch. "All carriers" removes
+  the param. State drives the controlled select, rather than reading
+  `useSearchParams` on each render, so it updates on the same render.
+- Missing or unknown ID means all carriers; an unknown ID is left in the URL
+  but the dropdown shows "All carriers".
+- Filtering is client-side on the loaded list, before the sort. A login edited
+  so it no longer matches drops out of the list; the filter is not reset.
+- A filtered carrier with no logins shows one table row:
+  "No logins for <carrier name>." (`EmptyState` is still used when there are no
+  logins at all.)
+- **Add pre-fill:** with a valid filter, Add opens with that carrier selected
+  (inactive carriers too), still editable. With no filter it starts empty.
+  Edit always starts on the login's own carrier. The form remounts on every
+  open, so it uses the filter at that moment.
+- **Hidden-login message:** when Add saves a login for a carrier other than the
+  filter, a gray notice ("Login added for UHC. It's hidden by the current
+  filter.") shows in the `role="status"` region under the unsaved banner. It
+  clears on the next filter change or after 6 seconds; it is keyed by login
+  ID, so a second hidden add restarts the timer.
+
+**Validation.**
+
+- Every field is `required`. Writing number and username are trimmed and use
+  `pattern=".*\S.*"`.
+- The password is **not** trimmed or lowercased and has no `pattern`.
+  `onSubmit` rejects it when it is blank after trimming ("Password can't be
+  blank."); otherwise it is saved exactly as typed, spaces included.
+- One login per agent + carrier, error under Carrier:
+  "Maria Alva already has a login at Humana."
+- Writing number unique within a carrier, ignoring case, error under Writing
+  number: "Writing number H4410087 is already used at Humana by Robt Klein."
+  The number is shown as stored. Skipped when it's the same login the first
+  error names.
+- Messages use agent and carrier names, never IDs.
+
+**Notes.**
+
+- Agent and carrier are recorded **by name**, not ID: the view maps IDs to
+  names before `diffValues`, so a note still reads well if a name changes later.
+- The password is passed as a redacted field:
+  `diffValues(FIELDS, before, after, ["portalPassword"])` compares the real
+  values but records `{ field, from: "", to: "", redacted: true }`. `NoteList`
+  renders a redacted change as "Password set" on an added note and "Password
+  changed" on an edited one, alone or alongside other changes. The password
+  value is never written to a note. Agents and Carriers don't pass `redact`.
+- Status changes show as usual: "Status: active → pending".
+
+**Hide/show and copy** (`credential-value.tsx`).
+
+- `CredentialValue` renders the username and password cells. The password
+  shows a fixed "••••••••" (same length for every password). Order in the
+  password cell: value, eye button, copy button. Username stays visible and
+  gets copy only. An empty value shows "—" with no buttons.
+- The eye button toggles that row only: `aria-label` "Show password" / "Hide
+  password"; eye icon while hidden, eye-off while visible.
+- Reveal state lives in each cell and remembers the revealed value, so a page
+  reload, a row filtered out and back, and a newly added login all start
+  hidden, and an edit that saves a new password hides it again. An edit that
+  leaves the password alone keeps a revealed row as it was.
+- Copy: clicking the value (a `<button>` with `cursor-pointer` and a hover) or
+  the copy icon calls `navigator.clipboard.writeText` with the exact stored
+  value, untrimmed. It works while masked and does not reveal. Feedback swaps
+  the icon for a check mark and shows "Copied" for 1.5 seconds, or "Couldn't
+  copy" if the clipboard fails or is missing, as a small label floating above
+  the icon so the cell width never changes. The `aria-live` region stays
+  mounted.
+- The clipboard needs a secure context: HTTPS or `localhost`. Over plain http
+  on a network address, every copy shows "Couldn't copy".
+- Only the agent button expands a row, so these buttons never trigger it.
+- The form uses `PasswordInput`: `type="password"` until its eye button shows
+  it, hidden again every time the dialog opens, `autoComplete="new-password"`
+  so the browser doesn't fill in the signed-in user's own saved password.
+- Icons are inline SVGs in the chevron's style (`aria-hidden`); no icon library.
+
+**Security.**
+
+- `data/logins.json` is committed to git, so it holds dummy passwords only
+  (`dummy-pass-1` … `dummy-pass-5`). The TODO in `lib/logins.ts` says real
+  passwords come only after the move to Supabase with admin-only access.
+- Masking is on-screen only. Today every password is sent to the browser in
+  the page's props and can be read in developer tools.
+- Supabase plan: don't send passwords with the list. Fetch one login's password
+  when it is revealed or copied, from an admin-only query.

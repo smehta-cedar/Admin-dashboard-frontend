@@ -7,7 +7,7 @@ import "server-only";
  *
  * A carrier is listed once however many lines of business it writes (e.g.
  * HealthSpring is both MAPD and Supp/Ancillary). Writing numbers are not
- * stored on carriers; they will live with Logins.
+ * stored on carriers; they live with Logins in lib/logins.ts.
  *
  * The commission matrix still uses the slim `Carrier` ({ code, name }) and its
  * own getCarriers() from commissions.ts. Don't widen that; use CarrierRecord

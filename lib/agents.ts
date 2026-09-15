@@ -5,8 +5,8 @@ import "server-only";
  * data/agents.json and data/agent-notes.json; later it queries Supabase. The
  * JSON is trusted as-is, not validated.
  *
- * Writing numbers are not stored on agents or carriers. They will live with
- * Logins (one agent's producer ID at one carrier).
+ * Writing numbers are not stored on agents or carriers. They live with
+ * Logins in lib/logins.ts (one agent's producer ID at one carrier).
  *
  * The commission matrix still uses the slim `Agent` ({ id, name }) from
  * commissions.ts. Don't widen that; use AgentRecord here for agent detail.

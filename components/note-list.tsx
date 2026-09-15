@@ -33,13 +33,23 @@ export function NoteList<F extends string>({ notes, labels }: NoteListProps<F>) 
           <ul className="mt-1 space-y-0.5 break-words text-sm text-gray-700">
             {note.changes.map((change) => (
               <li key={change.field}>
-                <span className="font-medium text-gray-900">{labels[change.field]}:</span>{" "}
-                {note.kind === "added" ? (
-                  change.to
+                {change.redacted ? (
+                  // Secret value: say only that it was set or changed.
+                  <>
+                    <span className="font-medium text-gray-900">{labels[change.field]}</span>{" "}
+                    {note.kind === "added" ? "set" : "changed"}
+                  </>
                 ) : (
                   <>
-                    {change.from || "(empty)"} <span aria-hidden="true">→</span>
-                    <span className="sr-only">changed to</span> {change.to || "(empty)"}
+                    <span className="font-medium text-gray-900">{labels[change.field]}:</span>{" "}
+                    {note.kind === "added" ? (
+                      change.to
+                    ) : (
+                      <>
+                        {change.from || "(empty)"} <span aria-hidden="true">→</span>
+                        <span className="sr-only">changed to</span> {change.to || "(empty)"}
+                      </>
+                    )}
                   </>
                 )}
               </li>

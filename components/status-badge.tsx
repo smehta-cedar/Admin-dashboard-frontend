@@ -1,7 +1,9 @@
-type Status = "active" | "inactive";
+/** Every status a badge can show. Agents and carriers use active/inactive; logins add pending. */
+type Status = "active" | "pending" | "inactive";
 
 const STATUS_STYLES: Record<Status, string> = {
   active: "bg-green-50 text-green-700",
+  pending: "bg-amber-50 text-amber-700",
   inactive: "bg-gray-100 text-gray-600",
 };
 
