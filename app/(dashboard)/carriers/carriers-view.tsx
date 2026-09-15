@@ -13,56 +13,56 @@ import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
 import { NoteList } from "@/components/note-list";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
-import type { AgentField, AgentNote, AgentRecord } from "@/lib/agents";
+import type { CarrierField, CarrierNote, CarrierRecord } from "@/lib/carriers";
 import { diffValues, nextId } from "@/lib/change-notes";
+import { LINES_OF_BUSINESS } from "@/lib/lines-of-business";
 
 /*
- * Agents table with dummy add and edit dialogs. Every add or edit records a
+ * Carriers table with dummy add and edit dialogs. Every add or edit records a
  * note listing what changed; clicking a name expands the row to show that
- * agent's aliases and notes. Agents and notes live in component state only:
- * nothing reaches a server, and a refresh brings back the JSON.
+ * carrier's aliases and notes. Carriers and notes live in component state
+ * only: nothing reaches a server, and a refresh brings back the JSON.
  */
 
-type AgentsViewProps = {
-  initialAgents: AgentRecord[];
-  initialNotes: AgentNote[];
+type CarriersViewProps = {
+  initialCarriers: CarrierRecord[];
+  initialNotes: CarrierNote[];
 };
 
-/** Which dialog is open. Edit holds the agent as it was when the dialog opened. */
-type Editor = { mode: "add" } | { mode: "edit"; agent: AgentRecord };
+/** Which dialog is open. Edit holds the carrier as it was when the dialog opened. */
+type Editor = { mode: "add" } | { mode: "edit"; carrier: CarrierRecord };
 
-type AgentValues = Omit<AgentRecord, "id">;
+type CarrierValues = Omit<CarrierRecord, "id">;
 
 /** Also the order changes are compared and listed in. */
-const FIELD_LABELS: Record<AgentField, string> = {
+const FIELD_LABELS: Record<CarrierField, string> = {
   name: "Name",
   aliases: "Aliases",
+  linesOfBusiness: "Lines of business",
   status: "Status",
-  npn: "NPN",
-  email: "Email",
-  phone: "Phone",
 };
 
-const FIELDS = Object.keys(FIELD_LABELS) as AgentField[];
+const FIELDS = Object.keys(FIELD_LABELS) as CarrierField[];
 
-const COLUMNS = ["ID", "NPN", "Name", "Status", "Email", "Phone"];
+const COLUMNS = ["ID", "Name", "Lines of business", "Status"];
 
-const EMPTY_VALUES = { name: "", aliases: [], npn: "", email: "", phone: "" };
+const EMPTY_VALUES = { name: "", aliases: [], linesOfBusiness: [] };
 
-export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
-  const [agents, setAgents] = useState(initialAgents);
+export function CarriersView({ initialCarriers, initialNotes }: CarriersViewProps) {
+  const [carriers, setCarriers] = useState(initialCarriers);
   const [notes, setNotes] = useState(initialNotes);
   const [unsavedCount, setUnsavedCount] = useState(0);
   const [editor, setEditor] = useState<Editor | null>(null);
-  const [npnError, setNpnError] = useState<string | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [linesError, setLinesError] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const { dialogRef, close: closeDialog } = useModalDialog(editor !== null);
   const id = useId();
 
-  const toggleExpanded = (agentId: string) =>
+  const toggleExpanded = (carrierId: string) =>
     setExpandedIds((current) => {
       const next = new Set(current);
-      if (!next.delete(agentId)) next.add(agentId);
+      if (!next.delete(carrierId)) next.add(carrierId);
       return next;
     });
 
@@ -70,7 +70,8 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
   // the editor unmounts the form, which resets it.
   const handleClose = () => {
     setEditor(null);
-    setNpnError(null);
+    setNameError(null);
+    setLinesError(null);
   };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -78,40 +79,57 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
     if (!editor) return;
 
     const data = new FormData(event.currentTarget);
-    const text = (field: AgentField) => String(data.get(field) ?? "").trim();
-    const values: AgentValues = {
+    const text = (field: CarrierField) => String(data.get(field) ?? "").trim();
+    const checkedLines = data.getAll("linesOfBusiness");
+    const values: CarrierValues = {
       name: text("name"),
       aliases: text("aliases")
         .split(",")
         .map((alias) => alias.trim())
         .filter(Boolean),
+      linesOfBusiness: LINES_OF_BUSINESS.filter((line) => checkedLines.includes(line)),
       status: text("status") === "inactive" ? "inactive" : "active",
-      npn: text("npn"),
-      email: text("email"),
-      phone: text("phone"),
     };
 
-    const editingId = editor.mode === "edit" ? editor.agent.id : null;
-    const npnOwner = agents.find((agent) => agent.id !== editingId && agent.npn === values.npn);
-    if (npnOwner) {
-      setNpnError(`NPN ${values.npn} already belongs to ${npnOwner.name}.`);
-      return;
-    }
+    // A name can't repeat another carrier's name or alias (ignoring case).
+    const editingId = editor.mode === "edit" ? editor.carrier.id : null;
+    const nameKey = values.name.toLowerCase();
+    const nameOwner = carriers.find(
+      (carrier) =>
+        carrier.id !== editingId &&
+        [carrier.name, ...carrier.aliases].some((name) => name.toLowerCase() === nameKey),
+    );
+    const nameMessage = !nameOwner
+      ? null
+      : nameOwner.name.toLowerCase() === nameKey
+        ? `${nameOwner.name} is already carrier ${nameOwner.id}.`
+        : `${values.name} is already an alias of ${nameOwner.name}.`;
+    const linesMessage =
+      values.linesOfBusiness.length === 0 ? "Choose at least one line of business." : null;
+    setNameError(nameMessage);
+    setLinesError(linesMessage);
+    if (nameMessage || linesMessage) return;
 
-    const agentId = editingId ?? nextId(agents);
-    const changes = diffValues(FIELDS, editor.mode === "edit" ? editor.agent : EMPTY_VALUES, values);
+    const carrierId = editingId ?? nextId(carriers);
+    const changes = diffValues(
+      FIELDS,
+      editor.mode === "edit" ? editor.carrier : EMPTY_VALUES,
+      values,
+    );
 
     // Saving an edit with nothing changed just closes, without a note.
     if (changes.length > 0) {
-      setAgents((current) =>
+      setCarriers((current) =>
         editor.mode === "edit"
-          ? current.map((agent) => (agent.id === agentId ? { id: agentId, ...values } : agent))
-          : [...current, { id: agentId, ...values }],
+          ? current.map((carrier) =>
+              carrier.id === carrierId ? { id: carrierId, ...values } : carrier,
+            )
+          : [...current, { id: carrierId, ...values }],
       );
       setNotes((current) => [
         {
           id: nextId(current),
-          agentId,
+          carrierId,
           kind: editor.mode === "edit" ? "edited" : "added",
           createdAt: new Date().toISOString(),
           changes,
@@ -125,15 +143,15 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
 
   const addButton = (
     <button type="button" onClick={() => setEditor({ mode: "add" })} className={PRIMARY_BUTTON_CLASS}>
-      Add agent
+      Add carrier
     </button>
   );
 
-  const editing = editor?.mode === "edit" ? editor.agent : undefined;
+  const editing = editor?.mode === "edit" ? editor.carrier : undefined;
 
   return (
     <>
-      <PageHeader title="Agents" actions={addButton} />
+      <PageHeader title="Carriers" actions={addButton} />
 
       <div role="status">
         {unsavedCount > 0 ? (
@@ -144,10 +162,10 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
         ) : null}
       </div>
 
-      {agents.length === 0 ? (
+      {carriers.length === 0 ? (
         <EmptyState
-          title="No agents yet"
-          description="Add an agent to see them listed here."
+          title="No carriers yet"
+          description="Add a carrier to see it listed here."
           action={addButton}
         />
       ) : (
@@ -170,24 +188,23 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 border-t border-gray-200">
-              {agents.map((agent) => {
-                const expanded = expandedIds.has(agent.id);
-                const detailsId = `${id}-details-${agent.id}`;
+              {carriers.map((carrier) => {
+                const expanded = expandedIds.has(carrier.id);
+                const detailsId = `${id}-details-${carrier.id}`;
 
                 return (
-                  <Fragment key={agent.id}>
+                  <Fragment key={carrier.id}>
                     <tr className={expanded ? "bg-gray-50" : undefined}>
-                      <td className="px-4 py-2.5 font-mono text-gray-600">{agent.id}</td>
-                      <td className="px-4 py-2.5 font-mono text-gray-600">{agent.npn}</td>
+                      <td className="px-4 py-2.5 font-mono text-gray-600">{carrier.id}</td>
                       <td className="px-4 py-2.5">
                         <button
                           type="button"
-                          onClick={() => toggleExpanded(agent.id)}
+                          onClick={() => toggleExpanded(carrier.id)}
                           aria-expanded={expanded}
                           aria-controls={expanded ? detailsId : undefined}
                           className="-ml-1 flex items-center gap-1 whitespace-nowrap rounded-md px-1 py-0.5 text-gray-900 hover:bg-gray-100"
                         >
-                          {agent.name}
+                          {carrier.name}
                           <svg
                             aria-hidden="true"
                             viewBox="0 0 20 20"
@@ -202,18 +219,19 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
                           </svg>
                         </button>
                       </td>
-                      <td className="px-4 py-2.5">
-                        <StatusBadge status={agent.status} />
+                      <td className="whitespace-nowrap px-4 py-2.5 text-gray-600">
+                        {carrier.linesOfBusiness.join(", ")}
                       </td>
-                      <td className="px-4 py-2.5 text-gray-600">{agent.email}</td>
-                      <td className="whitespace-nowrap px-4 py-2.5 text-gray-600">{agent.phone}</td>
+                      <td className="px-4 py-2.5">
+                        <StatusBadge status={carrier.status} />
+                      </td>
                       <td className="px-4 py-2.5 text-right">
                         <button
                           type="button"
-                          onClick={() => setEditor({ mode: "edit", agent })}
+                          onClick={() => setEditor({ mode: "edit", carrier })}
                           className={ROW_BUTTON_CLASS}
                         >
-                          Edit<span className="sr-only"> {agent.name}</span>
+                          Edit<span className="sr-only"> {carrier.name}</span>
                         </button>
                       </td>
                     </tr>
@@ -225,9 +243,9 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
                               <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                                 Aliases
                               </h3>
-                              {agent.aliases.length > 0 ? (
+                              {carrier.aliases.length > 0 ? (
                                 <ul className="mt-2 space-y-1 text-sm text-gray-900">
-                                  {agent.aliases.map((alias, index) => (
+                                  {carrier.aliases.map((alias, index) => (
                                     <li key={`${index}-${alias}`}>{alias}</li>
                                   ))}
                                 </ul>
@@ -240,7 +258,7 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
                                 Notes
                               </h3>
                               <NoteList
-                                notes={notes.filter((note) => note.agentId === agent.id)}
+                                notes={notes.filter((note) => note.carrierId === carrier.id)}
                                 labels={FIELD_LABELS}
                               />
                             </section>
@@ -260,16 +278,23 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
         {editor ? (
           <form onSubmit={handleSubmit} className="p-6">
             <h2 id={`${id}-title`} className="text-base font-semibold text-gray-900">
-              {editing ? `Edit ${editing.name}` : "Add agent"}
+              {editing ? `Edit ${editing.name}` : "Add carrier"}
             </h2>
             <p className="mt-1 text-sm text-gray-600">
               {editing
                 ? "Saving records a note of what changed. Nothing is saved anywhere yet; refreshing undoes it."
-                : "Not saved anywhere yet. The agent stays in the list until you refresh."}
+                : "Not saved anywhere yet. The carrier stays in the list until you refresh."}
             </p>
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <Field label="Name" htmlFor={`${id}-name`} className="sm:col-span-2">
+              <Field
+                label="Name"
+                htmlFor={`${id}-name`}
+                hint={nameError ?? undefined}
+                hintId={`${id}-name-error`}
+                error
+                className="sm:col-span-2"
+              >
                 <input
                   id={`${id}-name`}
                   name="name"
@@ -278,6 +303,9 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
                   pattern=".*\S.*"
                   autoComplete="off"
                   defaultValue={editing?.name}
+                  aria-invalid={nameError ? true : undefined}
+                  aria-describedby={nameError ? `${id}-name-error` : undefined}
+                  onChange={() => setNameError(null)}
                   className={INPUT_CLASS}
                 />
               </Field>
@@ -299,6 +327,31 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
                   className={INPUT_CLASS}
                 />
               </Field>
+              <fieldset className="sm:col-span-2">
+                <legend className="block text-sm font-medium text-gray-900">Lines of business</legend>
+                <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2">
+                  {LINES_OF_BUSINESS.map((line) => (
+                    <label key={line} className="flex items-center gap-2 text-sm text-gray-900">
+                      <input
+                        type="checkbox"
+                        name="linesOfBusiness"
+                        value={line}
+                        defaultChecked={editing?.linesOfBusiness.includes(line)}
+                        aria-invalid={linesError ? true : undefined}
+                        aria-describedby={linesError ? `${id}-lines-error` : undefined}
+                        onChange={() => setLinesError(null)}
+                        className="size-4 accent-gray-900"
+                      />
+                      {line}
+                    </label>
+                  ))}
+                </div>
+                {linesError ? (
+                  <p id={`${id}-lines-error`} className="mt-1 text-xs text-red-700">
+                    {linesError}
+                  </p>
+                ) : null}
+              </fieldset>
               <Field label="Status" htmlFor={`${id}-status`}>
                 <select
                   id={`${id}-status`}
@@ -310,51 +363,6 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
                   <option value="inactive">Inactive</option>
                 </select>
               </Field>
-              <Field
-                label="NPN"
-                htmlFor={`${id}-npn`}
-                hint={npnError ?? undefined}
-                hintId={`${id}-npn-error`}
-                error
-              >
-                <input
-                  id={`${id}-npn`}
-                  name="npn"
-                  type="text"
-                  required
-                  pattern=".*\S.*"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  defaultValue={editing?.npn}
-                  aria-invalid={npnError ? true : undefined}
-                  aria-describedby={npnError ? `${id}-npn-error` : undefined}
-                  onChange={() => setNpnError(null)}
-                  className={INPUT_CLASS}
-                />
-              </Field>
-              <Field label="Email" htmlFor={`${id}-email`}>
-                <input
-                  id={`${id}-email`}
-                  name="email"
-                  type="email"
-                  required
-                  autoComplete="off"
-                  defaultValue={editing?.email}
-                  className={INPUT_CLASS}
-                />
-              </Field>
-              <Field label="Phone" htmlFor={`${id}-phone`}>
-                <input
-                  id={`${id}-phone`}
-                  name="phone"
-                  type="tel"
-                  required
-                  pattern=".*\S.*"
-                  autoComplete="off"
-                  defaultValue={editing?.phone}
-                  className={INPUT_CLASS}
-                />
-              </Field>
             </div>
 
             <div className="mt-6 flex justify-end gap-2">
@@ -362,7 +370,7 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
                 Cancel
               </button>
               <button type="submit" className={PRIMARY_BUTTON_CLASS}>
-                {editing ? "Save changes" : "Add agent"}
+                {editing ? "Save changes" : "Add carrier"}
               </button>
             </div>
           </form>

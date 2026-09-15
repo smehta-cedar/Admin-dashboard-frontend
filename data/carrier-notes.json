@@ -1,0 +1,30 @@
+[
+  {
+    "id": "1",
+    "carrierId": "35",
+    "kind": "added",
+    "createdAt": "2026-08-12T16:30:00.000Z",
+    "changes": [
+      { "field": "name", "from": "", "to": "Sagicor" },
+      { "field": "linesOfBusiness", "from": "", "to": "Annuities" },
+      { "field": "status", "from": "", "to": "active" }
+    ]
+  },
+  {
+    "id": "2",
+    "carrierId": "8",
+    "kind": "edited",
+    "createdAt": "2026-09-01T13:45:00.000Z",
+    "changes": [{ "field": "linesOfBusiness", "from": "MAPD", "to": "MAPD, Supp/Ancillary" }]
+  },
+  {
+    "id": "3",
+    "carrierId": "22",
+    "kind": "edited",
+    "createdAt": "2026-09-10T18:20:00.000Z",
+    "changes": [
+      { "field": "aliases", "from": "", "to": "MoO" },
+      { "field": "linesOfBusiness", "from": "Supp/Ancillary", "to": "Supp/Ancillary, Life" }
+    ]
+  }
+]
