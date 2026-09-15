@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Commissions",
+  title: {
+    template: "%s · Commissions",
+    default: "Commissions",
+  },
 };
 
 export default function RootLayout({
