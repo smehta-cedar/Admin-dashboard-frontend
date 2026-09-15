@@ -1,0 +1,56 @@
+[
+  {
+    "id": "1",
+    "name": "Maria Alva",
+    "aliases": ["Maria Lopez"],
+    "status": "active",
+    "npn": "17654321",
+    "email": "maria.alvarez@example.com",
+    "phone": "(555) 010-2231"
+  },
+  {
+    "id": "2",
+    "name": "James Carter",
+    "aliases": ["Jim Carter", "Carter Insurance Group"],
+    "status": "active",
+    "npn": "18234567",
+    "email": "jcarter@example.com",
+    "phone": "555-010-4410"
+  },
+  {
+    "id": "3",
+    "name": "Pri Natz",
+    "aliases": [],
+    "status": "active",
+    "npn": "19876543",
+    "email": "priya.n@example.com",
+    "phone": "(555) 010-3365"
+  },
+  {
+    "id": "4",
+    "name": "Robt Klein",
+    "aliases": ["Bob Klein"],
+    "status": "inactive",
+    "npn": "16543210",
+    "email": "bob.klein@example.com",
+    "phone": "555.010.7788"
+  },
+  {
+    "id": "5",
+    "name": "Dan Won",
+    "aliases": [],
+    "status": "active",
+    "npn": "21456789",
+    "email": "denise.washington@example.com",
+    "phone": "5550109902"
+  },
+  {
+    "id": "6",
+    "name": "Tom Nan",
+    "aliases": ["Tom Nguyen"],
+    "status": "inactive",
+    "npn": "20123456",
+    "email": "tom.nguyen@example.com",
+    "phone": "555-010-6120"
+  }
+]

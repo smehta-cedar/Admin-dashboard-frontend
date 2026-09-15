@@ -1,0 +1,39 @@
+[
+  {
+    "id": "1",
+    "agentId": "5",
+    "kind": "added",
+    "createdAt": "2026-07-01T14:00:00.000Z",
+    "changes": [
+      { "field": "name", "from": "", "to": "Denise Washington" },
+      { "field": "status", "from": "", "to": "active" },
+      { "field": "npn", "from": "", "to": "21456789" },
+      { "field": "email", "from": "", "to": "denise.washington@example.com" },
+      { "field": "phone", "from": "", "to": "5550109902" }
+    ]
+  },
+  {
+    "id": "2",
+    "agentId": "1",
+    "kind": "edited",
+    "createdAt": "2026-08-04T15:12:00.000Z",
+    "changes": [{ "field": "aliases", "from": "", "to": "Maria Lopez" }]
+  },
+  {
+    "id": "3",
+    "agentId": "4",
+    "kind": "edited",
+    "createdAt": "2026-08-20T19:40:00.000Z",
+    "changes": [{ "field": "status", "from": "active", "to": "inactive" }]
+  },
+  {
+    "id": "4",
+    "agentId": "2",
+    "kind": "edited",
+    "createdAt": "2026-09-02T14:05:00.000Z",
+    "changes": [
+      { "field": "email", "from": "james.carter@example.com", "to": "jcarter@example.com" },
+      { "field": "phone", "from": "555-010-4400", "to": "555-010-4410" }
+    ]
+  }
+]
