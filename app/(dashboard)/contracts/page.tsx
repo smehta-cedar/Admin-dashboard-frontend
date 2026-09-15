@@ -9,8 +9,11 @@ export const metadata: Metadata = {
 export default function ContractsPage() {
   return (
     <>
-      <PageHeader title="Contracts" />
-      <EmptyState title="No contracts yet" description="Contracts will be listed here." />
+      <PageHeader title="Contracts" description="Agreements with agents and carriers." />
+      <EmptyState
+        title="No contracts yet"
+        description="Agent and carrier contracts will be listed here."
+      />
     </>
   );
 }

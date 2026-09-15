@@ -8,11 +8,12 @@ export const metadata: Metadata = {
   title: "Overview",
 };
 
-const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
-
-/** Formats the decimal string directly, so amounts never pass through a float. */
+/** Formats the decimal string with string ops only, so amounts never pass through a float. */
 function formatMoney(amount: Money) {
-  return usd.format(amount as `${number}`);
+  const negative = amount.startsWith("-");
+  const [whole, fraction] = (negative ? amount.slice(1) : amount).split(".");
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return `${negative ? "-" : ""}$${grouped}${fraction === undefined ? "" : `.${fraction}`}`;
 }
 
 function formatMonth(month: Month) {

@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 export default function AgentsPage() {
   return (
     <>
-      <PageHeader title="Agents" />
+      <PageHeader title="Agents" description="People who earn commission." />
       <EmptyState
         title="No agents yet"
         description="Agents will appear here once commissions are assigned to them."

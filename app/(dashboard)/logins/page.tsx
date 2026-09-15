@@ -9,8 +9,11 @@ export const metadata: Metadata = {
 export default function LoginsPage() {
   return (
     <>
-      <PageHeader title="Logins" />
-      <EmptyState title="No logins yet" description="Saved logins will be listed here." />
+      <PageHeader title="Logins" description="Carrier portal access." />
+      <EmptyState
+        title="No logins yet"
+        description="Carrier commission-portal logins will be listed here. Do not put passwords on this page."
+      />
     </>
   );
 }

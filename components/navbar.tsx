@@ -26,6 +26,16 @@ export function Navbar({ title, onMenuClick, drawerId }: NavbarProps) {
       <Link href="/" className="text-base font-semibold text-gray-900">
         {title}
       </Link>
+      {/* Static placeholder until there is auth. */}
+      <div className="ml-auto flex items-center gap-2">
+        <span
+          aria-hidden="true"
+          className="flex size-8 items-center justify-center rounded-full bg-gray-100 text-xs font-semibold text-gray-700"
+        >
+          SM
+        </span>
+        <span className="text-sm font-medium text-gray-900">Sujana</span>
+      </div>
     </header>
   );
 }

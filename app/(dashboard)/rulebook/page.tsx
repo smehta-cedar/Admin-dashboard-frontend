@@ -9,8 +9,11 @@ export const metadata: Metadata = {
 export default function RulebookPage() {
   return (
     <>
-      <PageHeader title="Rulebook" />
-      <EmptyState title="No rules yet" description="Commission rules will be listed here." />
+      <PageHeader title="Rulebook" description="How payouts are calculated." />
+      <EmptyState
+        title="No rules yet"
+        description="Rules for how each carrier’s commissions are calculated will be listed here."
+      />
     </>
   );
 }
