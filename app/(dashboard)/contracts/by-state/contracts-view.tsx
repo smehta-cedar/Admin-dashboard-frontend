@@ -12,7 +12,6 @@ import { Field } from "@/components/field";
 import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
 import { NoteList } from "@/components/note-list";
 import { PageHeader } from "@/components/page-header";
-import { StatusBadge } from "@/components/status-badge";
 import { MAP_BUCKETS, UsMap } from "@/components/us-map";
 import { US_MAP_VIEWBOX } from "@/components/us-map-shapes";
 import type { AgentRecord } from "@/lib/agents";
@@ -22,12 +21,13 @@ import { US_STATE_NAMES, US_STATES } from "@/lib/us-states";
 
 /*
  * Contracts: which agents are licensed in which states. A map colors each
- * state by how many agents hold an active license there; clicking a state lists
+ * state by how many active agents are licensed there; clicking a state lists
  * those agents. Contracts can be added and edited in a dialog, and every add or
- * edit records a note (agent by name). The All licenses table reaches every
- * contract, inactive ones included, and expands to show its states and notes.
+ * edit records a note (agent by name). The All licenses table lists every
+ * contract and expands to show its states and notes.
  * Only active agents appear: `agents` holds active agents only, and a contract
- * for any other agent stays in state but is never shown.
+ * for any other agent stays in state but is never shown. A contract has no
+ * status: agent status (edited on Agents) is the only one.
  * Contracts and notes live in component state only: nothing reaches a server,
  * and a refresh brings back the JSON. Carrier contracts come in a later phase.
  */
@@ -50,12 +50,11 @@ type ContractValues = Omit<ContractRecord, "id">;
 const FIELD_LABELS: Record<ContractField, string> = {
   agentId: "Agent",
   licensedStates: "Licensed states",
-  status: "Status",
 };
 
 const FIELDS = Object.keys(FIELD_LABELS) as ContractField[];
 
-const COLUMNS = ["Agent", "States", "Status"];
+const COLUMNS = ["Agent", "States"];
 
 /** Map zoom as a share of the box width: 1 fits it; above 1 the box scrolls. */
 const MAP_ZOOM = { min: 0.3, max: 2, buttonStep: 0.15 };
@@ -63,7 +62,7 @@ const MAP_ZOOM = { min: 0.3, max: 2, buttonStep: 0.15 };
 /** Map box height as a share of the map's Fit height. */
 const MAP_BOX_HEIGHT = 0.78;
 
-const EMPTY_VALUES ={ agentId: "", licensedStates: [] };
+const EMPTY_VALUES = { agentId: "", licensedStates: [] };
 
 const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
 
@@ -95,13 +94,12 @@ export function ContractsView({ initialContracts, initialNotes, agents }: Contra
     licensedStates: normalizeStates(values.licensedStates),
   });
 
-  // State code → active contracts licensed there, with the agent, sorted by
+  // State code → contracts of active agents licensed there, with the agent, sorted by
   // agent name. Built from live state, so adds and edits recolor the map.
   const licensesByState = useMemo(() => {
     const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
     const byState = new Map<string, { agent: AgentOption; contract: ContractRecord }[]>();
     for (const contract of contracts) {
-      if (contract.status !== "active") continue;
       const agent = agentsById.get(contract.agentId);
       if (!agent) continue;
       for (const code of new Set(contract.licensedStates)) {
@@ -187,8 +185,6 @@ export function ContractsView({ initialContracts, initialNotes, agents }: Contra
       licensedStates: normalizeStates(
         data.getAll("licensedStates").map((code) => String(code).trim()).filter(Boolean),
       ),
-      // Status isn't editable here: an update keeps it and a new contract starts active.
-      status: existing?.status ?? "active",
     };
 
     const contractId = existing?.id ?? nextId(contracts);
@@ -448,9 +444,6 @@ export function ContractsView({ initialContracts, initialNotes, agents }: Contra
                           </button>
                         </td>
                         <td className="px-4 py-2.5 tabular-nums text-gray-600">{states.length}</td>
-                        <td className="px-4 py-2.5">
-                          <StatusBadge status={contract.status} />
-                        </td>
                         <td className="px-4 py-2.5 text-right">
                           <button
                             type="button"

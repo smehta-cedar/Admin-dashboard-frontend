@@ -9,13 +9,14 @@ import "server-only";
  * the states that agent is licensed in. Licenses live here, not on
  * AgentRecord, so a later phase can add carrierId (contracts per carrier)
  * without reshaping Agents.
+ *
+ * A contract has no status of its own: every license listed is in force.
+ * Whether an agent counts is decided by agent status, edited on Agents.
  */
 
 import contractsJson from "@/data/contracts.json";
 import notesJson from "@/data/contract-notes.json";
 import type { AgentRecord } from "@/lib/agents";
-
-export type ContractStatus = "active" | "inactive";
 
 export type ContractRecord = {
   /** Internal ID, numbered 1, 2, 3, … for now. */
@@ -24,8 +25,6 @@ export type ContractRecord = {
   agentId: AgentRecord["id"];
   /** US state codes from lib/us-states.ts ("TX", "CA", …). Empty when none. */
   licensedStates: string[];
-  /** Defaults to "active". Only active records count on the map. */
-  status: ContractStatus;
 };
 
 /** Contract fields a note can record. The ID never changes. */
@@ -55,7 +54,7 @@ export type ContractNote = {
   changes: ContractChange[];
 };
 
-/** Every contract, active and inactive, in ID order (1, 2, 3, …). */
+/** Every contract in ID order (1, 2, 3, …). */
 export async function getContracts(): Promise<ContractRecord[]> {
   return (contractsJson as ContractRecord[]).slice().sort((a, b) => Number(a.id) - Number(b.id));
 }
