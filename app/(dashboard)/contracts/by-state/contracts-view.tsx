@@ -26,11 +26,14 @@ import { US_STATE_NAMES, US_STATES } from "@/lib/us-states";
  * those agents. Contracts can be added and edited in a dialog, and every add or
  * edit records a note (agent by name). The All licenses table reaches every
  * contract, inactive ones included, and expands to show its states and notes.
+ * Only active agents appear: `agents` holds active agents only, and a contract
+ * for any other agent stays in state but is never shown.
  * Contracts and notes live in component state only: nothing reaches a server,
  * and a refresh brings back the JSON. Carrier contracts come in a later phase.
  */
 
-type AgentOption = Pick<AgentRecord, "id" | "name" | "status">;
+/** An active agent. Inactive agents are never passed in. */
+type AgentOption = Pick<AgentRecord, "id" | "name">;
 
 type ContractsViewProps = {
   initialContracts: ContractRecord[];
@@ -127,13 +130,15 @@ export function ContractsView({ initialContracts, initialNotes, agents }: Contra
     { label: "States covered", value: `${statesCovered} of ${US_STATES.length}` },
   ];
 
-  // Every contract, sorted by agent name. Rebuilt on every render, so an add
-  // lands in its sorted place at once.
+  // Every contract of an active agent, sorted by agent name. Rebuilt on every
+  // render, so an add lands in its sorted place at once.
+  const activeAgentIds = new Set(agents.map((agent) => agent.id));
   const rows = contracts
+    .filter((contract) => activeAgentIds.has(contract.agentId))
     .map((contract) => ({ contract, agent: agentName(contract.agentId) }))
     .sort((a, b) => a.agent.localeCompare(b.agent));
 
-  // Add offers every agent. One contract per agent, so picking an agent who
+  // Add offers every active agent. One contract per agent, so picking an agent who
   // already has one loads that contract and saving updates it.
   const sortedAgents = [...agents].sort(byName);
   const contractFor = (agentId: string) =>
@@ -385,7 +390,7 @@ export function ContractsView({ initialContracts, initialNotes, agents }: Contra
         <h2 id={`${id}-table-title`} className="mb-3 text-base font-semibold text-gray-900">
           All licenses
         </h2>
-        {contracts.length === 0 ? (
+        {rows.length === 0 ? (
           <EmptyState
             title="No contracts yet"
             description="Add a contract to list an agent's licensed states."
@@ -557,7 +562,6 @@ export function ContractsView({ initialContracts, initialNotes, agents }: Contra
                     {sortedAgents.map((agent) => (
                       <option key={agent.id} value={agent.id}>
                         {agent.name}
-                        {agent.status === "inactive" ? " (inactive)" : ""}
                         {contractFor(agent.id) ? " (has contract)" : ""}
                       </option>
                     ))}

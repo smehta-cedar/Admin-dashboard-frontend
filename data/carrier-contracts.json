@@ -1,0 +1,21 @@
+[
+  { "id": "1", "agentId": "1", "carrierId": "10" },
+  { "id": "2", "agentId": "2", "carrierId": "10" },
+  { "id": "3", "agentId": "3", "carrierId": "10" },
+  { "id": "4", "agentId": "5", "carrierId": "10" },
+  { "id": "5", "agentId": "1", "carrierId": "11" },
+  { "id": "6", "agentId": "2", "carrierId": "11" },
+  { "id": "7", "agentId": "5", "carrierId": "11" },
+  { "id": "8", "agentId": "2", "carrierId": "5" },
+  { "id": "9", "agentId": "3", "carrierId": "5" },
+  { "id": "10", "agentId": "1", "carrierId": "7" },
+  { "id": "11", "agentId": "1", "carrierId": "13" },
+  { "id": "12", "agentId": "3", "carrierId": "13" },
+  { "id": "13", "agentId": "5", "carrierId": "8" },
+  { "id": "14", "agentId": "1", "carrierId": "22" },
+  { "id": "15", "agentId": "2", "carrierId": "22" },
+  { "id": "16", "agentId": "3", "carrierId": "24" },
+  { "id": "17", "agentId": "2", "carrierId": "30" },
+  { "id": "18", "agentId": "4", "carrierId": "10" },
+  { "id": "19", "agentId": "6", "carrierId": "13" }
+]

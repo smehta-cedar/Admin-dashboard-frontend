@@ -1,16 +1,35 @@
 import type { Metadata } from "next";
-import { EmptyState } from "@/components/empty-state";
-import { PageHeader } from "@/components/page-header";
+import { getAgents } from "@/lib/agents";
+import { getCarrierContractNotes, getCarrierContracts } from "@/lib/carrier-contracts";
+import { getCarriers } from "@/lib/carriers";
+import { CarrierContractsView } from "./carrier-contracts-view";
 
 export const metadata: Metadata = {
   title: "Contracts by carrier",
 };
 
-export default function ContractsByCarrierPage() {
+export default async function ContractsByCarrierPage() {
+  const [contracts, notes, agents, carriers] = await Promise.all([
+    getCarrierContracts(),
+    getCarrierContractNotes(),
+    getAgents(),
+    getCarriers(),
+  ]);
+
   return (
-    <>
-      <PageHeader title="Contracts by carrier" />
-      <EmptyState title="No carrier contracts yet" description="Carrier contracts will be listed here." />
-    </>
+    <CarrierContractsView
+      initialContracts={contracts}
+      initialNotes={notes}
+      // Contracts show active agents only; status is edited on the Agents page.
+      agents={agents
+        .filter((agent) => agent.status === "active")
+        .map(({ id, name }) => ({ id, name }))}
+      carriers={carriers.map(({ id, name, linesOfBusiness, status }) => ({
+        id,
+        name,
+        linesOfBusiness,
+        status,
+      }))}
+    />
   );
 }

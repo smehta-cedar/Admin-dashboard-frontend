@@ -14,5 +14,14 @@ export default async function ContractsPage() {
     getAgents(),
   ]);
 
-  return <ContractsView initialContracts={contracts} initialNotes={notes} agents={agents} />;
+  // Contracts show active agents only; status is edited on the Agents page.
+  return (
+    <ContractsView
+      initialContracts={contracts}
+      initialNotes={notes}
+      agents={agents
+        .filter((agent) => agent.status === "active")
+        .map(({ id, name }) => ({ id, name }))}
+    />
+  );
 }
