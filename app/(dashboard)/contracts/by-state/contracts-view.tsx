@@ -73,6 +73,8 @@ export function ContractsView({ initialContracts, initialNotes, agents }: Contra
   const [unsavedCount, setUnsavedCount] = useState(0);
   const [editor, setEditor] = useState<Editor | null>(null);
   const [agentError, setAgentError] = useState<string | null>(null);
+  // Agent chosen in the Add dialog, so its existing contract (if any) can load.
+  const [pickedAgentId, setPickedAgentId] = useState("");
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   // Map width as a share of its box (1 = Fit). Session only: a refresh resets it to 75%.
@@ -131,10 +133,11 @@ export function ContractsView({ initialContracts, initialNotes, agents }: Contra
     .map((contract) => ({ contract, agent: agentName(contract.agentId) }))
     .sort((a, b) => a.agent.localeCompare(b.agent));
 
-  // One contract per agent, so Add offers only agents without one.
-  const availableAgents = agents
-    .filter((agent) => !contracts.some((contract) => contract.agentId === agent.id))
-    .sort(byName);
+  // Add offers every agent. One contract per agent, so picking an agent who
+  // already has one loads that contract and saving updates it.
+  const sortedAgents = [...agents].sort(byName);
+  const contractFor = (agentId: string) =>
+    contracts.find((contract) => contract.agentId === agentId);
 
   // Clamped and rounded to 0.01 so button clicks don't drift into float noise.
   const changeZoom = (delta: number) =>
@@ -154,6 +157,7 @@ export function ContractsView({ initialContracts, initialNotes, agents }: Contra
   const handleClose = () => {
     setEditor(null);
     setAgentError(null);
+    setPickedAgentId("");
   };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -161,37 +165,38 @@ export function ContractsView({ initialContracts, initialNotes, agents }: Contra
     if (!editor) return;
 
     const data = new FormData(event.currentTarget);
-    const status = String(data.get("status") ?? "").trim();
-    const values: ContractValues = {
-      // The agent can't change on edit, so it isn't a form field there.
-      agentId:
-        editor.mode === "edit" ? editor.contract.agentId : String(data.get("agentId") ?? "").trim(),
-      licensedStates: normalizeStates(
-        data.getAll("licensedStates").map((code) => String(code).trim()).filter(Boolean),
-      ),
-      status: status === "inactive" ? "inactive" : "active",
-    };
+    // The agent can't change on edit, so it isn't a form field there.
+    const agentId =
+      editor.mode === "edit" ? editor.contract.agentId : String(data.get("agentId") ?? "").trim();
 
-    // The select already hides agents with a contract; this guards the rule.
-    const editingId = editor.mode === "edit" ? editor.contract.id : null;
-    const agentTaken = contracts.some(
-      (contract) => contract.id !== editingId && contract.agentId === values.agentId,
-    );
-    const agentMessage = agentTaken ? `${agentName(values.agentId)} already has a contract.` : null;
+    const agentMessage = agents.some((agent) => agent.id === agentId)
+      ? null
+      : "Choose an agent from the agent list.";
     setAgentError(agentMessage);
     if (agentMessage) return;
 
-    const contractId = editingId ?? nextId(contracts);
+    // Adding for an agent who already has a contract updates that contract.
+    const existing = editor.mode === "edit" ? editor.contract : contractFor(agentId);
+    const values: ContractValues = {
+      agentId,
+      licensedStates: normalizeStates(
+        data.getAll("licensedStates").map((code) => String(code).trim()).filter(Boolean),
+      ),
+      // Status isn't editable here: an update keeps it and a new contract starts active.
+      status: existing?.status ?? "active",
+    };
+
+    const contractId = existing?.id ?? nextId(contracts);
     const changes = diffValues(
       FIELDS,
-      editor.mode === "edit" ? shownValues(editor.contract) : EMPTY_VALUES,
+      existing ? shownValues(existing) : EMPTY_VALUES,
       shownValues(values),
     );
 
     // Saving an edit with nothing changed just closes, without a note.
     if (changes.length > 0) {
       setContracts((current) =>
-        editor.mode === "edit"
+        existing
           ? current.map((contract) =>
               contract.id === contractId ? { id: contractId, ...values } : contract,
             )
@@ -201,7 +206,7 @@ export function ContractsView({ initialContracts, initialNotes, agents }: Contra
         {
           id: nextId(current),
           contractId,
-          kind: editor.mode === "edit" ? "edited" : "added",
+          kind: existing ? "edited" : "added",
           createdAt: new Date().toISOString(),
           changes,
         },
@@ -219,6 +224,9 @@ export function ContractsView({ initialContracts, initialNotes, agents }: Contra
   );
 
   const editing = editor?.mode === "edit" ? editor.contract : undefined;
+  // In Add, the picked agent's existing contract; its states prefill the form.
+  const pickedContract = editor?.mode === "add" ? contractFor(pickedAgentId) : undefined;
+  const formContract = editing ?? pickedContract;
 
   return (
     <>
@@ -524,7 +532,9 @@ export function ContractsView({ initialContracts, initialNotes, agents }: Contra
                   htmlFor={`${id}-agent`}
                   hint={
                     agentError ??
-                    (availableAgents.length === 0 ? "Every agent already has a contract." : undefined)
+                    (pickedContract
+                      ? `${agentName(pickedAgentId)} already has a contract. Saving updates it.`
+                      : undefined)
                   }
                   hintId={`${id}-agent-error`}
                   error={agentError !== null}
@@ -534,19 +544,21 @@ export function ContractsView({ initialContracts, initialNotes, agents }: Contra
                     id={`${id}-agent`}
                     name="agentId"
                     required
-                    defaultValue=""
+                    value={pickedAgentId}
                     aria-invalid={agentError ? true : undefined}
-                    aria-describedby={
-                      agentError || availableAgents.length === 0 ? `${id}-agent-error` : undefined
-                    }
-                    onChange={() => setAgentError(null)}
+                    aria-describedby={agentError || pickedContract ? `${id}-agent-error` : undefined}
+                    onChange={(event) => {
+                      setPickedAgentId(event.target.value);
+                      setAgentError(null);
+                    }}
                     className={INPUT_CLASS}
                   >
                     <option value="">Choose an agent</option>
-                    {availableAgents.map((agent) => (
+                    {sortedAgents.map((agent) => (
                       <option key={agent.id} value={agent.id}>
                         {agent.name}
                         {agent.status === "inactive" ? " (inactive)" : ""}
+                        {contractFor(agent.id) ? " (has contract)" : ""}
                       </option>
                     ))}
                   </select>
@@ -557,14 +569,17 @@ export function ContractsView({ initialContracts, initialNotes, agents }: Contra
                 <p id={`${id}-states-hint`} className="mt-1 text-xs text-gray-500">
                   Leave all unchecked if the agent holds no licenses yet.
                 </p>
-                <div className="mt-2 grid max-h-64 grid-cols-2 gap-x-4 gap-y-1.5 overflow-y-auto rounded-md border border-gray-200 p-3 sm:grid-cols-3">
+                <div
+                  key={formContract?.id ?? "new"}
+                  className="mt-2 grid max-h-64 grid-cols-2 gap-x-4 gap-y-1.5 overflow-y-auto rounded-md border border-gray-200 p-3 sm:grid-cols-3"
+                >
                   {US_STATES.map((state) => (
                     <label key={state.code} className="flex items-center gap-2 text-sm text-gray-900">
                       <input
                         type="checkbox"
                         name="licensedStates"
                         value={state.code}
-                        defaultChecked={editing?.licensedStates.includes(state.code)}
+                        defaultChecked={formContract?.licensedStates.includes(state.code)}
                         className="size-4 shrink-0 accent-gray-900"
                       />
                       <span className="min-w-0 truncate" title={state.name}>
@@ -574,17 +589,6 @@ export function ContractsView({ initialContracts, initialNotes, agents }: Contra
                   ))}
                 </div>
               </fieldset>
-              <Field label="Status" htmlFor={`${id}-status`}>
-                <select
-                  id={`${id}-status`}
-                  name="status"
-                  defaultValue={editing?.status ?? "active"}
-                  className={INPUT_CLASS}
-                >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </select>
-              </Field>
             </div>
 
             <div className="mt-6 flex justify-end gap-2">
@@ -592,7 +596,7 @@ export function ContractsView({ initialContracts, initialNotes, agents }: Contra
                 Cancel
               </button>
               <button type="submit" className={PRIMARY_BUTTON_CLASS}>
-                {editing ? "Save changes" : "Add contract"}
+                {formContract ? "Save changes" : "Add contract"}
               </button>
             </div>
           </form>
