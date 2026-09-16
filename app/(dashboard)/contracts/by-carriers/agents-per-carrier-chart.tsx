@@ -29,7 +29,7 @@ export function AgentsPerCarrierChart({ groups, total, scopeText }: AgentsPerCar
   return (
     <section
       aria-labelledby="agents-per-carrier-title"
-      className="mb-4 rounded-lg border border-gray-200 bg-white px-4 py-3"
+      className="mb-10 rounded-lg border border-gray-200 bg-white px-4 py-3"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 id="agents-per-carrier-title" className="text-sm font-semibold text-gray-900">

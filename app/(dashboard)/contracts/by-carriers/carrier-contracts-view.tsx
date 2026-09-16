@@ -15,6 +15,7 @@ import type {
 import type { CarrierRecord } from "@/lib/carriers";
 import { diffValues, nextId } from "@/lib/change-notes";
 import { LINES_OF_BUSINESS } from "@/lib/lines-of-business";
+import { AgentCarrierList } from "./agent-carrier-list";
 import { AgentsPerCarrierChart } from "./agents-per-carrier-chart";
 
 /*
@@ -53,7 +54,9 @@ type CarrierContractsViewProps = {
  * Which dialog is open. Add may start on a carrier (from that carrier's card);
  * edit holds the contract as it was when the dialog opened.
  */
-type Editor = { mode: "add"; carrierId: string } | { mode: "edit"; contract: CarrierContractRecord };
+type Editor =
+  | { mode: "add"; carrierId: string; agentId?: string }
+  | { mode: "edit"; contract: CarrierContractRecord };
 
 type ContractValues = Omit<CarrierContractRecord, "id">;
 
@@ -508,6 +511,14 @@ export function CarrierContractsView({
                   </ul>
                 </div>
               ) : null}
+
+              <AgentCarrierList
+                agents={activeAgents}
+                carriers={rows.map((row) => row.carrier)}
+                contracts={contracts}
+                headingId={`${id}-agents-title`}
+                onAdd={(agentId) => setEditor({ mode: "add", carrierId: "", agentId })}
+              />
             </>
           )}
         </>
@@ -539,7 +550,7 @@ export function CarrierContractsView({
                   id={`${id}-agent`}
                   name="agentId"
                   required
-                  defaultValue={editing?.agentId ?? ""}
+                  defaultValue={editing ? editing.agentId : editor.mode === "add" ? (editor.agentId ?? "") : ""}
                   aria-invalid={agentError ? true : undefined}
                   aria-describedby={agentError ? `${id}-agent-error` : undefined}
                   onChange={() => setAgentError(null)}
