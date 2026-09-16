@@ -2,8 +2,8 @@
  * Glanceable bar chart: active agents contracted per carrier, one small block
  * per line of business. Bars run from 0 to the number of active agents, so a
  * full bar means every active agent is contracted. Plain HTML/CSS bars in the
- * app's gray/green/amber tokens; the count and coverage are always text, so
- * color is never the only signal.
+ * app's gray/green/amber tokens; the count is always text and the bar's length
+ * shows the share, so color is never the only signal.
  */
 
 export type ChartBar = {
@@ -13,8 +13,6 @@ export type ChartBar = {
   count: number;
   /** Tailwind background class for the bar, e.g. "bg-green-500". */
   barClass: string;
-  /** Coverage label for the tooltip, e.g. "Full". */
-  coverageLabel: string;
 };
 
 export type ChartGroup = { line: string; bars: ChartBar[] };
@@ -54,7 +52,7 @@ export function AgentsPerCarrierChart({ groups, total, scopeText }: AgentsPerCar
                   return (
                     <li
                       key={bar.id}
-                      title={`${bar.name}: ${bar.count} of ${total} active agents (${bar.coverageLabel} coverage)`}
+                      title={`${bar.name} · ${bar.count} of ${total} active agents`}
                       className="grid grid-cols-[minmax(0,7.5rem)_minmax(0,1fr)_1.5rem] items-center gap-2 rounded px-1 text-xs hover:bg-gray-50"
                     >
                       <span className="truncate text-gray-700">{bar.name}</span>
@@ -68,7 +66,7 @@ export function AgentsPerCarrierChart({ groups, total, scopeText }: AgentsPerCar
                         {bar.count}
                         <span className="sr-only">
                           {" "}
-                          of {total} active agents, {bar.coverageLabel} coverage
+                          of {total} active agents
                         </span>
                       </span>
                     </li>
