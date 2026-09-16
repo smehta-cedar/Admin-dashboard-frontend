@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { getAgents } from "@/lib/agents";
-import { getContracts } from "@/lib/contracts";
+import { getContractNotes, getContracts } from "@/lib/contracts";
 import { ContractsView } from "./contracts-view";
 
 export const metadata: Metadata = {
@@ -8,7 +8,11 @@ export const metadata: Metadata = {
 };
 
 export default async function ContractsPage() {
-  const [contracts, agents] = await Promise.all([getContracts(), getAgents()]);
+  const [contracts, notes, agents] = await Promise.all([
+    getContracts(),
+    getContractNotes(),
+    getAgents(),
+  ]);
 
-  return <ContractsView initialContracts={contracts} agents={agents} />;
+  return <ContractsView initialContracts={contracts} initialNotes={notes} agents={agents} />;
 }

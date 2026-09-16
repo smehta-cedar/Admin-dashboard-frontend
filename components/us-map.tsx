@@ -66,6 +66,7 @@ export function UsMap({ counts, selectedCode, onSelect, unit }: UsMapProps) {
     }
   };
 
+  // Tooltip anchor in viewBox units.
   const tooltip = activeShape ? labelPosition(activeShape) : null;
 
   return (
@@ -143,7 +144,7 @@ export function UsMap({ counts, selectedCode, onSelect, unit }: UsMapProps) {
         <div
           aria-hidden="true"
           className={`pointer-events-none absolute z-10 whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-xs font-medium text-white shadow ${
-            tooltip.x < 150 ? "-translate-x-6" : tooltip.x > 825 ? "-translate-x-[calc(100%-1.5rem)]" : "-translate-x-1/2"
+            tooltip.x < 150 ? "-translate-x-6" : tooltip.x > US_MAP_VIEWBOX.width - 150 ? "-translate-x-[calc(100%-1.5rem)]" : "-translate-x-1/2"
           } ${tooltip.y < 90 ? "mt-4" : "-mt-4 -translate-y-full"}`}
           style={{
             left: `${(tooltip.x / US_MAP_VIEWBOX.width) * 100}%`,
