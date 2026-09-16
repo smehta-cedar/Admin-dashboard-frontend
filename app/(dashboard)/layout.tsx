@@ -8,7 +8,14 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/carriers", label: "Carriers" },
   { href: "/rulebook", label: "Rulebook" },
   { href: "/logins", label: "Logins" },
-  { href: "/contracts", label: "Contracts" },
+  {
+    href: "/contracts",
+    label: "Contracts",
+    children: [
+      { href: "/contracts/by-state", label: "By state" },
+      { href: "/contracts/by-carriers", label: "By carriers" },
+    ],
+  },
 ];
 
 export default function DashboardLayout({
