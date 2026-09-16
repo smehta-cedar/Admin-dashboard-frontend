@@ -53,10 +53,16 @@ type CredentialValueProps = {
 /** A table cell's value with copy (and, for secrets, show/hide) buttons. Empty shows "—". */
 export function CredentialValue({ value, label, secret = false }: CredentialValueProps) {
   const { status, copy } = useCopy(value);
-  // The value that was revealed rather than a boolean: if an edit saves a new
-  // password it no longer matches, so the new one starts hidden.
-  const [revealedValue, setRevealedValue] = useState<string | null>(null);
-  const hidden = secret && revealedValue !== value;
+  const [revealed, setRevealed] = useState(false);
+  // Hide again whenever the value changes (an edit saved a new password), even
+  // if it changes back to one shown before. Adjusted during render, so the new
+  // value is never shown for a frame.
+  const [revealedFor, setRevealedFor] = useState(value);
+  if (revealedFor !== value) {
+    setRevealedFor(value);
+    setRevealed(false);
+  }
+  const hidden = secret && !revealed;
 
   if (value === "") return <span>—</span>;
 
@@ -80,7 +86,7 @@ export function CredentialValue({ value, label, secret = false }: CredentialValu
       {secret ? (
         <button
           type="button"
-          onClick={() => setRevealedValue(hidden ? value : null)}
+          onClick={() => setRevealed((current) => !current)}
           aria-label={hidden ? "Show password" : "Hide password"}
           className={ICON_BUTTON_CLASS}
         >

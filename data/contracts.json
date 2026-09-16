@@ -1,0 +1,38 @@
+[
+  {
+    "id": "1",
+    "agentId": "1",
+    "licensedStates": ["AZ", "CA", "FL", "NM", "NV", "TX", "LA"],
+    "status": "active"
+  },
+  {
+    "id": "2",
+    "agentId": "2",
+    "licensedStates": ["AL", "FL", "GA", "NC", "SC", "TN", "TX", "LA"],
+    "status": "active"
+  },
+  {
+    "id": "3",
+    "agentId": "3",
+    "licensedStates": ["CA", "NV", "OR", "TX", "WA", "LA"],
+    "status": "active"
+  },
+  {
+    "id": "4",
+    "agentId": "4",
+    "licensedStates": ["AR", "KS", "OK", "TX", "LA"],
+    "status": "inactive"
+  },
+  {
+    "id": "5",
+    "agentId": "5",
+    "licensedStates": ["FL", "GA", "NJ", "NY", "PA", "TX", "LA"],
+    "status": "active"
+  },
+  {
+    "id": "6",
+    "agentId": "6",
+    "licensedStates": ["LA"],
+    "status": "inactive"
+  }
+]

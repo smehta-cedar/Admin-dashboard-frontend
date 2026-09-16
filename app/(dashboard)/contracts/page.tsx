@@ -1,19 +1,14 @@
 import type { Metadata } from "next";
-import { EmptyState } from "@/components/empty-state";
-import { PageHeader } from "@/components/page-header";
+import { getAgents } from "@/lib/agents";
+import { getContracts } from "@/lib/contracts";
+import { ContractsView } from "./contracts-view";
 
 export const metadata: Metadata = {
   title: "Contracts",
 };
 
-export default function ContractsPage() {
-  return (
-    <>
-      <PageHeader title="Contracts" description="Agreements with agents and carriers." />
-      <EmptyState
-        title="No contracts yet"
-        description="Agent and carrier contracts will be listed here."
-      />
-    </>
-  );
+export default async function ContractsPage() {
+  const [contracts, agents] = await Promise.all([getContracts(), getAgents()]);
+
+  return <ContractsView initialContracts={contracts} agents={agents} />;
 }

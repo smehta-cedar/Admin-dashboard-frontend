@@ -325,7 +325,7 @@ Logins-only. The Agent and Carrier status types are unchanged
   gets copy only. An empty value shows "—" with no buttons.
 - The eye button toggles that row only: `aria-label` "Show password" / "Hide
   password"; eye icon while hidden, eye-off while visible.
-- Reveal state lives in each cell and remembers the revealed value, so a page
+- Reveal state is a boolean in each cell, reset whenever the value changes, so a page
   reload, a row filtered out and back, and a newly added login all start
   hidden, and an edit that saves a new password hides it again. An edit that
   leaves the password alone keeps a revealed row as it was.
