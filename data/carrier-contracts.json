@@ -1,7 +1,7 @@
 [
   { "id": "1", "agentId": "1", "carrierId": "10", "appointedStates": ["FL", "LA", "TX"] },
   { "id": "2", "agentId": "2", "carrierId": "10", "appointedStates": ["TX"] },
-  { "id": "3", "agentId": "3", "carrierId": "10", "appointedStates": ["LA", "TX"] },
+  { "id": "3", "agentId": "3", "carrierId": "10", "appointedStates": ["TX"] },
   { "id": "4", "agentId": "5", "carrierId": "10", "appointedStates": ["FL", "GA", "LA"] },
   { "id": "5", "agentId": "1", "carrierId": "11", "appointedStates": ["AZ", "CA", "NV", "TX"] },
   { "id": "6", "agentId": "2", "carrierId": "11", "appointedStates": ["AL", "GA", "NC", "SC", "TN"] },
@@ -17,5 +17,5 @@
   { "id": "16", "agentId": "3", "carrierId": "24", "appointedStates": ["OR", "TX", "WA"] },
   { "id": "17", "agentId": "2", "carrierId": "30", "appointedStates": ["FL", "GA"] },
   { "id": "18", "agentId": "4", "carrierId": "10", "appointedStates": ["AR", "OK", "TX"] },
-  { "id": "19", "agentId": "6", "carrierId": "13", "appointedStates": ["LA"] }
+  { "id": "19", "agentId": "6", "carrierId": "13", "appointedStates": [] }
 ]

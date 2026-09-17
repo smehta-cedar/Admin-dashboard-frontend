@@ -12,10 +12,9 @@ import type {
 } from "@/lib/carrier-contracts";
 import type { CarrierRecord } from "@/lib/carriers";
 import type { LoginRecord } from "@/lib/logins";
-import { US_STATE_NAMES } from "@/lib/us-states";
+import { US_STATE_NAMES, writableStates } from "@/lib/us-states";
 import {
   AppointmentDialog,
-  normalizeStates,
   saveAppointment,
   type AppointmentEditor,
   type AppointmentError,
@@ -31,9 +30,12 @@ import { AgentSwitcher } from "./agent-switcher";
  * the agent's own fields are still edited on their pages; the one thing editable
  * here is appointing this agent to a carrier.
  *
- * States come from carrier appointments only: "States" is the union across
- * every appointment ("via carriers"), and each carrier row lists the states
- * that appointment covers. Carrier names link to their profiles.
+ * States show in two places. "Licensed states" is the agent's own licences
+ * (AgentRecord.licensedStates, edited on Agents): where they may write at all,
+ * whoever the carrier. Each carrier row then lists where they can actually
+ * write with that carrier — a state counts only when it is licensed, inside
+ * the carrier's footprint, and listed on the appointment. There is no combined
+ * list across carriers. Carrier names link to their profiles.
  *
  * "Add carrier" opens the shared AppointmentDialog
  * (../../contracts/appointment-dialog.tsx) in add mode with this agent
@@ -100,16 +102,26 @@ export function AgentProfile({
     carriers.find((carrier) => carrier.id === carrierId)?.availableStates ?? [];
 
   // This agent's carriers, rebuilt from state so a new appointment shows at once.
+  // `writable` is what the appointment actually buys them: its states within
+  // this agent's licences and that carrier's footprint.
   const agentCarriers = contracts
     .filter((contract) => contract.agentId === agent.id)
     .flatMap((contract) => {
       const carrier = carriers.find((option) => option.id === contract.carrierId);
       return carrier
-        ? [{ ...carrier, appointedStates: normalizeStates(contract.appointedStates) }]
+        ? [
+            {
+              ...carrier,
+              writable: writableStates(
+                contract.appointedStates,
+                agent.licensedStates,
+                carrier.availableStates,
+              ),
+            },
+          ]
         : [];
     })
     .sort(byName);
-  const states = [...new Set(agentCarriers.flatMap((carrier) => carrier.appointedStates))].sort();
 
   /** Appoints this agent to a carrier. Returns the dialog's error message, if any. */
   const saveContract = (
@@ -124,6 +136,8 @@ export function AgentProfile({
       agentName,
       carrierName,
       availableStates,
+      // The dialog locks the agent to this profile, so this is the only answer.
+      licensedStates: () => agent.licensedStates,
     });
     if (result.error !== null) return result.error;
     if (!result.changed) return null;
@@ -159,13 +173,15 @@ export function AgentProfile({
       }
     >
       <ProfileSection
-        title="States"
-        count={states.length}
-        emptyMessage="Not appointed in any states through a carrier yet."
+        title="Licensed states"
+        count={agent.licensedStates.length}
+        emptyMessage="No licences recorded, so this agent can't write anywhere yet."
       >
-        <p className="mb-2 text-xs text-fg-subtle">Via carrier appointments</p>
+        <p className="mb-2 text-xs text-fg-subtle">
+          Personal licences, whoever the carrier. Edited on Agents.
+        </p>
         <ul className="flex flex-wrap gap-1.5">
-          {states.map((code) => (
+          {agent.licensedStates.map((code) => (
             <StateChip key={code} code={code} />
           ))}
         </ul>
@@ -199,9 +215,12 @@ export function AgentProfile({
                   </Link>
                   <StatusBadge status={carrier.status} />
                 </div>
-                {carrier.appointedStates.length > 0 ? (
-                  <ul aria-label={`States with ${carrier.name}`} className="flex flex-wrap gap-1">
-                    {carrier.appointedStates.map((code) => (
+                {carrier.writable.length > 0 ? (
+                  <ul
+                    aria-label={`States writable with ${carrier.name}`}
+                    className="flex flex-wrap gap-1"
+                  >
+                    {carrier.writable.map((code) => (
                       <StateChip key={code} code={code} />
                     ))}
                   </ul>
@@ -262,7 +281,7 @@ export function AgentProfile({
       {/* Agent locked to this profile: the only option, already chosen. */}
       <AppointmentDialog
         editor={editor}
-        agents={[{ id: agent.id, name: agent.name }]}
+        agents={[{ id: agent.id, name: agent.name, licensedStates: agent.licensedStates }]}
         carriers={carriers}
         onSave={saveContract}
         onClose={() => setEditor(null)}

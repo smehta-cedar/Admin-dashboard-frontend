@@ -3,7 +3,15 @@ import "server-only";
 /*
  * Data boundary for agents. Today it reads fake agents and notes from
  * data/agents.json and data/agent-notes.json; later it queries Supabase. The
- * JSON is trusted as-is, not validated.
+ * JSON is trusted as-is, not validated, except that an agent missing
+ * licensedStates loads with none (and a console warning) and phones load in
+ * the one display format (lib/phone.ts).
+ *
+ * licensedStates is the agent's own resident/non-resident licences: where they
+ * may write at all, whoever the carrier. It is one of the two ceilings on an
+ * appointment — the other is the carrier's availableStates (lib/carriers.ts).
+ * An agent can write with a carrier in a state only when the state is in both,
+ * and an appointment lists it. Empty means licensed nowhere, never "everywhere".
  *
  * Writing numbers are not stored on agents or carriers. They live with
  * Logins in lib/logins.ts (one agent's producer ID at one carrier).
@@ -14,6 +22,7 @@ import "server-only";
 
 import agentsJson from "@/data/agents.json";
 import notesJson from "@/data/agent-notes.json";
+import { formatPhone } from "@/lib/phone";
 
 export type AgentStatus = "active" | "inactive";
 
@@ -26,10 +35,15 @@ export type AgentRecord = {
   aliases: string[];
   /** Defaults to "active" when adding. */
   status: AgentStatus;
+  /**
+   * US state codes from lib/us-states.ts the agent holds a licence in, unique
+   * and in code order. Empty when licensed nowhere yet (not "all states").
+   */
+  licensedStates: string[];
   /** National Producer Number. Unique across agents. */
   npn: string;
   email: string;
-  /** Stored as entered; no formatting yet. */
+  /** "(555)010-4410" (formatPhone); other lengths stay as entered. */
   phone: string;
 };
 
@@ -57,14 +71,35 @@ export type AgentNote = {
   changes: AgentChange[];
 };
 
+/** An agent as the JSON may hold it: older rows have no licensedStates. */
+type StoredAgent = Omit<AgentRecord, "licensedStates"> & { licensedStates?: string[] };
+
+/**
+ * A stored agent with licensedStates unique and in code order, and the phone
+ * in the display format. Missing licensedStates becomes [] (with a console
+ * warning naming the agent).
+ */
+function toRecord(agent: StoredAgent): AgentRecord {
+  if (!Array.isArray(agent.licensedStates)) {
+    console.warn(`Agent ${agent.id} has no licensedStates; treating them as licensed in no states.`);
+  }
+  const states = Array.isArray(agent.licensedStates) ? agent.licensedStates : [];
+  return {
+    ...agent,
+    phone: formatPhone(agent.phone),
+    licensedStates: [...new Set(states)].sort(),
+  };
+}
+
 /** Every agent, active and inactive, in ID order (1, 2, 3, …). */
 export async function getAgents(): Promise<AgentRecord[]> {
-  return (agentsJson as AgentRecord[]).slice().sort((a, b) => Number(a.id) - Number(b.id));
+  return (agentsJson as StoredAgent[]).map(toRecord).sort((a, b) => Number(a.id) - Number(b.id));
 }
 
 /** One agent by internal ID, or null when there is none. */
 export async function getAgent(id: string): Promise<AgentRecord | null> {
-  return (agentsJson as AgentRecord[]).find((agent) => agent.id === id) ?? null;
+  const agent = (agentsJson as StoredAgent[]).find((stored) => stored.id === id);
+  return agent ? toRecord(agent) : null;
 }
 
 /** Every agent note, newest first. */

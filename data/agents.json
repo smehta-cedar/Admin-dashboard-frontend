@@ -4,53 +4,59 @@
     "name": "Maria Alva",
     "aliases": ["Maria Lopez"],
     "status": "active",
+    "licensedStates": ["AZ", "CA", "FL", "GA", "LA", "NM", "NV", "TX"],
     "npn": "17654321",
     "email": "maria.alvarez@example.com",
-    "phone": "(555) 010-2231"
+    "phone": "(555)010-2231"
   },
   {
     "id": "2",
     "name": "James Carter",
     "aliases": ["Jim Carter", "Carter Insurance Group"],
     "status": "active",
+    "licensedStates": ["AL", "FL", "GA", "LA", "NC", "SC", "TN", "TX"],
     "npn": "18234567",
     "email": "jcarter@example.com",
-    "phone": "555-010-4410"
+    "phone": "(555)010-4410"
   },
   {
     "id": "3",
     "name": "Pri Natz",
     "aliases": [],
     "status": "active",
+    "licensedStates": ["CA", "NV", "OR", "TX", "WA"],
     "npn": "19876543",
     "email": "priya.n@example.com",
-    "phone": "(555) 010-3365"
+    "phone": "(555)010-3365"
   },
   {
     "id": "4",
     "name": "Robt Klein",
     "aliases": ["Bob Klein"],
     "status": "inactive",
+    "licensedStates": ["AR", "OK", "TX"],
     "npn": "16543210",
     "email": "bob.klein@example.com",
-    "phone": "555.010.7788"
+    "phone": "(555)010-7788"
   },
   {
     "id": "5",
     "name": "Brandon Wahl",
     "aliases": [],
     "status": "active",
+    "licensedStates": ["FL", "GA", "LA", "NJ", "NY", "PA"],
     "npn": "21456789",
     "email": "brandon.wahl@example.com",
-    "phone": "5550109902"
+    "phone": "(555)010-9902"
   },
   {
     "id": "6",
     "name": "Tom Nan",
     "aliases": ["Tom Nguyen"],
     "status": "inactive",
+    "licensedStates": [],
     "npn": "20123456",
     "email": "tom.nguyen@example.com",
-    "phone": "555-010-6120"
+    "phone": "(555)010-6120"
   }
 ]

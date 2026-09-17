@@ -13,6 +13,7 @@ import type {
 } from "@/lib/carrier-contracts";
 import type { CarrierRecord } from "@/lib/carriers";
 import { diffValues, nextId } from "@/lib/change-notes";
+import { intersectStates, stateSummary } from "@/lib/us-states";
 
 /*
  * The one Add / Edit contract dialog, shared by Contracts by carrier and
@@ -22,15 +23,20 @@ import { diffValues, nextId } from "@/lib/change-notes";
  * carrier picked; Edit starts filled in from the contract. Both check one
  * contract per agent per carrier and record a note of what changed.
  *
- * The state grid offers only the chosen carrier's availableStates (set on
- * Carriers), and saveAppointment rejects any other state. Editing a contract
+ * The state grid lists the chosen carrier's whole footprint (availableStates,
+ * set on Carriers), but a box is only enabled when the chosen agent is also
+ * licensed there (licensedStates, set on Agents): an appointment can only cover
+ * states where the agent may write at all and the carrier sells. The rest stay
+ * visible but disabled, so it is clear what a new licence would open up; Select
+ * all skips them and they never submit. saveAppointment rejects any state
+ * outside the intersection, naming which side blocks it. Editing a contract
  * whose states fall outside that ceiling warns, then saving strips them.
  *
  * Each view owns its contracts and notes state and passes `onSave`, which
  * usually calls `saveAppointment` below and sets that state.
  */
 
-type AgentOption = Pick<AgentRecord, "id" | "name">;
+type AgentOption = Pick<AgentRecord, "id" | "name" | "licensedStates">;
 type CarrierOption = Pick<CarrierRecord, "id" | "name" | "status" | "availableStates">;
 
 /** Which dialog is open. Add may start on an agent or carrier; edit holds the contract as it was. */
@@ -67,8 +73,10 @@ type SaveInput = {
   editing?: CarrierContractRecord;
   agentName: (agentId: string) => string;
   carrierName: (carrierId: string) => string;
-  /** The carrier's availableStates: the ceiling for appointedStates. */
+  /** The carrier's availableStates: one half of the ceiling for appointedStates. */
   availableStates: (carrierId: string) => string[];
+  /** The agent's licensedStates: the other half. */
+  licensedStates: (agentId: string) => string[];
 };
 
 type SaveResult =
@@ -84,7 +92,8 @@ type SaveResult =
 /**
  * Adds or edits a contract, pure. Returns the next contracts and notes (a note
  * only when something changed), or an error when the agent already has a
- * contract with that carrier or a state is outside the carrier's availableStates.
+ * contract with that carrier or a state is outside the ceiling — the agent's
+ * licensedStates intersected with the carrier's availableStates.
  */
 export function saveAppointment({
   contracts,
@@ -94,6 +103,7 @@ export function saveAppointment({
   agentName,
   carrierName,
   availableStates,
+  licensedStates,
 }: SaveInput): SaveResult {
   const duplicate = contracts.some(
     (contract) =>
@@ -110,15 +120,28 @@ export function saveAppointment({
     };
   }
 
-  const ceiling = availableStates(values.carrierId);
-  const outside = normalizeStates(values.appointedStates).filter((code) => !ceiling.includes(code));
-  if (outside.length > 0) {
+  // Each half of the ceiling is checked on its own, so the error names the side
+  // that blocks the state and the page that fixes it.
+  const states = normalizeStates(values.appointedStates);
+  const unavailable = states.filter((code) => !availableStates(values.carrierId).includes(code));
+  if (unavailable.length > 0) {
     return {
       error: {
         field: "appointedStates",
-        message: `${carrierName(values.carrierId)} isn't available in ${outside.join(", ")}. Add ${
-          outside.length === 1 ? "it" : "them"
+        message: `${carrierName(values.carrierId)} isn't available in ${unavailable.join(", ")}. Add ${
+          unavailable.length === 1 ? "it" : "them"
         } to the carrier's states on Carriers first.`,
+      },
+    };
+  }
+  const unlicensed = states.filter((code) => !licensedStates(values.agentId).includes(code));
+  if (unlicensed.length > 0) {
+    return {
+      error: {
+        field: "appointedStates",
+        message: `${agentName(values.agentId)} isn't licensed in ${unlicensed.join(", ")}. Add ${
+          unlicensed.length === 1 ? "it" : "them"
+        } to their licensed states on Agents first.`,
       },
     };
   }
@@ -133,7 +156,7 @@ export function saveAppointment({
   if (changes.length === 0) return { error: null, changed: false, contracts, notes };
 
   const contractId = editing?.id ?? nextId(contracts);
-  const saved = { id: contractId, ...values, appointedStates: normalizeStates(values.appointedStates) };
+  const saved = { id: contractId, ...values, appointedStates: states };
   return {
     error: null,
     changed: true,
@@ -196,7 +219,10 @@ type AppointmentFormProps = Omit<AppointmentDialogProps, "editor" | "onClose"> &
 function AppointmentForm({ id, editor, agents, carriers, onSave, close }: AppointmentFormProps) {
   const editing = editor.mode === "edit" ? editor.contract : undefined;
   const [error, setError] = useState<AppointmentError | null>(null);
-  // Controlled so the state grid follows the chosen carrier.
+  // Both controlled, so the state grid follows whichever of the two changes.
+  const [agentId, setAgentId] = useState(
+    editing?.agentId ?? (editor.mode === "add" ? editor.agentId : undefined) ?? "",
+  );
   const [carrierId, setCarrierId] = useState(
     editing?.carrierId ?? (editor.mode === "add" ? editor.carrierId : undefined) ?? "",
   );
@@ -206,12 +232,35 @@ function AppointmentForm({ id, editor, agents, carriers, onSave, close }: Appoin
   const carrierName = (otherId: string) =>
     carriers.find((option) => option.id === otherId)?.name ?? `Carrier ${otherId}`;
 
+  const agent = agents.find((option) => option.id === agentId);
   const carrier = carriers.find((option) => option.id === carrierId);
-  const ceiling = carrier?.availableStates ?? [];
-  // States the contract had that the chosen carrier doesn't offer; saving drops them.
-  const stripped = carrier
-    ? normalizeStates(editing?.appointedStates ?? []).filter((code) => !ceiling.includes(code))
-    : [];
+  // The states that can be checked: where the agent is licensed and the carrier is available.
+  const ceiling =
+    agent && carrier ? intersectStates(agent.licensedStates, carrier.availableStates) : [];
+  // The grid lists the carrier's whole footprint; boxes outside the ceiling are disabled.
+  const offered = agent && carrier ? carrier.availableStates : [];
+  const unlicensedOffered = offered.filter((code) => !ceiling.includes(code));
+  // States the contract had that the pair no longer allows; saving drops them.
+  const stripped =
+    agent && carrier
+      ? normalizeStates(editing?.appointedStates ?? []).filter((code) => !ceiling.includes(code))
+      : [];
+  // Why they go: the carrier's footprint is checked first, so a state missing
+  // from both is blamed on the carrier once rather than named twice.
+  const strippedUnavailable = stripped.filter(
+    (code) => !(carrier?.availableStates ?? []).includes(code),
+  );
+  const strippedUnlicensed = stripped.filter((code) => !strippedUnavailable.includes(code));
+  const strippedReason = [
+    strippedUnavailable.length > 0
+      ? `${carrier?.name} isn't available in ${strippedUnavailable.join(", ")}.`
+      : null,
+    strippedUnlicensed.length > 0
+      ? `${agent?.name} isn't licensed in ${strippedUnlicensed.join(", ")}.`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   const agentError = error?.field === "agentId" ? error.message : null;
   const statesError = error?.field === "appointedStates" ? error.message : null;
@@ -262,10 +311,13 @@ function AppointmentForm({ id, editor, agents, carriers, onSave, close }: Appoin
             id={`${id}-agent`}
             name="agentId"
             required
-            defaultValue={editing?.agentId ?? (editor.mode === "add" ? editor.agentId : undefined) ?? ""}
+            value={agentId}
             aria-invalid={agentError ? true : undefined}
             aria-describedby={agentError ? `${id}-agent-error` : undefined}
-            onChange={() => setError(null)}
+            onChange={(event) => {
+              setAgentId(event.target.value);
+              setError(null);
+            }}
             className={INPUT_CLASS}
           >
             <option value="">Choose an agent</option>
@@ -300,7 +352,9 @@ function AppointmentForm({ id, editor, agents, carriers, onSave, close }: Appoin
         <StateCheckboxes
           legend="States"
           name="appointedStates"
-          codes={ceiling}
+          codes={offered}
+          disabledCodes={unlicensedOffered}
+          disabledTitle={(state) => `Agent not licensed in ${state.name}`}
           defaultChecked={editing?.appointedStates}
           onChange={() => setError(null)}
           className="sm:col-span-2"
@@ -309,7 +363,7 @@ function AppointmentForm({ id, editor, agents, carriers, onSave, close }: Appoin
             <>
               {stripped.length > 0 ? (
                 <p className="mt-2 rounded-md bg-warn-soft px-3 py-2 text-xs text-warn-ink">
-                  Saving removes {stripped.join(", ")}: {carrier?.name} isn&apos;t available there.
+                  Saving removes {stripped.join(", ")}: {strippedReason}
                 </p>
               ) : null}
               {statesError ? (
@@ -321,11 +375,19 @@ function AppointmentForm({ id, editor, agents, carriers, onSave, close }: Appoin
           }
         >
           <p id={`${id}-states-hint`} className="mt-1 text-xs text-fg-subtle">
-            {!carrier
-              ? "Choose a carrier to see the states it's available in."
-              : ceiling.length === 0
+            {!agent || !carrier
+              ? "Choose an agent and a carrier to see the carrier's states."
+              : carrier.availableStates.length === 0
                 ? `${carrier.name} isn't available in any states yet. Add its states on Carriers before appointing agents there.`
-                : `Only ${carrier.name}'s available states are listed. Leave all unchecked if none yet; that means no states, not every state.`}
+                : agent.licensedStates.length === 0
+                  ? `${agent.name} isn't licensed in any states yet, so every state is disabled. Add their licensed states on Agents before appointing them with a carrier.`
+                  : ceiling.length === 0
+                    ? `${agent.name} isn't licensed in any state ${carrier.name} is available in, so every state is disabled. Licensed: ${stateSummary(agent.licensedStates)}.`
+                    : `Every state ${carrier.name} is available in is listed${
+                        unlicensedOffered.length > 0
+                          ? `; the ones ${agent.name} isn't licensed in are disabled`
+                          : ""
+                      }. Leave all unchecked if none yet; that means no states, not every state.`}
           </p>
         </StateCheckboxes>
       </div>

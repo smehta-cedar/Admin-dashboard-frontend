@@ -72,3 +72,29 @@ export function stateSummary(codes: string[]): string {
   if (codes.length === 0) return "No states";
   return [...codes].sort().join(" · ");
 }
+
+/**
+ * Codes in every list, unique and in code order. No lists means no codes.
+ * Used for the two state ceilings: an agent's licences against a carrier's
+ * footprint, and an appointment within both.
+ */
+export function intersectStates(...lists: string[][]): string[] {
+  const [first, ...rest] = lists;
+  if (!first) return [];
+  return [...new Set(first)].filter((code) => rest.every((list) => list.includes(code))).sort();
+}
+
+/**
+ * States an agent can actually write with one carrier: the appointment
+ * narrowed to the agent's licences and the carrier's footprint. All three are
+ * needed — a licence alone is not an appointment, and an appointment cannot
+ * reach past either ceiling. Older rows may sit outside one; editing the
+ * appointment strips those.
+ */
+export function writableStates(
+  appointedStates: string[],
+  licensedStates: string[],
+  availableStates: string[],
+): string[] {
+  return intersectStates(appointedStates, licensedStates, availableStates);
+}

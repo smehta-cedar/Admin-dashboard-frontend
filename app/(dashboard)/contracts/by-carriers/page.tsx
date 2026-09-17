@@ -23,7 +23,7 @@ export default async function ContractsByCarrierPage() {
       // Contracts show active agents only; status is edited on the Agents page.
       agents={agents
         .filter((agent) => agent.status === "active")
-        .map(({ id, name }) => ({ id, name }))}
+        .map(({ id, name, licensedStates }) => ({ id, name, licensedStates }))}
       carriers={carriers.map(({ id, name, linesOfBusiness, status, availableStates }) => ({
         id,
         name,

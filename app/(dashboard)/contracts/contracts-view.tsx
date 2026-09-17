@@ -12,11 +12,10 @@ import { US_MAP_VIEWBOX } from "@/components/us-map-shapes";
 import type { AgentRecord } from "@/lib/agents";
 import type { CarrierContractNote, CarrierContractRecord } from "@/lib/carrier-contracts";
 import type { CarrierRecord } from "@/lib/carriers";
-import { US_STATE_NAMES, US_STATES, stateSummary } from "@/lib/us-states";
+import { US_STATE_NAMES, US_STATES, stateSummary, writableStates } from "@/lib/us-states";
 import {
   APPOINTMENT_FIELD_LABELS,
   AppointmentDialog,
-  normalizeStates,
   saveAppointment,
   type AppointmentEditor,
   type AppointmentError,
@@ -25,8 +24,11 @@ import {
 
 /*
  * Contracts by state: where agents can write, as a view over carrier
- * appointments (lib/carrier-contracts.ts). There are no carrier-less licenses:
- * an agent can write in a state only through a carrier appointment listing it.
+ * appointments (lib/carrier-contracts.ts) narrowed by both ceilings. A state
+ * counts for an agent at a carrier only when the agent is licensed there
+ * (Agents), the carrier is available there (Carriers), and the appointment
+ * lists it — a licence alone is not an appointment, and an appointment cannot
+ * reach past either ceiling.
  *
  * A map colors each state by how many distinct active agents have at least one
  * appointment there. Picking a state lists the same appointments two ways: By
@@ -38,8 +40,9 @@ import {
  * Add contract, the table's Edit and a state panel line all open the shared
  * AppointmentDialog (./appointment-dialog.tsx), the same form Contracts by
  * carrier uses; Edit opens it filled in, and its state grid offers only the
- * carrier's availableStates. Since every appointment stays within that
- * ceiling, a state's By carrier list only holds carriers available there.
+ * states the chosen agent and carrier share. Since every appointment stays
+ * within both ceilings, a state's By carrier list only holds carriers
+ * available there, and its By agent list only agents licensed there.
  * Only active agents appear: `agents` holds active agents only, and
  * an appointment for any other agent stays in state but is never shown.
  * Appointments and notes live in component state only: nothing reaches a
@@ -47,7 +50,7 @@ import {
  */
 
 /** An active agent. Inactive agents are never passed in. */
-type AgentOption = Pick<AgentRecord, "id" | "name">;
+type AgentOption = Pick<AgentRecord, "id" | "name" | "licensedStates">;
 type CarrierOption = Pick<CarrierRecord, "id" | "name" | "status" | "availableStates">;
 
 type ContractsViewProps = {
@@ -65,6 +68,7 @@ type AppointmentRow = {
   contract: CarrierContractRecord;
   agent: AgentOption;
   carrier: CarrierOption;
+  /** Writable states: the appointment within the agent's licences and the carrier's footprint. */
   states: string[];
 };
 
@@ -166,7 +170,18 @@ export function ContractsView({ initialContracts, initialNotes, agents, carriers
           status: "active" as const,
           availableStates: [],
         };
-        return [{ contract, agent, carrier, states: normalizeStates(contract.appointedStates) }];
+        return [
+          {
+            contract,
+            agent,
+            carrier,
+            states: writableStates(
+              contract.appointedStates,
+              agent.licensedStates,
+              carrier.availableStates,
+            ),
+          },
+        ];
       })
       .sort((a, b) => byName(a.agent, b.agent) || byName(a.carrier, b.carrier));
   }, [contracts, agents, carriers]);
@@ -255,6 +270,8 @@ export function ContractsView({ initialContracts, initialNotes, agents, carriers
     carriers.find((carrier) => carrier.id === carrierId)?.name ?? `Carrier ${carrierId}`;
   const availableStates = (carrierId: string) =>
     carriers.find((carrier) => carrier.id === carrierId)?.availableStates ?? [];
+  const licensedStates = (agentId: string) =>
+    agents.find((agent) => agent.id === agentId)?.licensedStates ?? [];
 
   // Clamped and rounded to 0.01 so button clicks don't drift into float noise.
   const changeZoom = (delta: number) =>
@@ -275,6 +292,7 @@ export function ContractsView({ initialContracts, initialNotes, agents, carriers
       agentName,
       carrierName,
       availableStates,
+      licensedStates,
     });
     if (result.error !== null) return result.error;
     // Saving an edit with nothing changed just closes, without a note.

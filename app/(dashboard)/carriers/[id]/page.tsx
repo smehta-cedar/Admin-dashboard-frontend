@@ -4,6 +4,7 @@ import { getAgents } from "@/lib/agents";
 import { getCarrierContracts } from "@/lib/carrier-contracts";
 import { getCarrier, getCarrierNotes, getCarriers } from "@/lib/carriers";
 import { getLogins } from "@/lib/logins";
+import { writableStates } from "@/lib/us-states";
 import { CarrierProfile } from "./carrier-profile";
 
 export async function generateMetadata(props: PageProps<"/carriers/[id]">): Promise<Metadata> {
@@ -33,6 +34,8 @@ export default async function CarrierProfilePage(props: PageProps<"/carriers/[id
     <CarrierProfile
       carrier={carrier}
       allCarriers={carriers.map(({ id, name, status }) => ({ id, name, status })).sort(byName)}
+      // States an agent can write here: the appointment within their own
+      // licences and this carrier's footprint, not the raw appointment.
       agents={carrierContracts
         .filter((contract) => contract.carrierId === id)
         .flatMap((contract) => {
@@ -43,7 +46,11 @@ export default async function CarrierProfilePage(props: PageProps<"/carriers/[id
                   id: agent.id,
                   name: agent.name,
                   status: agent.status,
-                  appointedStates: [...new Set(contract.appointedStates)].sort(),
+                  writable: writableStates(
+                    contract.appointedStates,
+                    agent.licensedStates,
+                    carrier.availableStates,
+                  ),
                 },
               ]
             : [];

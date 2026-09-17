@@ -9,7 +9,7 @@ import type { AgentRecord } from "@/lib/agents";
 import type { CarrierContractNote, CarrierContractRecord } from "@/lib/carrier-contracts";
 import type { CarrierRecord } from "@/lib/carriers";
 import { LINES_OF_BUSINESS } from "@/lib/lines-of-business";
-import { stateSummary } from "@/lib/us-states";
+import { stateSummary, writableStates } from "@/lib/us-states";
 import {
   AppointmentDialog,
   normalizeStates,
@@ -39,17 +39,19 @@ import { AgentsPerCarrierChart } from "./agents-per-carrier-chart";
  * its contracted agents as initials (appointed states on hover) and does not
  * expand. The add-agent icon top-right opens Add contract for that carrier.
  *
- * Each contract (appointment) lists the states the agent is appointed in with
- * that carrier; empty means none yet, not every state. The Agents list below
- * shows each carrier chip with its states, and clicking the states opens Edit.
- * Every add and edit opens the shared AppointmentDialog (../appointment-dialog.tsx),
- * the same one Contracts by state uses; its state grid offers only the
- * carrier's availableStates. Add and edit are dummy: contracts and
- * notes live in component state only, and a refresh brings back the JSON.
+ * The states shown against a contract are the writable ones: the appointment
+ * narrowed to the agent's licensedStates (Agents) and the carrier's
+ * availableStates (Carriers). Empty means none yet, not every state. The
+ * Agents list below shows each carrier chip with those states, and clicking
+ * them opens Edit. Every add and edit opens the shared AppointmentDialog
+ * (../appointment-dialog.tsx), the same one Contracts by state uses; its state
+ * grid offers only the states the chosen agent and carrier share. Add and edit
+ * are dummy: contracts and notes live in component state only, and a refresh
+ * brings back the JSON.
  */
 
 /** An active agent. Inactive agents are never passed in. */
-type AgentOption = Pick<AgentRecord, "id" | "name">;
+type AgentOption = Pick<AgentRecord, "id" | "name" | "licensedStates">;
 type CarrierOption = Pick<
   CarrierRecord,
   "id" | "name" | "linesOfBusiness" | "status" | "availableStates"
@@ -141,6 +143,8 @@ export function CarrierContractsView({
     carriers.find((carrier) => carrier.id === carrierId)?.name ?? `Carrier ${carrierId}`;
   const availableStates = (carrierId: string) =>
     carriers.find((carrier) => carrier.id === carrierId)?.availableStates ?? [];
+  const licensedStates = (agentId: string) =>
+    agents.find((agent) => agent.id === agentId)?.licensedStates ?? [];
 
   /** Coverage of one carrier among active agents, given a set of contracts. */
   const coverageOf = (carrierId: string, from: CarrierContractRecord[]) => {
@@ -174,7 +178,11 @@ export function CarrierContractsView({
       .map((contract) => ({
         contract,
         agent: agentName(contract.agentId),
-        states: normalizeStates(contract.appointedStates),
+        states: writableStates(
+          contract.appointedStates,
+          licensedStates(contract.agentId),
+          carrier.availableStates,
+        ),
       }))
       .sort((a, b) => a.agent.localeCompare(b.agent));
     return { carrier, coverage, contractedActive, carrierContracts };
@@ -218,6 +226,7 @@ export function CarrierContractsView({
       agentName,
       carrierName,
       availableStates,
+      licensedStates,
     });
     if (result.error !== null) return result.error;
     // Saving an edit with nothing changed just closes, without a note.

@@ -13,13 +13,16 @@ import "server-only";
  * nowhere yet, never "every state". Whether the agent is active comes from
  * AgentRecord.status, edited only on Agents.
  *
- * appointedStates must be a subset of the carrier's availableStates
- * (lib/carriers.ts): the contract dialog only offers those states and rejects
- * others on save. Older rows outside the ceiling load as-is; editing one strips
- * the extras.
+ * appointedStates must be within both ceilings: the agent's licensedStates
+ * (lib/agents.ts) and the carrier's availableStates (lib/carriers.ts). The
+ * contract dialog only offers states in both and rejects others on save,
+ * naming the side that blocks them. Older rows outside a ceiling load as-is;
+ * editing one strips the extras.
  *
- * Appointments are the source of truth for where an agent can write: Contracts
- * by state is a view over them. Writing numbers stay with Logins in lib/logins.ts.
+ * An appointment is still what makes an agent contracted — a licence alone
+ * never does — so Contracts by state is a view over appointments, narrowed to
+ * the states the agent and carrier share. Writing numbers stay with Logins in
+ * lib/logins.ts.
  */
 
 import contractsJson from "@/data/carrier-contracts.json";

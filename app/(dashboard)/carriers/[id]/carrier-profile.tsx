@@ -11,18 +11,20 @@ import { CarrierSwitcher } from "./carrier-switcher";
 
 /*
  * Read-only profile for one carrier: identity (including the states it is
- * available in, the ceiling for its appointments), then everything linked to it —
- * contracted agents (with the states each is appointed in), logins, and change
- * notes. Editing stays on the Carriers, Contracts and Logins pages. Agent names
- * link to their profiles.
+ * available in, one ceiling on its appointments), then everything linked to it —
+ * contracted agents, logins, and change notes. An agent row shows the states
+ * they can actually write here: their appointment narrowed to their own
+ * licences (Agents) and this carrier's footprint, so a state the carrier sells
+ * but the agent isn't licensed in never shows. Editing stays on the Carriers,
+ * Contracts and Logins pages. Agent names link to their profiles.
  */
 
 type CarrierProfileProps = {
   carrier: CarrierRecord;
   /** Every carrier, sorted by name, for the switcher. */
   allCarriers: Pick<CarrierRecord, "id" | "name" | "status">[];
-  /** Contracted agents, sorted by name, each with its appointed state codes in code order. */
-  agents: { id: string; name: string; status: AgentStatus; appointedStates: string[] }[];
+  /** Contracted agents, sorted by name, each with the state codes they can write here. */
+  agents: { id: string; name: string; status: AgentStatus; writable: string[] }[];
   /** Sorted by agent name. */
   logins: (LoginRecord & { agentName: string })[];
   /** Newest first. */
@@ -76,14 +78,14 @@ export function CarrierProfile({ carrier, allCarriers, agents, logins, notes }: 
                 {agent.name}
               </Link>
               <div className="flex items-center gap-3">
-                {/* Every appointed state code, or "No states". */}
+                {/* Every writable state code, or "No states". */}
                 <span
-                  title={agent.appointedStates.join(", ") || undefined}
+                  title={agent.writable.join(", ") || undefined}
                   className={`font-mono text-xs tabular-nums ${
-                    agent.appointedStates.length === 0 ? "text-fg-faint" : "text-fg-muted"
+                    agent.writable.length === 0 ? "text-fg-faint" : "text-fg-muted"
                   }`}
                 >
-                  {stateSummary(agent.appointedStates)}
+                  {stateSummary(agent.writable)}
                 </span>
                 <StatusBadge status={agent.status} />
               </div>

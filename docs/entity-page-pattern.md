@@ -55,6 +55,9 @@ server-only entity module.
 - **New IDs:** `nextId(items)` = highest ID + 1, so lists stay 1…n.
 - **Required vs optional:** required fields are plain `string`; optional ones
   are `?:`. Lists (like `aliases`) are `string[]`, empty when none — not optional.
+- **Phones:** one format, `(555)010-4410`. `formatPhone` in `lib/phone.ts` is
+  applied when data loads (`lib/agents.ts`) and when the form saves; anything
+  that isn't 10 digits stays as entered. Search also matches the bare digits.
 - **Status:** string union (`"active" | "inactive"`), default `"active"` on add.
 - **Uniqueness rules** (e.g. NPN) are enforced in the form for now.
 - **Existing slim types stay slim.** The commission matrix keeps
@@ -152,7 +155,7 @@ Styling (inside `DataTable`):
   table `min-w-full text-left text-sm`.
 - Head: `bg-surface-muted`; `th scope="col"`, `whitespace-nowrap px-4 py-2.5 font-medium text-fg-muted`.
 - Body: `divide-y divide-line border-t border-line`; cells `px-4 py-2.5` + column `className`.
-- Column order used on Agents: **ID, NPN, Name, Status, Email, Phone, [actions]**.
+- Column order used on Agents: **ID, NPN, Name, Status, Email, Phone, States, [actions]**.
 - IDs and codes: `font-mono text-fg-muted`. Secondary text: `text-fg-muted`.
   Primary name: `text-fg`, `whitespace-nowrap`.
 - Status badge: `rounded-md px-2 py-0.5 text-xs font-medium capitalize` +
@@ -165,6 +168,10 @@ Styling (inside `DataTable`):
 Profile pages' small related tables stay plain `<table>`s for now.
 
 ## 7. Expandable row (name dropdown)
+
+Agents and Carriers no longer use this: their rows don't expand, the name is
+just a link to the profile, and aliases and notes are read there. The pattern below still
+applies to the lists that pass `renderDetails`.
 
 - `DataTable` owns the open state (a `Set` of row IDs; several rows can be
   open; all start closed; a search or sort keeps them open). It passes each
@@ -312,28 +319,43 @@ Files: [lib/carrier-contracts.ts](../lib/carrier-contracts.ts),
 [app/(dashboard)/contracts/by-carriers/](../app/(dashboard)/contracts/by-carriers/),
 [app/(dashboard)/contracts/](../app/(dashboard)/contracts/).
 
-**Two layers of states.**
+**Three layers of states.**
 
 | Field | Meaning | Edited on |
 | --- | --- | --- |
+| `AgentRecord.licensedStates` | Personal licences: where the agent may write at all, whoever the carrier | Agents |
 | `CarrierRecord.availableStates` | Carrier footprint: states the carrier is available in for the agency | Carriers |
-| `CarrierContractRecord.appointedStates` | States one agent may write for that carrier, always ⊆ the carrier's `availableStates` | Contracts (both views) |
+| `CarrierContractRecord.appointedStates` | States one agent may write for that carrier, always ⊆ `licensedStates ∩ availableStates` | Contracts (both views) |
 
-**One source of truth for where agents write: carrier appointments.** A
-`CarrierContractRecord` is one agent appointed with one carrier, with
-`appointedStates` (state codes). There are no carrier-less agent licenses: an
-agent can write in a state only through an appointment that lists it. The
-carrier footprint is only the ceiling; it never makes an agent appointed.
+**An appointment is still what makes an agent contracted; the two ceilings only
+limit it.** A `CarrierContractRecord` is one agent appointed with one carrier,
+with `appointedStates` (state codes). A licence alone never lets an agent write
+anywhere — there must be an appointment listing the state — and an appointment
+can never reach past either ceiling. So the states an agent can actually write
+with a carrier are
 
-- Both lists follow the same rules: empty means none yet, never "every state";
-  a stored row missing the field loads as `[]` with a `console.warn`; values
-  are unique codes in code order. Notes label them "Available states" (carrier)
-  and "States" (appointment).
+```
+writable = appointedStates ∩ agent.licensedStates ∩ carrier.availableStates
+```
+
+`writableStates(appointed, licensed, available)` in
+[lib/us-states.ts](../lib/us-states.ts) computes it (over `intersectStates`),
+and every list, map, chip and profile row shows that, never the raw
+appointment. Keeping `appointedStates` as a stored subset (rather than deriving
+it as the whole intersection) is what lets a carrier appoint an agent in fewer
+states than they could otherwise write in.
+
+- All three lists follow the same rules: empty means none yet, never "every
+  state"; a stored row missing the field loads as `[]` with a `console.warn`;
+  values are unique codes in code order. Notes label them "Licensed states"
+  (agent), "Available states" (carrier) and "States" (appointment).
 - `StateCheckboxes` ([components/state-checkboxes.tsx](../components/state-checkboxes.tsx))
-  is the one state fieldset (heading, Select all, scrolling grid): every state on the Carriers dialog, only the carrier's
-  `availableStates` in the contract dialog.
+  is the one state fieldset (heading, Select all, scrolling grid): every state
+  on the Agents and Carriers dialogs, the carrier's footprint in the contract
+  dialog. `disabledCodes` lists states that stay visible but can't be picked
+  (disabled box, muted label, `disabledTitle` tooltip): Select all skips them,
+  and they render unchecked with no `name`, so they never submit.
 - One appointment per agent + carrier, checked in the form.
-- Empty `appointedStates` means appointed nowhere yet, never "every state".
 - A stored row missing `appointedStates` loads as `[]` with a `console.warn`.
 - Notes label the field "States"; values are codes in code order joined with
   ", ", so reordering alone never records a change.
@@ -346,21 +368,32 @@ there is the pure save: duplicate check, ceiling check, note diff, next
 contracts and notes. Each view keeps its own state and passes `onSave`, which
 returns an `AppointmentError` (`{ field, message }`) shown under that field.
 
-- The grid follows the chosen carrier and offers only its `availableStates`.
-  No carrier chosen, or a carrier with none: a quiet hint, no boxes.
-- `saveAppointment` rejects any state outside the ceiling with an error naming
-  the states.
-- Editing a contract with states outside the ceiling (older data, or a carrier
-  whose footprint shrank) shows an amber "Saving removes …" warning; those boxes
-  aren't offered, so saving strips them and the note records it. Contracts are
-  never shrunk automatically when a carrier's footprint changes.
+- Both selects are controlled, and the grid follows whichever changes: it
+  lists all of `carrier.availableStates`, and a box is enabled only when the
+  state is also in `agent.licensedStates`. The rest are disabled with the
+  tooltip "Agent not licensed in {state}" — Humana in FL, LA, TX with an agent
+  licensed in LA, TX shows FL disabled and LA/TX checkable, and Select all
+  never checks FL. Until both are chosen, or when the carrier has no footprint,
+  a quiet hint replaces the boxes; with no licences or no overlap the grid
+  shows fully disabled and the hint says why.
+- `saveAppointment` takes `licensedStates(agentId)` alongside
+  `availableStates(carrierId)` and checks each half separately, so the error
+  names the side that blocks the state and the page that fixes it
+  ("Humana isn't available in NM…" / "Pri Natz isn't licensed in LA…").
+- Editing a contract with states outside the ceiling (older data, a carrier
+  whose footprint shrank, or an agent who dropped a licence) shows an amber
+  "Saving removes …" warning that says which side dropped each code; those
+  boxes are missing (outside the footprint) or disabled and unchecked
+  (unlicensed), so saving strips them and the note records it.
+  Contracts are never shrunk automatically when a footprint or licence changes.
 
-**By carriers**: chips in the Agents list show each appointment's states
-(`stateSummary`) and open Edit.
+**By carriers**: chips in the Agents list show each appointment's writable
+states (`stateSummary`) and open Edit.
 
 **By state** is a read view over appointments, not a separate record (the map,
-groupings and copy stay appointment-based; since appointments sit within the
-ceiling, a state's By carrier list only holds carriers available there):
+groupings and copy stay appointment-based; since appointments sit within both
+ceilings, a state's By carrier list only holds carriers available there, and
+its By agent list only agents licensed there):
 
 - The map counts distinct active agents with at least one appointment in the
   state.
@@ -370,9 +403,11 @@ ceiling, a state's By carrier list only holds carriers available there):
 - The Appointments table (Agent, Carrier, States, Edit) searches state codes
   and names. Add contract and Edit open the shared dialog.
 
-**Profiles** derive states the same way: the agent profile shows the union
-across appointments plus each carrier's states; the carrier profile shows its
-available states in the identity grid and each agent's appointed states on the
+**Profiles** derive states the same way. The agent profile shows **Licensed
+states** (`licensedStates`: personal, "whoever the carrier") and, on each
+carrier row, that appointment's writable states; there is no combined
+"Writable states" section across carriers. The carrier profile shows its
+available states in the identity grid and each agent's writable states on the
 agent rows.
 
 The agent profile is also an entry point: **Add carrier** in the Carriers
@@ -389,9 +424,10 @@ slot for the button beside its title (`ROW_BUTTON_CLASS`, "+ Add carrier").
 The carrier profile stays read-only for now; the matching button there would be
 Add agent.
 
-**Carriers** show `availableStates` as a States column (`stateSummary`, sorted
-by count, searchable by code and name) and edit them with `StateCheckboxes` in
-the add/edit dialog. Empty is allowed.
+**Agents** and **Carriers** each show their own list as a States column
+(`stateSummary`, sorted by count, searchable by code and name) and edit it with
+`StateCheckboxes` in the add/edit dialog — `licensedStates` on Agents,
+`availableStates` on Carriers. Empty is allowed on both.
 
 ### Logins
 

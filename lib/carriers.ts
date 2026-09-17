@@ -10,10 +10,11 @@ import "server-only";
  * HealthSpring is both MAPD and Supp/Ancillary). Writing numbers are not
  * stored on carriers; they live with Logins in lib/logins.ts.
  *
- * availableStates is the carrier's footprint for the agency: the ceiling for
- * every appointment with it (lib/carrier-contracts.ts). An agent's
- * appointedStates with a carrier must be a subset. Empty means available in no
- * states yet, never "every state".
+ * availableStates is the carrier's footprint for the agency: one of the two
+ * ceilings on every appointment with it (lib/carrier-contracts.ts), the other
+ * being the agent's own licensedStates (lib/agents.ts). An agent's
+ * appointedStates with a carrier must be within both. Empty means available in
+ * no states yet, never "every state".
  *
  * The commission matrix still uses the slim `Carrier` ({ code, name }) and its
  * own getCarriers() from commissions.ts. Don't widen that; use CarrierRecord

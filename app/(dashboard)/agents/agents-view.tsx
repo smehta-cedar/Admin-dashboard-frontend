@@ -12,17 +12,22 @@ import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
 import { Field } from "@/components/field";
 import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
-import { NoteList } from "@/components/note-list";
 import { PageHeader } from "@/components/page-header";
+import { StateCheckboxes } from "@/components/state-checkboxes";
 import { StatusBadge, statusRank } from "@/components/status-badge";
 import type { AgentField, AgentNote, AgentRecord } from "@/lib/agents";
 import { diffValues, nextId } from "@/lib/change-notes";
+import { formatPhone, phoneDigits } from "@/lib/phone";
+import { US_STATE_NAMES, stateSummary } from "@/lib/us-states";
 
 /*
  * Agents table with dummy add and edit dialogs. Every add or edit records a
  * note listing what changed. The table sorts by header and filters by search.
- * A name links to the agent's profile; the chevron beside it expands the row to
- * show their aliases and notes. Agents and notes
+ * A name links to the agent's profile, which shows their aliases and notes;
+ * rows don't expand. States are the agent's own licensedStates —
+ * where they may write at all; which of those they can actually write with a
+ * carrier is that state also being in the carrier's footprint and in an
+ * appointment (Contracts). Agents and notes
  * live in component state only: nothing reaches a server, and a refresh brings
  * back the JSON.
  */
@@ -45,16 +50,18 @@ export const FIELD_LABELS: Record<AgentField, string> = {
   npn: "NPN",
   email: "Email",
   phone: "Phone",
+  licensedStates: "Licensed states",
 };
 
 const FIELDS = Object.keys(FIELD_LABELS) as AgentField[];
 
 
-const EMPTY_VALUES = { name: "", aliases: [], npn: "", email: "", phone: "" };
+const EMPTY_VALUES = { name: "", aliases: [], npn: "", email: "", phone: "", licensedStates: [] };
 
 export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
   const [agents, setAgents] = useState(initialAgents);
-  const [notes, setNotes] = useState(initialNotes);
+  // Not shown here (the profile lists notes); new ones are still recorded.
+  const [, setNotes] = useState(initialNotes);
   const [unsavedCount, setUnsavedCount] = useState(0);
   const [editor, setEditor] = useState<Editor | null>(null);
   const [npnError, setNpnError] = useState<string | null>(null);
@@ -84,36 +91,13 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
       {
         id: "name",
         header: "Name",
-        cell: (agent, { expanded, toggleExpanded, detailsId }) => (
-          <div className="-ml-1 flex items-center gap-0.5 whitespace-nowrap">
-            <Link
-              href={`/agents/${agent.id}`}
-              className="rounded-md px-1 py-0.5 text-fg hover:bg-surface-hover hover:underline"
-            >
-              {agent.name}
-            </Link>
-            <button
-              type="button"
-              onClick={toggleExpanded}
-              aria-expanded={expanded}
-              aria-controls={expanded ? detailsId : undefined}
-              aria-label={`Details for ${agent.name}`}
-              className="rounded-md p-0.5 hover:bg-surface-hover"
-            >
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 20 20"
-                className={`size-4 shrink-0 text-fg-subtle transition-transform ${expanded ? "rotate-90" : ""}`}
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.5}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M8 5l5 5-5 5" />
-              </svg>
-            </button>
-          </div>
+        cell: (agent) => (
+          <Link
+            href={`/agents/${agent.id}`}
+            className="-ml-1 whitespace-nowrap rounded-md px-1 py-0.5 text-fg hover:bg-surface-hover hover:underline"
+          >
+            {agent.name}
+          </Link>
         ),
         sortValue: (agent) => agent.name,
         searchText: (agent) => [agent.name, ...agent.aliases],
@@ -138,7 +122,21 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
         header: "Phone",
         cell: (agent) => agent.phone,
         className: "whitespace-nowrap text-fg-muted",
-        searchText: (agent) => agent.phone,
+        // Digits too, so "5550104410" finds "(555)010-4410".
+        searchText: (agent) => [agent.phone, phoneDigits(agent.phone)],
+      },
+      {
+        id: "licensedStates",
+        header: "Licensed States",
+        cell: (agent) => (
+          <span className={agent.licensedStates.length === 0 ? "text-fg-faint" : undefined}>
+            {stateSummary(agent.licensedStates)}
+          </span>
+        ),
+        className: "tabular-nums text-fg-muted",
+        sortValue: (agent) => agent.licensedStates.length,
+        searchText: (agent) =>
+          agent.licensedStates.flatMap((code) => [code, US_STATE_NAMES[code] ?? ""]),
       },
       {
         id: "actions",
@@ -181,7 +179,10 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
       status: text("status") === "inactive" ? "inactive" : "active",
       npn: text("npn"),
       email: text("email"),
-      phone: text("phone"),
+      phone: formatPhone(text("phone")),
+      licensedStates: [
+        ...new Set(data.getAll("licensedStates").map((code) => String(code).trim()).filter(Boolean)),
+      ].sort(),
     };
 
     const editingId = editor.mode === "edit" ? editor.agent.id : null;
@@ -249,34 +250,7 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
           columns={columns}
           getRowId={(agent) => agent.id}
           unit={["agent", "agents"]}
-          searchPlaceholder="Search name, NPN, email…"
-          renderDetails={(agent) => (
-            <div className="grid gap-6 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
-              <section>
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
-                  Aliases
-                </h3>
-                {agent.aliases.length > 0 ? (
-                  <ul className="mt-2 space-y-1 text-sm text-fg">
-                    {agent.aliases.map((alias, index) => (
-                      <li key={`${index}-${alias}`}>{alias}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="mt-2 text-sm text-fg-subtle">None</p>
-                )}
-              </section>
-              <section>
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
-                  Notes
-                </h3>
-                <NoteList
-                  notes={notes.filter((note) => note.agentId === agent.id)}
-                  labels={FIELD_LABELS}
-                />
-              </section>
-            </div>
-          )}
+          searchPlaceholder="Search name, NPN, email, state…"
         />
       )}
 
@@ -379,6 +353,19 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
                   className={INPUT_CLASS}
                 />
               </Field>
+
+              <StateCheckboxes
+                legend="Licensed states"
+                name="licensedStates"
+                defaultChecked={editing?.licensedStates}
+                className="mt-4 sm:col-span-2"
+                legendClassName="font-semibold"
+                describedBy={`${id}-licensed-hint`}
+              >
+                <p id={`${id}-licensed-hint`} className="mt-1 text-xs text-fg-subtle">
+                  Where this agent holds a licence. Leave all unchecked if none.
+                </p>
+              </StateCheckboxes>
             </div>
 
             <div className="mt-6 flex justify-end gap-2">

@@ -12,7 +12,6 @@ import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
 import { Field } from "@/components/field";
 import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
-import { NoteList } from "@/components/note-list";
 import { PageHeader } from "@/components/page-header";
 import { StateCheckboxes } from "@/components/state-checkboxes";
 import { StatusBadge, statusRank } from "@/components/status-badge";
@@ -24,9 +23,10 @@ import { US_STATE_NAMES, stateSummary } from "@/lib/us-states";
 /*
  * Carriers table with dummy add and edit dialogs. Every add or edit records a
  * note listing what changed. The table sorts by header and filters by search.
- * A name links to the carrier's profile; the chevron beside it expands the row
- * to show its aliases and notes. States are the carrier's availableStates: the
- * ceiling for agent appointments on Contracts. Carriers
+ * A name links to the carrier's profile, which shows its aliases and notes;
+ * rows don't expand. States are the carrier's availableStates: one
+ * of the two ceilings on an agent appointment (Contracts), the other being the
+ * agent's own licensedStates. Carriers
  * and notes live in component state only: nothing reaches a server, and a
  * refresh brings back the JSON.
  */
@@ -56,7 +56,8 @@ const EMPTY_VALUES = { name: "", aliases: [], linesOfBusiness: [], availableStat
 
 export function CarriersView({ initialCarriers, initialNotes }: CarriersViewProps) {
   const [carriers, setCarriers] = useState(initialCarriers);
-  const [notes, setNotes] = useState(initialNotes);
+  // Not shown here (the profile lists notes); new ones are still recorded.
+  const [, setNotes] = useState(initialNotes);
   const [unsavedCount, setUnsavedCount] = useState(0);
   const [editor, setEditor] = useState<Editor | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
@@ -79,36 +80,13 @@ export function CarriersView({ initialCarriers, initialNotes }: CarriersViewProp
       {
         id: "name",
         header: "Name",
-        cell: (carrier, { expanded, toggleExpanded, detailsId }) => (
-          <div className="-ml-1 flex items-center gap-0.5 whitespace-nowrap">
-            <Link
-              href={`/carriers/${carrier.id}`}
-              className="rounded-md px-1 py-0.5 text-fg hover:bg-surface-hover hover:underline"
-            >
-              {carrier.name}
-            </Link>
-            <button
-              type="button"
-              onClick={toggleExpanded}
-              aria-expanded={expanded}
-              aria-controls={expanded ? detailsId : undefined}
-              aria-label={`Details for ${carrier.name}`}
-              className="rounded-md p-0.5 hover:bg-surface-hover"
-            >
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 20 20"
-                className={`size-4 shrink-0 text-fg-subtle transition-transform ${expanded ? "rotate-90" : ""}`}
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.5}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M8 5l5 5-5 5" />
-              </svg>
-            </button>
-          </div>
+        cell: (carrier) => (
+          <Link
+            href={`/carriers/${carrier.id}`}
+            className="-ml-1 whitespace-nowrap rounded-md px-1 py-0.5 text-fg hover:bg-surface-hover hover:underline"
+          >
+            {carrier.name}
+          </Link>
         ),
         sortValue: (carrier) => carrier.name,
         searchText: (carrier) => [carrier.name, ...carrier.aliases],
@@ -272,33 +250,6 @@ export function CarriersView({ initialCarriers, initialNotes }: CarriersViewProp
           getRowId={(carrier) => carrier.id}
           unit={["carrier", "carriers"]}
           searchPlaceholder="Search name, alias, line, state…"
-          renderDetails={(carrier) => (
-            <div className="grid gap-6 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
-              <section>
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
-                  Aliases
-                </h3>
-                {carrier.aliases.length > 0 ? (
-                  <ul className="mt-2 space-y-1 text-sm text-fg">
-                    {carrier.aliases.map((alias, index) => (
-                      <li key={`${index}-${alias}`}>{alias}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="mt-2 text-sm text-fg-subtle">None</p>
-                )}
-              </section>
-              <section>
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
-                  Notes
-                </h3>
-                <NoteList
-                  notes={notes.filter((note) => note.carrierId === carrier.id)}
-                  labels={FIELD_LABELS}
-                />
-              </section>
-            </div>
-          )}
         />
       )}
 

@@ -1,18 +1,20 @@
 import Link from "next/link";
-import { stateSummary } from "@/lib/us-states";
+import { stateSummary, writableStates } from "@/lib/us-states";
 
 /*
  * Contracts grouped by agent, as one plain row per active agent: initials and
  * name, how many carriers they are contracted with (count as text plus a thin
  * bar out of the carriers shown above), and those carriers as name chips, each
- * with its appointed states. Clicking the states opens Edit for that contract.
+ * with the states the agent can write there: the appointment narrowed to their
+ * licences and the carrier's footprint. Clicking the states opens Edit for that
+ * contract.
  * Carriers in scope are the same ones the cards above show, so "Show all
  * carriers" applies here too. Agents with no contract stay listed, muted, so
  * gaps are visible. Add carrier opens Add contract for that agent.
  */
 
-type ListAgent = { id: string; name: string };
-type ListCarrier = { id: string; name: string };
+type ListAgent = { id: string; name: string; licensedStates: string[] };
+type ListCarrier = { id: string; name: string; availableStates: string[] };
 type ListContract = { id: string; agentId: string; carrierId: string; appointedStates: string[] };
 
 type AgentCarrierListProps = {
@@ -99,7 +101,11 @@ export function AgentCarrierList({ agents, carriers, contracts, onAdd, onEdit, h
                 {count > 0 ? (
                   <ul aria-label={`Carriers ${agent.name} is contracted with`} className="flex flex-1 flex-wrap gap-1.5">
                     {agentCarriers.map(({ carrier, contract }) => {
-                      const states = [...contract.appointedStates].sort();
+                      const states = writableStates(
+                        contract.appointedStates,
+                        agent.licensedStates,
+                        carrier.availableStates,
+                      );
                       return (
                         <li
                           key={carrier.id}
