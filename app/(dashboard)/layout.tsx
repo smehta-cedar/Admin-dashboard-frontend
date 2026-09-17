@@ -12,7 +12,14 @@ const NAV_ITEMS: NavItem[] = [
       { href: "/agents/profile", label: "Agent profile", activePrefix: "/agents/" },
     ],
   },
-  { href: "/carriers", label: "Carriers" },
+  {
+    href: "/carriers",
+    label: "Carriers",
+    children: [
+      // Opens the first carrier; stays highlighted on every /carriers/<id>.
+      { href: "/carriers/profile", label: "Carrier profile", activePrefix: "/carriers/" },
+    ],
+  },
   { href: "/rulebook", label: "Rulebook" },
   { href: "/logins", label: "Logins" },
   {

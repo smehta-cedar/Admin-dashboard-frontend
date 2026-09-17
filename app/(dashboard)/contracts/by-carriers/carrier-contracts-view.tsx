@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useId, useState, type FormEvent } from "react";
 import { GHOST_BUTTON_CLASS, INPUT_CLASS, PRIMARY_BUTTON_CLASS } from "@/components/classes";
 import { EmptyState } from "@/components/empty-state";
@@ -387,9 +388,12 @@ export function CarrierContractsView({
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0 space-y-2">
                                 <h3 className="flex max-w-full items-center gap-1">
-                                  <span className="truncate font-semibold tracking-tight text-gray-950">
+                                  <Link
+                                    href={`/carriers/${carrier.id}`}
+                                    className="truncate font-semibold tracking-tight text-gray-950 hover:underline"
+                                  >
                                     {carrier.name}
-                                  </span>
+                                  </Link>
                                   {carrier.status === "inactive" ? (
                                     <span className="shrink-0 text-xs font-normal text-gray-400">inactive</span>
                                   ) : null}
@@ -494,7 +498,9 @@ export function CarrierContractsView({
                         key={carrier.id}
                         className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white py-0.5 pl-3 pr-1 text-sm text-gray-600"
                       >
-                        {carrier.name}
+                        <Link href={`/carriers/${carrier.id}`} className="hover:underline">
+                          {carrier.name}
+                        </Link>
                         {carrier.status === "inactive" ? (
                           <span className="text-gray-400"> (inactive)</span>
                         ) : null}

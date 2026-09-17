@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ProfileSection, ProfileShell } from "@/components/profile-shell";
 import { StatusBadge } from "@/components/status-badge";
 import type { AgentNote, AgentRecord } from "@/lib/agents";
@@ -11,9 +12,8 @@ import { AgentSwitcher } from "./agent-switcher";
 /*
  * Read-only profile for one agent: identity, then everything linked to them —
  * licensed states, contracted carriers, logins, and change notes. Editing
- * stays on the Agents, Contracts and Logins pages.
- *
- * Carrier names are plain text until carriers get their own profile page.
+ * stays on the Agents, Contracts and Logins pages. Carrier names link to
+ * their profiles.
  */
 
 type AgentProfileProps = {
@@ -73,7 +73,9 @@ export function AgentProfile({ agent, allAgents, licensedStates, carriers, login
         <ul className="divide-y divide-gray-200 rounded-lg border border-gray-200 text-sm">
           {carriers.map((carrier) => (
             <li key={carrier.id} className="flex items-center justify-between gap-4 px-4 py-2.5">
-              <span className="text-gray-900">{carrier.name}</span>
+              <Link href={`/carriers/${carrier.id}`} className="text-gray-900 hover:underline">
+                {carrier.name}
+              </Link>
               <StatusBadge status={carrier.status} />
             </li>
           ))}
@@ -99,7 +101,11 @@ export function AgentProfile({ agent, allAgents, licensedStates, carriers, login
             <tbody className="divide-y divide-gray-200 border-t border-gray-200">
               {logins.map((login) => (
                 <tr key={login.id}>
-                  <td className="whitespace-nowrap px-4 py-2.5 text-gray-900">{login.carrierName}</td>
+                  <td className="whitespace-nowrap px-4 py-2.5">
+                    <Link href={`/carriers/${login.carrierId}`} className="text-gray-900 hover:underline">
+                      {login.carrierName}
+                    </Link>
+                  </td>
                   <td className="px-4 py-2.5 font-mono text-gray-600">{login.writingNumber}</td>
                   <td className="px-4 py-2.5 text-gray-600">
                     <CredentialValue value={login.username} label="username" />

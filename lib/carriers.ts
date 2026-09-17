@@ -64,6 +64,11 @@ export async function getCarriers(): Promise<CarrierRecord[]> {
   return (carriersJson as CarrierRecord[]).slice().sort((a, b) => Number(a.id) - Number(b.id));
 }
 
+/** One carrier by internal ID, or null when there is none. */
+export async function getCarrier(id: string): Promise<CarrierRecord | null> {
+  return (carriersJson as CarrierRecord[]).find((carrier) => carrier.id === id) ?? null;
+}
+
 /** Every carrier note, newest first. */
 export async function getCarrierNotes(): Promise<CarrierNote[]> {
   return (notesJson as CarrierNote[])

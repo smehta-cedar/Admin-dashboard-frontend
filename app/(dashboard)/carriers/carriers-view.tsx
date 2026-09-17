@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Fragment, useId, useState, type FormEvent } from "react";
 import {
   GHOST_BUTTON_CLASS,
@@ -19,9 +20,10 @@ import { LINES_OF_BUSINESS } from "@/lib/lines-of-business";
 
 /*
  * Carriers table with dummy add and edit dialogs. Every add or edit records a
- * note listing what changed; clicking a name expands the row to show that
- * carrier's aliases and notes. Carriers and notes live in component state
- * only: nothing reaches a server, and a refresh brings back the JSON.
+ * note listing what changed. A name links to the carrier's profile; the
+ * chevron beside it expands the row to show its aliases and notes. Carriers
+ * and notes live in component state only: nothing reaches a server, and a
+ * refresh brings back the JSON.
  */
 
 type CarriersViewProps = {
@@ -35,7 +37,7 @@ type Editor = { mode: "add" } | { mode: "edit"; carrier: CarrierRecord };
 type CarrierValues = Omit<CarrierRecord, "id">;
 
 /** Also the order changes are compared and listed in. */
-const FIELD_LABELS: Record<CarrierField, string> = {
+export const FIELD_LABELS: Record<CarrierField, string> = {
   name: "Name",
   aliases: "Aliases",
   linesOfBusiness: "Lines of business",
@@ -197,27 +199,35 @@ export function CarriersView({ initialCarriers, initialNotes }: CarriersViewProp
                     <tr className={expanded ? "bg-gray-50" : undefined}>
                       <td className="px-4 py-2.5 font-mono text-gray-600">{carrier.id}</td>
                       <td className="px-4 py-2.5">
-                        <button
-                          type="button"
-                          onClick={() => toggleExpanded(carrier.id)}
-                          aria-expanded={expanded}
-                          aria-controls={expanded ? detailsId : undefined}
-                          className="-ml-1 flex items-center gap-1 whitespace-nowrap rounded-md px-1 py-0.5 text-gray-900 hover:bg-gray-100"
-                        >
-                          {carrier.name}
-                          <svg
-                            aria-hidden="true"
-                            viewBox="0 0 20 20"
-                            className={`size-4 shrink-0 text-gray-500 transition-transform ${expanded ? "rotate-90" : ""}`}
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth={1.5}
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
+                        <div className="-ml-1 flex items-center gap-0.5 whitespace-nowrap">
+                          <Link
+                            href={`/carriers/${carrier.id}`}
+                            className="rounded-md px-1 py-0.5 text-gray-900 hover:bg-gray-100 hover:underline"
                           >
-                            <path d="M8 5l5 5-5 5" />
-                          </svg>
-                        </button>
+                            {carrier.name}
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => toggleExpanded(carrier.id)}
+                            aria-expanded={expanded}
+                            aria-controls={expanded ? detailsId : undefined}
+                            aria-label={`Details for ${carrier.name}`}
+                            className="rounded-md p-0.5 hover:bg-gray-100"
+                          >
+                            <svg
+                              aria-hidden="true"
+                              viewBox="0 0 20 20"
+                              className={`size-4 shrink-0 text-gray-500 transition-transform ${expanded ? "rotate-90" : ""}`}
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth={1.5}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M8 5l5 5-5 5" />
+                            </svg>
+                          </button>
+                        </div>
                       </td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-gray-600">
                         {carrier.linesOfBusiness.join(", ")}

@@ -94,9 +94,11 @@ export function AgentCarrierList({ agents, carriers, contracts, onAdd, headingId
                     {agentCarriers.map((carrier) => (
                       <li
                         key={carrier.id}
-                        className="rounded-md bg-[#f5ebe0] px-2 py-1 text-xs font-medium text-stone-700 ring-1 ring-inset ring-stone-200"
+                        className="rounded-md bg-[#f5ebe0] text-xs font-medium text-stone-700 ring-1 ring-inset ring-stone-200"
                       >
-                        {carrier.name}
+                        <Link href={`/carriers/${carrier.id}`} className="block px-2 py-1 hover:underline">
+                          {carrier.name}
+                        </Link>
                       </li>
                     ))}
                   </ul>
