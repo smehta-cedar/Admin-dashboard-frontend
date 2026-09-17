@@ -32,8 +32,9 @@ function isActive(pathname: string, href: string, activePrefix?: string) {
 }
 
 const LINK_BASE = "block rounded-md px-3 py-2 text-sm font-medium";
-const LINK_ACTIVE = "bg-gray-100 text-gray-900";
-const LINK_IDLE = "text-gray-600 hover:bg-gray-50 hover:text-gray-900";
+/* Inset bar on the left edge marks the current page in the logo teal. */
+const LINK_ACTIVE = "bg-brand-soft text-brand-ink shadow-[inset_3px_0_0_var(--color-brand)]";
+const LINK_IDLE = "text-gray-600 hover:bg-brand-soft/60 hover:text-gray-900";
 
 export function Sidebar({ items, onLinkClick }: SidebarProps) {
   const pathname = usePathname();
@@ -63,7 +64,7 @@ export function Sidebar({ items, onLinkClick }: SidebarProps) {
                   active
                     ? LINK_ACTIVE
                     : activeChild
-                      ? "text-gray-900 hover:bg-gray-50"
+                      ? "text-brand-ink hover:bg-brand-soft/60"
                       : LINK_IDLE
                 }`}
               >

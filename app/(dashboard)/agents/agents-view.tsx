@@ -1,26 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useId, useState, type FormEvent } from "react";
+import { useId, useMemo, useState, type FormEvent } from "react";
 import {
   GHOST_BUTTON_CLASS,
   INPUT_CLASS,
   PRIMARY_BUTTON_CLASS,
   ROW_BUTTON_CLASS,
 } from "@/components/classes";
+import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
 import { Field } from "@/components/field";
 import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
 import { NoteList } from "@/components/note-list";
 import { PageHeader } from "@/components/page-header";
-import { StatusBadge } from "@/components/status-badge";
+import { StatusBadge, statusRank } from "@/components/status-badge";
 import type { AgentField, AgentNote, AgentRecord } from "@/lib/agents";
 import { diffValues, nextId } from "@/lib/change-notes";
 
 /*
  * Agents table with dummy add and edit dialogs. Every add or edit records a
- * note listing what changed. A name links to the agent's profile; the chevron
- * beside it expands the row to show their aliases and notes. Agents and notes
+ * note listing what changed. The table sorts by header and filters by search.
+ * A name links to the agent's profile; the chevron beside it expands the row to
+ * show their aliases and notes. Agents and notes
  * live in component state only: nothing reaches a server, and a refresh brings
  * back the JSON.
  */
@@ -47,7 +49,6 @@ export const FIELD_LABELS: Record<AgentField, string> = {
 
 const FIELDS = Object.keys(FIELD_LABELS) as AgentField[];
 
-const COLUMNS = ["ID", "NPN", "Name", "Status", "Email", "Phone"];
 
 const EMPTY_VALUES = { name: "", aliases: [], npn: "", email: "", phone: "" };
 
@@ -57,16 +58,106 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
   const [unsavedCount, setUnsavedCount] = useState(0);
   const [editor, setEditor] = useState<Editor | null>(null);
   const [npnError, setNpnError] = useState<string | null>(null);
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const { dialogRef, close: closeDialog } = useModalDialog(editor !== null);
   const id = useId();
 
-  const toggleExpanded = (agentId: string) =>
-    setExpandedIds((current) => {
-      const next = new Set(current);
-      if (!next.delete(agentId)) next.add(agentId);
-      return next;
-    });
+  // Sort and search run in DataTable. Search covers aliases too, so an agent can
+  // be found by any name they appear under on statements.
+  const columns = useMemo<DataTableColumn<AgentRecord>[]>(
+    () => [
+      {
+        id: "id",
+        header: "ID",
+        cell: (agent) => agent.id,
+        className: "font-mono text-gray-600",
+        sortValue: (agent) => Number(agent.id),
+        searchText: (agent) => agent.id,
+      },
+      {
+        id: "npn",
+        header: "NPN",
+        cell: (agent) => agent.npn,
+        className: "font-mono text-gray-600",
+        sortValue: (agent) => agent.npn,
+        searchText: (agent) => agent.npn,
+      },
+      {
+        id: "name",
+        header: "Name",
+        cell: (agent, { expanded, toggleExpanded, detailsId }) => (
+          <div className="-ml-1 flex items-center gap-0.5 whitespace-nowrap">
+            <Link
+              href={`/agents/${agent.id}`}
+              className="rounded-md px-1 py-0.5 text-gray-900 hover:bg-gray-100 hover:underline"
+            >
+              {agent.name}
+            </Link>
+            <button
+              type="button"
+              onClick={toggleExpanded}
+              aria-expanded={expanded}
+              aria-controls={expanded ? detailsId : undefined}
+              aria-label={`Details for ${agent.name}`}
+              className="rounded-md p-0.5 hover:bg-gray-100"
+            >
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 20 20"
+                className={`size-4 shrink-0 text-gray-500 transition-transform ${expanded ? "rotate-90" : ""}`}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M8 5l5 5-5 5" />
+              </svg>
+            </button>
+          </div>
+        ),
+        sortValue: (agent) => agent.name,
+        searchText: (agent) => [agent.name, ...agent.aliases],
+      },
+      {
+        id: "status",
+        header: "Status",
+        cell: (agent) => <StatusBadge status={agent.status} />,
+        sortValue: (agent) => statusRank(agent.status),
+        searchText: (agent) => agent.status,
+      },
+      {
+        id: "email",
+        header: "Email",
+        cell: (agent) => agent.email,
+        className: "text-gray-600",
+        sortValue: (agent) => agent.email,
+        searchText: (agent) => agent.email,
+      },
+      {
+        id: "phone",
+        header: "Phone",
+        cell: (agent) => agent.phone,
+        className: "whitespace-nowrap text-gray-600",
+        searchText: (agent) => agent.phone,
+      },
+      {
+        id: "actions",
+        header: "Actions",
+        srOnlyHeader: true,
+        cell: (agent) => (
+          <button
+            type="button"
+            onClick={() => setEditor({ mode: "edit", agent })}
+            className={ROW_BUTTON_CLASS}
+          >
+            Edit<span className="sr-only"> {agent.name}</span>
+          </button>
+        ),
+        className: "text-right",
+      },
+    ],
+    [],
+  );
 
   // Runs for every close: Cancel, Escape, backdrop click, or a save. Clearing
   // the editor unmounts the form, which resets it.
@@ -153,117 +244,40 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
           action={addButton}
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-gray-200">
-          <table className="min-w-full text-left text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                {COLUMNS.map((heading) => (
-                  <th
-                    key={heading}
-                    scope="col"
-                    className="whitespace-nowrap px-4 py-2.5 font-medium text-gray-600"
-                  >
-                    {heading}
-                  </th>
-                ))}
-                <th scope="col" className="px-4 py-2.5">
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 border-t border-gray-200">
-              {agents.map((agent) => {
-                const expanded = expandedIds.has(agent.id);
-                const detailsId = `${id}-details-${agent.id}`;
-
-                return (
-                  <Fragment key={agent.id}>
-                    <tr className={expanded ? "bg-gray-50" : undefined}>
-                      <td className="px-4 py-2.5 font-mono text-gray-600">{agent.id}</td>
-                      <td className="px-4 py-2.5 font-mono text-gray-600">{agent.npn}</td>
-                      <td className="px-4 py-2.5">
-                        <div className="-ml-1 flex items-center gap-0.5 whitespace-nowrap">
-                          <Link
-                            href={`/agents/${agent.id}`}
-                            className="rounded-md px-1 py-0.5 text-gray-900 hover:bg-gray-100 hover:underline"
-                          >
-                            {agent.name}
-                          </Link>
-                          <button
-                            type="button"
-                            onClick={() => toggleExpanded(agent.id)}
-                            aria-expanded={expanded}
-                            aria-controls={expanded ? detailsId : undefined}
-                            aria-label={`Details for ${agent.name}`}
-                            className="rounded-md p-0.5 hover:bg-gray-100"
-                          >
-                            <svg
-                              aria-hidden="true"
-                              viewBox="0 0 20 20"
-                              className={`size-4 shrink-0 text-gray-500 transition-transform ${expanded ? "rotate-90" : ""}`}
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth={1.5}
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            >
-                              <path d="M8 5l5 5-5 5" />
-                            </svg>
-                          </button>
-                        </div>
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <StatusBadge status={agent.status} />
-                      </td>
-                      <td className="px-4 py-2.5 text-gray-600">{agent.email}</td>
-                      <td className="whitespace-nowrap px-4 py-2.5 text-gray-600">{agent.phone}</td>
-                      <td className="px-4 py-2.5 text-right">
-                        <button
-                          type="button"
-                          onClick={() => setEditor({ mode: "edit", agent })}
-                          className={ROW_BUTTON_CLASS}
-                        >
-                          Edit<span className="sr-only"> {agent.name}</span>
-                        </button>
-                      </td>
-                    </tr>
-                    {expanded ? (
-                      <tr id={detailsId} className="bg-gray-50">
-                        <td colSpan={COLUMNS.length + 1} className="px-4 pb-4 pt-1">
-                          <div className="grid gap-6 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
-                            <section>
-                              <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                Aliases
-                              </h3>
-                              {agent.aliases.length > 0 ? (
-                                <ul className="mt-2 space-y-1 text-sm text-gray-900">
-                                  {agent.aliases.map((alias, index) => (
-                                    <li key={`${index}-${alias}`}>{alias}</li>
-                                  ))}
-                                </ul>
-                              ) : (
-                                <p className="mt-2 text-sm text-gray-500">None</p>
-                              )}
-                            </section>
-                            <section>
-                              <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                Notes
-                              </h3>
-                              <NoteList
-                                notes={notes.filter((note) => note.agentId === agent.id)}
-                                labels={FIELD_LABELS}
-                              />
-                            </section>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : null}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          rows={agents}
+          columns={columns}
+          getRowId={(agent) => agent.id}
+          unit={["agent", "agents"]}
+          searchPlaceholder="Search name, NPN, email…"
+          renderDetails={(agent) => (
+            <div className="grid gap-6 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
+              <section>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  Aliases
+                </h3>
+                {agent.aliases.length > 0 ? (
+                  <ul className="mt-2 space-y-1 text-sm text-gray-900">
+                    {agent.aliases.map((alias, index) => (
+                      <li key={`${index}-${alias}`}>{alias}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-sm text-gray-500">None</p>
+                )}
+              </section>
+              <section>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  Notes
+                </h3>
+                <NoteList
+                  notes={notes.filter((note) => note.agentId === agent.id)}
+                  labels={FIELD_LABELS}
+                />
+              </section>
+            </div>
+          )}
+        />
       )}
 
       <ModalDialog dialogRef={dialogRef} labelledBy={`${id}-title`} onClose={handleClose}>

@@ -24,11 +24,12 @@ export default async function ContractsByCarrierPage() {
       agents={agents
         .filter((agent) => agent.status === "active")
         .map(({ id, name }) => ({ id, name }))}
-      carriers={carriers.map(({ id, name, linesOfBusiness, status }) => ({
+      carriers={carriers.map(({ id, name, linesOfBusiness, status, availableStates }) => ({
         id,
         name,
         linesOfBusiness,
         status,
+        availableStates,
       }))}
     />
   );

@@ -1,9 +1,11 @@
 import Link from "next/link";
+import { stateSummary } from "@/lib/us-states";
 
 /*
  * Contracts grouped by agent, as one plain row per active agent: initials and
  * name, how many carriers they are contracted with (count as text plus a thin
- * bar out of the carriers shown above), and those carriers as name chips.
+ * bar out of the carriers shown above), and those carriers as name chips, each
+ * with its appointed states. Clicking the states opens Edit for that contract.
  * Carriers in scope are the same ones the cards above show, so "Show all
  * carriers" applies here too. Agents with no contract stay listed, muted, so
  * gaps are visible. Add carrier opens Add contract for that agent.
@@ -11,14 +13,16 @@ import Link from "next/link";
 
 type ListAgent = { id: string; name: string };
 type ListCarrier = { id: string; name: string };
+type ListContract = { id: string; agentId: string; carrierId: string; appointedStates: string[] };
 
 type AgentCarrierListProps = {
   /** Active agents, sorted by name. */
   agents: ListAgent[];
   /** Carriers in scope, in display order. */
   carriers: ListCarrier[];
-  contracts: { id: string; agentId: string; carrierId: string }[];
+  contracts: ListContract[];
   onAdd: (agentId: string) => void;
+  onEdit: (contract: ListContract) => void;
   headingId: string;
 };
 
@@ -30,7 +34,7 @@ const initials = (name: string) => {
   return (first + last).toUpperCase();
 };
 
-export function AgentCarrierList({ agents, carriers, contracts, onAdd, headingId }: AgentCarrierListProps) {
+export function AgentCarrierList({ agents, carriers, contracts, onAdd, onEdit, headingId }: AgentCarrierListProps) {
   const total = carriers.length;
 
   return (
@@ -49,10 +53,13 @@ export function AgentCarrierList({ agents, carriers, contracts, onAdd, headingId
       ) : (
         <ul className="divide-y divide-gray-100 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xs">
           {agents.map((agent) => {
-            // In the order of the carriers shown above.
-            const agentCarriers = carriers.filter((carrier) =>
-              contracts.some((contract) => contract.agentId === agent.id && contract.carrierId === carrier.id),
-            );
+            // In the order of the carriers shown above, each with its contract.
+            const agentCarriers = carriers.flatMap((carrier) => {
+              const contract = contracts.find(
+                (item) => item.agentId === agent.id && item.carrierId === carrier.id,
+              );
+              return contract ? [{ carrier, contract }] : [];
+            });
             const count = agentCarriers.length;
             const percent = total === 0 ? 0 : Math.round((count / total) * 100);
 
@@ -91,16 +98,33 @@ export function AgentCarrierList({ agents, carriers, contracts, onAdd, headingId
 
                 {count > 0 ? (
                   <ul aria-label={`Carriers ${agent.name} is contracted with`} className="flex flex-1 flex-wrap gap-1.5">
-                    {agentCarriers.map((carrier) => (
-                      <li
-                        key={carrier.id}
-                        className="rounded-md bg-[#f5ebe0] text-xs font-medium text-stone-700 ring-1 ring-inset ring-stone-200"
-                      >
-                        <Link href={`/carriers/${carrier.id}`} className="block px-2 py-1 hover:underline">
-                          {carrier.name}
-                        </Link>
-                      </li>
-                    ))}
+                    {agentCarriers.map(({ carrier, contract }) => {
+                      const states = [...contract.appointedStates].sort();
+                      return (
+                        <li
+                          key={carrier.id}
+                          className="flex items-stretch divide-x divide-stone-200 rounded-md bg-[#f5ebe0] text-xs font-medium text-stone-700 ring-1 ring-inset ring-stone-200"
+                        >
+                          <Link href={`/carriers/${carrier.id}`} className="block px-2 py-1 hover:underline">
+                            {carrier.name}
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => onEdit(contract)}
+                            title={states.length > 0 ? states.join(", ") : "No states yet"}
+                            className={`rounded-r-md px-2 py-1 tabular-nums hover:bg-stone-200/60 ${
+                              states.length === 0 ? "text-stone-400" : "text-stone-600"
+                            }`}
+                          >
+                            {stateSummary(states)}
+                            <span className="sr-only">
+                              {" "}
+                              for {agent.name} at {carrier.name}. Edit
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
                   </ul>
                 ) : (
                   <p className="flex-1 text-sm text-stone-400">No carriers yet</p>

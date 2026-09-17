@@ -36,7 +36,7 @@ export default function DashboardLayout({
   children,
 }: Readonly<{ children: ReactNode }>) {
   return (
-    <AppShell title="Commissions" navItems={NAV_ITEMS}>
+    <AppShell title="" navItems={NAV_ITEMS}>
       {children}
     </AppShell>
   );

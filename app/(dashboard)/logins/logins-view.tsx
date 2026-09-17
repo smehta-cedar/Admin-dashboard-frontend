@@ -1,19 +1,21 @@
 "use client";
 
-import { Fragment, useEffect, useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   GHOST_BUTTON_CLASS,
   INPUT_CLASS,
   PRIMARY_BUTTON_CLASS,
   ROW_BUTTON_CLASS,
+  TOOLBAR_INPUT_CLASS,
 } from "@/components/classes";
+import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
 import { Field } from "@/components/field";
 import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
 import { NoteList } from "@/components/note-list";
 import { PageHeader } from "@/components/page-header";
-import { StatusBadge } from "@/components/status-badge";
+import { StatusBadge, statusRank } from "@/components/status-badge";
 import type { AgentRecord } from "@/lib/agents";
 import type { CarrierRecord } from "@/lib/carriers";
 import { diffValues, nextId } from "@/lib/change-notes";
@@ -24,7 +26,8 @@ import { CredentialValue, PasswordInput } from "./credential-value";
  * Logins table with dummy add and edit dialogs. Each login is one agent at one
  * carrier. Every add or edit records a note listing what changed (agent and
  * carrier by name); clicking an agent name expands the row to show that
- * login's notes. A carrier dropdown filters the list (?carrier=<id>). Logins
+ * login's notes. A carrier dropdown filters the list (?carrier=<id>); within
+ * it, the table sorts by header and narrows by search. Logins
  * and notes live in component state only: nothing reaches a server, and a
  * refresh brings back the JSON.
  */
@@ -56,11 +59,83 @@ const FIELD_LABELS: Record<LoginField, string> = {
 
 const FIELDS = Object.keys(FIELD_LABELS) as LoginField[];
 
-const COLUMNS = ["Agent", "Carrier", "Writing number", "Portal username", "Password", "Status"];
+/** A table row: the login with its agent and carrier names looked up. */
+type LoginRow = { login: LoginRecord; agent: string; carrier: string };
 
-/** INPUT_CLASS without the top margin and full width, to sit beside the Add button. */
-const FILTER_SELECT_CLASS =
-  "block rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900";
+/*
+ * Sort and search run in DataTable. The password is neither sortable nor
+ * searchable, so typing part of one never reveals which row it belongs to.
+ * The actions column is added in the view, since Edit opens its dialog.
+ */
+const COLUMNS: DataTableColumn<LoginRow>[] = [
+  {
+    id: "agent",
+    header: "Agent",
+    cell: ({ agent, carrier }, { expanded, toggleExpanded, detailsId }) => (
+      <button
+        type="button"
+        onClick={toggleExpanded}
+        aria-expanded={expanded}
+        aria-controls={expanded ? detailsId : undefined}
+        className="-ml-1 flex items-center gap-1 whitespace-nowrap rounded-md px-1 py-0.5 text-gray-900 hover:bg-gray-100"
+      >
+        {agent}
+        <span className="sr-only"> at {carrier}</span>
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 20 20"
+          className={`size-4 shrink-0 text-gray-500 transition-transform ${expanded ? "rotate-90" : ""}`}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M8 5l5 5-5 5" />
+        </svg>
+      </button>
+    ),
+    sortValue: ({ agent }) => agent,
+    searchText: ({ agent }) => agent,
+  },
+  {
+    id: "carrier",
+    header: "Carrier",
+    cell: ({ carrier }) => carrier,
+    className: "whitespace-nowrap text-gray-900",
+    sortValue: ({ carrier }) => carrier,
+    searchText: ({ carrier }) => carrier,
+  },
+  {
+    id: "writingNumber",
+    header: "Writing number",
+    cell: ({ login }) => login.writingNumber,
+    className: "font-mono text-gray-600",
+    sortValue: ({ login }) => login.writingNumber,
+    searchText: ({ login }) => login.writingNumber,
+  },
+  {
+    id: "username",
+    header: "Portal username",
+    cell: ({ login }) => <CredentialValue value={login.username} label="username" />,
+    className: "text-gray-600",
+    sortValue: ({ login }) => login.username,
+    searchText: ({ login }) => login.username,
+  },
+  {
+    id: "password",
+    header: "Password",
+    cell: ({ login }) => <CredentialValue value={login.portalPassword} label="password" secret />,
+    className: "text-gray-600",
+  },
+  {
+    id: "status",
+    header: "Status",
+    cell: ({ login }) => <StatusBadge status={login.status} />,
+    sortValue: ({ login }) => statusRank(login.status),
+    searchText: ({ login }) => login.status,
+  },
+];
 
 const EMPTY_VALUES = { agentId: "", carrierId: "", writingNumber: "", username: "", portalPassword: "" };
 
@@ -82,7 +157,6 @@ export function LoginsView({ initialLogins, initialNotes, agents, carriers }: Lo
   const [hiddenNotice, setHiddenNotice] = useState<{ loginId: string; message: string } | null>(
     null,
   );
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const { dialogRef, close: closeDialog } = useModalDialog(editor !== null);
   const id = useId();
   const searchParams = useSearchParams();
@@ -125,24 +199,48 @@ export function LoginsView({ initialLogins, initialNotes, agents, carriers }: Lo
     return () => clearTimeout(timeout);
   }, [hiddenNotice]);
 
-  // Narrowed to the carrier filter, sorted by agent name, then carrier name.
-  // Built from state on every render, so an add or edit lands in place right
-  // away, or drops out if it no longer matches the filter.
-  const rows = logins
-    .filter((login) => !carrierFilter || login.carrierId === carrierFilter)
-    .map((login) => ({
-      login,
-      agent: agentName(login.agentId),
-      carrier: carrierName(login.carrierId),
-    }))
-    .sort((a, b) => a.agent.localeCompare(b.agent) || a.carrier.localeCompare(b.carrier));
+  // Narrowed to the carrier filter, sorted by agent name, then carrier name
+  // (the order a cleared header sort returns to). Rebuilt when logins change,
+  // so an add or edit lands in place right away, or drops out if it no longer
+  // matches the filter.
+  const rows = useMemo<LoginRow[]>(() => {
+    const agentNames = new Map(agents.map((agent) => [agent.id, agent.name]));
+    const carrierNames = new Map(carriers.map((carrier) => [carrier.id, carrier.name]));
+    return logins
+      .filter((login) => !carrierFilter || login.carrierId === carrierFilter)
+      .map((login) => ({
+        login,
+        agent: agentNames.get(login.agentId) ?? `Agent ${login.agentId}`,
+        carrier: carrierNames.get(login.carrierId) ?? `Carrier ${login.carrierId}`,
+      }))
+      .sort((a, b) => a.agent.localeCompare(b.agent) || a.carrier.localeCompare(b.carrier));
+  }, [logins, carrierFilter, agents, carriers]);
 
-  const toggleExpanded = (loginId: string) =>
-    setExpandedIds((current) => {
-      const next = new Set(current);
-      if (!next.delete(loginId)) next.add(loginId);
-      return next;
-    });
+  const columns = useMemo<DataTableColumn<LoginRow>[]>(
+    () => [
+      ...COLUMNS,
+      {
+        id: "actions",
+        header: "Actions",
+        srOnlyHeader: true,
+        cell: ({ login, agent, carrier }) => (
+          <button
+            type="button"
+            onClick={() => setEditor({ mode: "edit", login })}
+            className={ROW_BUTTON_CLASS}
+          >
+            Edit
+            <span className="sr-only">
+              {" "}
+              {agent} at {carrier}
+            </span>
+          </button>
+        ),
+        className: "text-right",
+      },
+    ],
+    [],
+  );
 
   // Runs for every close: Cancel, Escape, backdrop click, or a save. Clearing
   // the editor unmounts the form, which resets it.
@@ -256,7 +354,7 @@ export function LoginsView({ initialLogins, initialNotes, agents, carriers }: Lo
               id={`${id}-carrier-filter`}
               value={carrierFilter}
               onChange={(event) => changeCarrierFilter(event.target.value)}
-              className={FILTER_SELECT_CLASS}
+              className={TOOLBAR_INPUT_CLASS}
             >
               <option value="">All carriers</option>
               {[...carriers].sort(byName).map((carrier) => (
@@ -292,109 +390,25 @@ export function LoginsView({ initialLogins, initialNotes, agents, carriers }: Lo
           action={addButton}
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-gray-200">
-          <table className="min-w-full text-left text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                {COLUMNS.map((heading) => (
-                  <th
-                    key={heading}
-                    scope="col"
-                    className="whitespace-nowrap px-4 py-2.5 font-medium text-gray-600"
-                  >
-                    {heading}
-                  </th>
-                ))}
-                <th scope="col" className="px-4 py-2.5">
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 border-t border-gray-200">
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={COLUMNS.length + 1} className="px-4 py-6 text-center text-gray-600">
-                    No logins for {carrierName(carrierFilter)}.
-                  </td>
-                </tr>
-              ) : null}
-              {rows.map(({ login, agent, carrier }) => {
-                const expanded = expandedIds.has(login.id);
-                const detailsId = `${id}-details-${login.id}`;
-
-                return (
-                  <Fragment key={login.id}>
-                    <tr className={expanded ? "bg-gray-50" : undefined}>
-                      <td className="px-4 py-2.5">
-                        <button
-                          type="button"
-                          onClick={() => toggleExpanded(login.id)}
-                          aria-expanded={expanded}
-                          aria-controls={expanded ? detailsId : undefined}
-                          className="-ml-1 flex items-center gap-1 whitespace-nowrap rounded-md px-1 py-0.5 text-gray-900 hover:bg-gray-100"
-                        >
-                          {agent}
-                          <span className="sr-only"> at {carrier}</span>
-                          <svg
-                            aria-hidden="true"
-                            viewBox="0 0 20 20"
-                            className={`size-4 shrink-0 text-gray-500 transition-transform ${expanded ? "rotate-90" : ""}`}
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth={1.5}
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <path d="M8 5l5 5-5 5" />
-                          </svg>
-                        </button>
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-2.5 text-gray-900">{carrier}</td>
-                      <td className="px-4 py-2.5 font-mono text-gray-600">{login.writingNumber}</td>
-                      <td className="px-4 py-2.5 text-gray-600">
-                        <CredentialValue value={login.username} label="username" />
-                      </td>
-                      <td className="px-4 py-2.5 text-gray-600">
-                        <CredentialValue value={login.portalPassword} label="password" secret />
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <StatusBadge status={login.status} />
-                      </td>
-                      <td className="px-4 py-2.5 text-right">
-                        <button
-                          type="button"
-                          onClick={() => setEditor({ mode: "edit", login })}
-                          className={ROW_BUTTON_CLASS}
-                        >
-                          Edit
-                          <span className="sr-only">
-                            {" "}
-                            {agent} at {carrier}
-                          </span>
-                        </button>
-                      </td>
-                    </tr>
-                    {expanded ? (
-                      <tr id={detailsId} className="bg-gray-50">
-                        <td colSpan={COLUMNS.length + 1} className="px-4 pb-4 pt-1">
-                          <section className="max-w-2xl">
-                            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                              Notes
-                            </h3>
-                            <NoteList
-                              notes={notes.filter((note) => note.loginId === login.id)}
-                              labels={FIELD_LABELS}
-                            />
-                          </section>
-                        </td>
-                      </tr>
-                    ) : null}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          rows={rows}
+          columns={columns}
+          getRowId={({ login }) => login.id}
+          unit={["login", "logins"]}
+          searchPlaceholder="Search agent, carrier, number…"
+          emptyMessage={`No logins for ${carrierName(carrierFilter)}.`}
+          renderDetails={({ login }) => (
+            <section className="max-w-2xl">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Notes
+              </h3>
+              <NoteList
+                notes={notes.filter((note) => note.loginId === login.id)}
+                labels={FIELD_LABELS}
+              />
+            </section>
+          )}
+        />
       )}
 
       <ModalDialog dialogRef={dialogRef} labelledBy={`${id}-title`} onClose={handleClose}>

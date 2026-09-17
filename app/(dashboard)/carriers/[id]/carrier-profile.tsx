@@ -4,22 +4,25 @@ import { StatusBadge } from "@/components/status-badge";
 import type { AgentStatus } from "@/lib/agents";
 import type { CarrierNote, CarrierRecord } from "@/lib/carriers";
 import type { LoginRecord } from "@/lib/logins";
+import { stateSummary } from "@/lib/us-states";
 import { CredentialValue } from "../../logins/credential-value";
 import { CarrierNotes } from "./carrier-notes";
 import { CarrierSwitcher } from "./carrier-switcher";
 
 /*
- * Read-only profile for one carrier: identity, then everything linked to it —
- * contracted agents, logins, and change notes. Editing stays on the Carriers,
- * Contracts and Logins pages. Agent names link to their profiles.
+ * Read-only profile for one carrier: identity (including the states it is
+ * available in, the ceiling for its appointments), then everything linked to it —
+ * contracted agents (with the states each is appointed in), logins, and change
+ * notes. Editing stays on the Carriers, Contracts and Logins pages. Agent names
+ * link to their profiles.
  */
 
 type CarrierProfileProps = {
   carrier: CarrierRecord;
   /** Every carrier, sorted by name, for the switcher. */
   allCarriers: Pick<CarrierRecord, "id" | "name" | "status">[];
-  /** Contracted agents, sorted by name. */
-  agents: { id: string; name: string; status: AgentStatus }[];
+  /** Contracted agents, sorted by name, each with its appointed state codes in code order. */
+  agents: { id: string; name: string; status: AgentStatus; appointedStates: string[] }[];
   /** Sorted by agent name. */
   logins: (LoginRecord & { agentName: string })[];
   /** Newest first. */
@@ -55,6 +58,14 @@ export function CarrierProfile({ carrier, allCarriers, agents, logins, notes }: 
               ""
             ),
         },
+        {
+          label: "Available states",
+          value: (
+            <span className={carrier.availableStates.length === 0 ? "text-gray-500" : "tabular-nums"}>
+              {stateSummary(carrier.availableStates)}
+            </span>
+          ),
+        },
       ]}
     >
       <ProfileSection title="Agents" count={agents.length} emptyMessage="No contracted agents.">
@@ -64,7 +75,18 @@ export function CarrierProfile({ carrier, allCarriers, agents, logins, notes }: 
               <Link href={`/agents/${agent.id}`} className={LINK_CLASS}>
                 {agent.name}
               </Link>
-              <StatusBadge status={agent.status} />
+              <div className="flex items-center gap-3">
+                {/* Every appointed state code, or "No states". */}
+                <span
+                  title={agent.appointedStates.join(", ") || undefined}
+                  className={`font-mono text-xs tabular-nums ${
+                    agent.appointedStates.length === 0 ? "text-gray-400" : "text-gray-600"
+                  }`}
+                >
+                  {stateSummary(agent.appointedStates)}
+                </span>
+                <StatusBadge status={agent.status} />
+              </div>
             </li>
           ))}
         </ul>

@@ -1,60 +1,135 @@
 "use client";
 
-import { Fragment, useId, useMemo, useState, type FormEvent } from "react";
-import {
-  GHOST_BUTTON_CLASS,
-  INPUT_CLASS,
-  PRIMARY_BUTTON_CLASS,
-  ROW_BUTTON_CLASS,
-} from "@/components/classes";
+import Link from "next/link";
+import { useId, useMemo, useState } from "react";
+import { INPUT_CLASS, PRIMARY_BUTTON_CLASS, ROW_BUTTON_CLASS } from "@/components/classes";
+import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
-import { Field } from "@/components/field";
-import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
 import { NoteList } from "@/components/note-list";
 import { PageHeader } from "@/components/page-header";
 import { MAP_BUCKETS, UsMap } from "@/components/us-map";
 import { US_MAP_VIEWBOX } from "@/components/us-map-shapes";
 import type { AgentRecord } from "@/lib/agents";
-import { diffValues, nextId } from "@/lib/change-notes";
-import type { ContractField, ContractNote, ContractRecord } from "@/lib/contracts";
-import { US_STATE_NAMES, US_STATES } from "@/lib/us-states";
+import type { CarrierContractNote, CarrierContractRecord } from "@/lib/carrier-contracts";
+import type { CarrierRecord } from "@/lib/carriers";
+import { US_STATE_NAMES, US_STATES, stateSummary } from "@/lib/us-states";
+import {
+  APPOINTMENT_FIELD_LABELS,
+  AppointmentDialog,
+  normalizeStates,
+  saveAppointment,
+  type AppointmentEditor,
+  type AppointmentError,
+  type AppointmentValues,
+} from "../appointment-dialog";
 
 /*
- * Contracts: which agents are licensed in which states. A map colors each
- * state by how many active agents are licensed there; clicking a state lists
- * those agents. Contracts can be added and edited in a dialog, and every add or
- * edit records a note (agent by name). The All licenses table lists every
- * contract and expands to show its states and notes.
- * Only active agents appear: `agents` holds active agents only, and a contract
- * for any other agent stays in state but is never shown. A contract has no
- * status: agent status (edited on Agents) is the only one.
- * Contracts and notes live in component state only: nothing reaches a server,
- * and a refresh brings back the JSON. Carrier contracts come in a later phase.
+ * Contracts by state: where agents can write, as a view over carrier
+ * appointments (lib/carrier-contracts.ts). There are no carrier-less licenses:
+ * an agent can write in a state only through a carrier appointment listing it.
+ *
+ * A map colors each state by how many distinct active agents have at least one
+ * appointment there. Picking a state lists the same appointments two ways: By
+ * agent (each agent with the carriers that appoint them there) or By carrier
+ * (each carrier with the agents it appoints there). The Appointments table
+ * lists every appointment of an active agent, sorts and searches (agent,
+ * carrier, state code or name), and expands to show its states and notes.
+ *
+ * Add contract, the table's Edit and a state panel line all open the shared
+ * AppointmentDialog (../appointment-dialog.tsx), the same form Contracts by
+ * carrier uses; Edit opens it filled in, and its state grid offers only the
+ * carrier's availableStates. Since every appointment stays within that
+ * ceiling, a state's By carrier list only holds carriers available there.
+ * Only active agents appear: `agents` holds active agents only, and
+ * an appointment for any other agent stays in state but is never shown.
+ * Appointments and notes live in component state only: nothing reaches a
+ * server, and a refresh brings back the JSON.
  */
 
 /** An active agent. Inactive agents are never passed in. */
 type AgentOption = Pick<AgentRecord, "id" | "name">;
+type CarrierOption = Pick<CarrierRecord, "id" | "name" | "status" | "availableStates">;
 
 type ContractsViewProps = {
-  initialContracts: ContractRecord[];
-  initialNotes: ContractNote[];
+  initialContracts: CarrierContractRecord[];
+  initialNotes: CarrierContractNote[];
   agents: AgentOption[];
+  carriers: CarrierOption[];
 };
 
-/** Which dialog is open. Edit holds the contract as it was when the dialog opened. */
-type Editor = { mode: "add" } | { mode: "edit"; contract: ContractRecord };
+/** How the selected state's appointments are grouped. */
+type StateView = "agent" | "carrier";
 
-type ContractValues = Omit<ContractRecord, "id">;
-
-/** Also the order changes are compared and listed in. */
-const FIELD_LABELS: Record<ContractField, string> = {
-  agentId: "Agent",
-  licensedStates: "Licensed states",
+/** An appointment of an active agent, with names resolved and states in code order. */
+type AppointmentRow = {
+  contract: CarrierContractRecord;
+  agent: AgentOption;
+  carrier: CarrierOption;
+  states: string[];
 };
 
-const FIELDS = Object.keys(FIELD_LABELS) as ContractField[];
-
-const COLUMNS = ["Agent", "States"];
+/*
+ * Sort and search run in DataTable. Search matches state codes and names too,
+ * so typing "Texas" or "TX" lists the appointments there. The actions column
+ * is added in the view, since Edit opens its dialog.
+ */
+const COLUMNS: DataTableColumn<AppointmentRow>[] = [
+  {
+    id: "agent",
+    header: "Agent",
+    cell: ({ agent }, { expanded, toggleExpanded, detailsId }) => (
+      <button
+        type="button"
+        onClick={toggleExpanded}
+        aria-expanded={expanded}
+        aria-controls={expanded ? detailsId : undefined}
+        className="-ml-1 flex items-center gap-1 whitespace-nowrap rounded-md px-1 py-0.5 text-gray-900 hover:bg-gray-100"
+      >
+        {agent.name}
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 20 20"
+          className={`size-4 shrink-0 text-gray-500 transition-transform ${expanded ? "rotate-90" : ""}`}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M8 5l5 5-5 5" />
+        </svg>
+      </button>
+    ),
+    sortValue: ({ agent }) => agent.name,
+    searchText: ({ agent }) => agent.name,
+  },
+  {
+    id: "carrier",
+    header: "Carrier",
+    cell: ({ carrier }) => (
+      <span className="whitespace-nowrap">
+        <Link href={`/carriers/${carrier.id}`} className="text-gray-900 hover:underline">
+          {carrier.name}
+        </Link>
+        {carrier.status === "inactive" ? <span className="text-gray-400"> (inactive)</span> : null}
+      </span>
+    ),
+    sortValue: ({ carrier }) => carrier.name,
+    searchText: ({ carrier }) => carrier.name,
+  },
+  {
+    id: "states",
+    header: "States",
+    cell: ({ states }) => (
+      <span className={states.length === 0 ? "text-gray-400" : undefined}>
+        {stateSummary(states)}
+      </span>
+    ),
+    className: "tabular-nums text-gray-600",
+    sortValue: ({ states }) => states.length,
+    searchText: ({ states }) => states.flatMap((code) => [code, US_STATE_NAMES[code] ?? ""]),
+  },
+];
 
 /** Map zoom as a share of the box width: 1 fits it; above 1 the box scrolls. */
 const MAP_ZOOM = { min: 0.3, max: 2, buttonStep: 0.15 };
@@ -62,85 +137,124 @@ const MAP_ZOOM = { min: 0.3, max: 2, buttonStep: 0.15 };
 /** Map box height as a share of the map's Fit height. */
 const MAP_BOX_HEIGHT = 0.78;
 
-const EMPTY_VALUES = { agentId: "", licensedStates: [] };
-
 const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
 
-/** Unique codes in code order, so a list's order never shows up as a change. */
-const normalizeStates = (codes: string[]) => [...new Set(codes)].sort();
-
-export function ContractsView({ initialContracts, initialNotes, agents }: ContractsViewProps) {
+export function ContractsView({ initialContracts, initialNotes, agents, carriers }: ContractsViewProps) {
   const [contracts, setContracts] = useState(initialContracts);
   const [notes, setNotes] = useState(initialNotes);
   const [unsavedCount, setUnsavedCount] = useState(0);
-  const [editor, setEditor] = useState<Editor | null>(null);
-  const [agentError, setAgentError] = useState<string | null>(null);
-  // Agent chosen in the Add dialog, so its existing contract (if any) can load.
-  const [pickedAgentId, setPickedAgentId] = useState("");
+  const [editor, setEditor] = useState<AppointmentEditor | null>(null);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
+  const [stateView, setStateView] = useState<StateView>("agent");
   // Map width as a share of its box (1 = Fit). Session only: a refresh resets it to 75%.
   const [mapZoom, setMapZoom] = useState(0.75);
-  const { dialogRef, close: closeDialog } = useModalDialog(editor !== null);
   const id = useId();
+
+  // Every appointment of an active agent, sorted by agent then carrier name (the
+  // order a cleared header sort returns to). Rebuilt from live state, so an
+  // edit recolors the map and moves rows at once.
+  const rows = useMemo<AppointmentRow[]>(() => {
+    const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
+    const carriersById = new Map(carriers.map((carrier) => [carrier.id, carrier]));
+    return contracts
+      .flatMap((contract) => {
+        const agent = agentsById.get(contract.agentId);
+        if (!agent) return [];
+        const carrier = carriersById.get(contract.carrierId) ?? {
+          id: contract.carrierId,
+          name: `Carrier ${contract.carrierId}`,
+          status: "active" as const,
+          availableStates: [],
+        };
+        return [{ contract, agent, carrier, states: normalizeStates(contract.appointedStates) }];
+      })
+      .sort((a, b) => byName(a.agent, b.agent) || byName(a.carrier, b.carrier));
+  }, [contracts, agents, carriers]);
+
+  // State code → appointments that include it, in row order.
+  const rowsByState = useMemo(() => {
+    const byState = new Map<string, AppointmentRow[]>();
+    for (const row of rows) {
+      for (const code of row.states) byState.set(code, [...(byState.get(code) ?? []), row]);
+    }
+    return byState;
+  }, [rows]);
+
+  // The map counts distinct agents, not appointments.
+  const counts = useMemo(
+    () =>
+      Object.fromEntries(
+        [...rowsByState].map(([code, list]) => [code, new Set(list.map((row) => row.agent.id)).size]),
+      ),
+    [rowsByState],
+  );
+
+  const writingAgentCount = new Set(rows.filter((row) => row.states.length > 0).map((row) => row.agent.id))
+    .size;
+  const statesCovered = [...rowsByState.keys()].filter((code) => code in US_STATE_NAMES).length;
+
+  const stats = [
+    { label: "Agents appointed", value: String(writingAgentCount) },
+    { label: "States covered", value: `${statesCovered} of ${US_STATES.length}` },
+    { label: "Appointments", value: String(rows.length) },
+  ];
+
+  const selectedRows = selectedCode ? (rowsByState.get(selectedCode) ?? []) : [];
+  const selectedName = selectedCode ? (US_STATE_NAMES[selectedCode] ?? selectedCode) : null;
+  const selectedAgentCount = counts[selectedCode ?? ""] ?? 0;
+
+  // The selected state's appointments grouped both ways. Rows are already
+  // sorted by agent then carrier, so By agent needs no resort.
+  const groupBy = <K extends "agent" | "carrier", O extends "agent" | "carrier">(key: K, other: O) => {
+    // `others` keeps each appointment's row, so a line can open Edit for it.
+    const groups = new Map<string, { item: AppointmentRow[K]; others: AppointmentRow[] }>();
+    for (const row of selectedRows) {
+      const group = groups.get(row[key].id) ?? { item: row[key], others: [] };
+      group.others.push(row);
+      groups.set(row[key].id, group);
+    }
+    return [...groups.values()]
+      .sort((a, b) => byName(a.item, b.item))
+      .map((group) => ({
+        ...group,
+        others: group.others.slice().sort((a, b) => byName(a[other], b[other])),
+      }));
+  };
+  const byAgent = groupBy("agent", "carrier");
+  const byCarrier = groupBy("carrier", "agent");
+
+  const columns = useMemo<DataTableColumn<AppointmentRow>[]>(
+    () => [
+      ...COLUMNS,
+      {
+        id: "actions",
+        header: "Actions",
+        srOnlyHeader: true,
+        cell: ({ contract, agent, carrier }) => (
+          <button
+            type="button"
+            onClick={() => setEditor({ mode: "edit", contract })}
+            className={ROW_BUTTON_CLASS}
+          >
+            Edit
+            <span className="sr-only">
+              {" "}
+              {agent.name} at {carrier.name}
+            </span>
+          </button>
+        ),
+        className: "text-right",
+      },
+    ],
+    [],
+  );
 
   const agentName = (agentId: string) =>
     agents.find((agent) => agent.id === agentId)?.name ?? `Agent ${agentId}`;
-
-  /** Values as notes show them: agent by name, states in code order. */
-  const shownValues = (values: ContractValues) => ({
-    ...values,
-    agentId: agentName(values.agentId),
-    licensedStates: normalizeStates(values.licensedStates),
-  });
-
-  // State code → contracts of active agents licensed there, with the agent, sorted by
-  // agent name. Built from live state, so adds and edits recolor the map.
-  const licensesByState = useMemo(() => {
-    const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
-    const byState = new Map<string, { agent: AgentOption; contract: ContractRecord }[]>();
-    for (const contract of contracts) {
-      const agent = agentsById.get(contract.agentId);
-      if (!agent) continue;
-      for (const code of new Set(contract.licensedStates)) {
-        byState.set(code, [...(byState.get(code) ?? []), { agent, contract }]);
-      }
-    }
-    for (const list of byState.values()) list.sort((a, b) => byName(a.agent, b.agent));
-    return byState;
-  }, [contracts, agents]);
-
-  const counts = useMemo(
-    () => Object.fromEntries([...licensesByState].map(([code, list]) => [code, list.length])),
-    [licensesByState],
-  );
-
-  const licensedAgentCount = new Set(
-    [...licensesByState.values()].flat().map(({ agent }) => agent.id),
-  ).size;
-  const statesCovered = [...licensesByState.keys()].filter((code) => code in US_STATE_NAMES).length;
-
-  const selectedLicenses = selectedCode ? (licensesByState.get(selectedCode) ?? []) : [];
-  const selectedName = selectedCode ? (US_STATE_NAMES[selectedCode] ?? selectedCode) : null;
-
-  const stats = [
-    { label: "Licensed agents", value: String(licensedAgentCount) },
-    { label: "States covered", value: `${statesCovered} of ${US_STATES.length}` },
-  ];
-
-  // Every contract of an active agent, sorted by agent name. Rebuilt on every
-  // render, so an add lands in its sorted place at once.
-  const activeAgentIds = new Set(agents.map((agent) => agent.id));
-  const rows = contracts
-    .filter((contract) => activeAgentIds.has(contract.agentId))
-    .map((contract) => ({ contract, agent: agentName(contract.agentId) }))
-    .sort((a, b) => a.agent.localeCompare(b.agent));
-
-  // Add offers every active agent. One contract per agent, so picking an agent who
-  // already has one loads that contract and saving updates it.
-  const sortedAgents = [...agents].sort(byName);
-  const contractFor = (agentId: string) =>
-    contracts.find((contract) => contract.agentId === agentId);
+  const carrierName = (carrierId: string) =>
+    carriers.find((carrier) => carrier.id === carrierId)?.name ?? `Carrier ${carrierId}`;
+  const availableStates = (carrierId: string) =>
+    carriers.find((carrier) => carrier.id === carrierId)?.availableStates ?? [];
 
   // Clamped and rounded to 0.01 so button clicks don't drift into float noise.
   const changeZoom = (delta: number) =>
@@ -148,74 +262,28 @@ export function ContractsView({ initialContracts, initialNotes, agents }: Contra
       Math.round(Math.min(MAP_ZOOM.max, Math.max(MAP_ZOOM.min, mapZoom + delta)) * 100) / 100,
     );
 
-  const toggleExpanded =(contractId: string) =>
-    setExpandedIds((current) => {
-      const next = new Set(current);
-      if (!next.delete(contractId)) next.add(contractId);
-      return next;
+  /** Adds or edits a contract through saveAppointment. Returns the dialog's error message, if any. */
+  const saveContract = (
+    values: AppointmentValues,
+    editing?: CarrierContractRecord,
+  ): AppointmentError | null => {
+    const result = saveAppointment({
+      contracts,
+      notes,
+      values,
+      editing,
+      agentName,
+      carrierName,
+      availableStates,
     });
-
-  // Runs for every close: Cancel, Escape, backdrop click, or a save. Clearing
-  // the editor unmounts the form, which resets it.
-  const handleClose = () => {
-    setEditor(null);
-    setAgentError(null);
-    setPickedAgentId("");
-  };
-
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!editor) return;
-
-    const data = new FormData(event.currentTarget);
-    // The agent can't change on edit, so it isn't a form field there.
-    const agentId =
-      editor.mode === "edit" ? editor.contract.agentId : String(data.get("agentId") ?? "").trim();
-
-    const agentMessage = agents.some((agent) => agent.id === agentId)
-      ? null
-      : "Choose an agent from the agent list.";
-    setAgentError(agentMessage);
-    if (agentMessage) return;
-
-    // Adding for an agent who already has a contract updates that contract.
-    const existing = editor.mode === "edit" ? editor.contract : contractFor(agentId);
-    const values: ContractValues = {
-      agentId,
-      licensedStates: normalizeStates(
-        data.getAll("licensedStates").map((code) => String(code).trim()).filter(Boolean),
-      ),
-    };
-
-    const contractId = existing?.id ?? nextId(contracts);
-    const changes = diffValues(
-      FIELDS,
-      existing ? shownValues(existing) : EMPTY_VALUES,
-      shownValues(values),
-    );
-
+    if (result.error !== null) return result.error;
     // Saving an edit with nothing changed just closes, without a note.
-    if (changes.length > 0) {
-      setContracts((current) =>
-        existing
-          ? current.map((contract) =>
-              contract.id === contractId ? { id: contractId, ...values } : contract,
-            )
-          : [...current, { id: contractId, ...values }],
-      );
-      setNotes((current) => [
-        {
-          id: nextId(current),
-          contractId,
-          kind: existing ? "edited" : "added",
-          createdAt: new Date().toISOString(),
-          changes,
-        },
-        ...current,
-      ]);
+    if (result.changed) {
+      setContracts(result.contracts);
+      setNotes(result.notes);
       setUnsavedCount((count) => count + 1);
     }
-    closeDialog();
+    return null;
   };
 
   const addButton = (
@@ -224,15 +292,55 @@ export function ContractsView({ initialContracts, initialNotes, agents }: Contra
     </button>
   );
 
-  const editing = editor?.mode === "edit" ? editor.contract : undefined;
-  // In Add, the picked agent's existing contract; its states prefill the form.
-  const pickedContract = editor?.mode === "add" ? contractFor(pickedAgentId) : undefined;
-  const formContract = editing ?? pickedContract;
+  const viewOptions: { value: StateView; label: string }[] = [
+    { value: "agent", label: "By agent" },
+    { value: "carrier", label: "By carrier" },
+  ];
+
+  const selectedGroups =
+    stateView === "agent"
+      ? byAgent.map(({ item, others }) => ({
+          key: item.id,
+          title: <Link href={`/agents/${item.id}`} className="hover:underline">{item.name}</Link>,
+          label: `Carriers appointing ${item.name}`,
+          chips: others.map(({ contract, carrier, states }) => ({
+            id: carrier.id,
+            href: `/carriers/${carrier.id}`,
+            name: carrier.name,
+            inactive: carrier.status === "inactive",
+            contract,
+            states,
+            editLabel: `Edit ${item.name} at ${carrier.name}`,
+          })),
+        }))
+      : byCarrier.map(({ item, others }) => ({
+          key: item.id,
+          title: (
+            <>
+              <Link href={`/carriers/${item.id}`} className="hover:underline">
+                {item.name}
+              </Link>
+              {item.status === "inactive" ? (
+                <span className="font-normal text-gray-400"> (inactive)</span>
+              ) : null}
+            </>
+          ),
+          label: `Agents appointed with ${item.name}`,
+          chips: others.map(({ contract, agent, states }) => ({
+            id: agent.id,
+            href: `/agents/${agent.id}`,
+            name: agent.name,
+            inactive: false,
+            contract,
+            states,
+            editLabel: `Edit ${agent.name} at ${item.name}`,
+          })),
+        }));
 
   return (
     <>
       <PageHeader
-        title="Contracts"
+        title="Contracts by state"
         inlineDescription
         description={
           <dl className="flex flex-wrap items-center divide-x divide-gray-200">
@@ -251,18 +359,19 @@ export function ContractsView({ initialContracts, initialNotes, agents }: Contra
         {unsavedCount > 0 ? (
           <p className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
             {unsavedCount === 1 ? "1 change" : `${unsavedCount} changes`} made on this page only.
-            Nothing is saved yet, so refreshing undoes {unsavedCount === 1 ? "it" : "them"}.
+            Nothing is saved yet, so refreshing (or leaving the page) undoes{" "}
+            {unsavedCount === 1 ? "it" : "them"}.
           </p>
         ) : null}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]">
         <section aria-labelledby={`${id}-map-title`}>
           <h2 id={`${id}-map-title`} className="sr-only">
-            Active agents by state
+            Where active agents can write
           </h2>
           {/*
-           * The box is the map's Fit shape at 90% height; the map inside is sized
+           * The box is the map's Fit shape at 78% height; the map inside is sized
            * by zoom. When it overflows the box scrolls both ways to pan; otherwise
            * auto margins center it (and, unlike flex centering, never clip it).
            * The zoom buttons (top-right) and legend (bottom-left) sit outside the
@@ -307,7 +416,7 @@ export function ContractsView({ initialContracts, initialNotes, agents }: Contra
             </div>
 
             <div className="absolute bottom-3 left-3 z-10 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md bg-white/90 px-2 py-1.5 text-xs text-gray-600 shadow-sm ring-1 ring-gray-200/80">
-              <span>Active agents licensed</span>
+              <span>Active agents appointed</span>
               <ul className="flex items-center gap-2">
                 {MAP_BUCKETS.map((bucket) => (
                   <li key={bucket.label} className="flex items-center gap-1">
@@ -341,33 +450,104 @@ export function ContractsView({ initialContracts, initialNotes, agents }: Contra
             ))}
           </select>
 
-          <div role="status" className="mt-4 rounded-lg border border-gray-200 p-4">
+          <div className="mt-4 rounded-lg border border-gray-200 p-4">
             {selectedName ? (
               <>
-                <h2 id={`${id}-detail-title`} className="text-base font-semibold text-gray-900">
-                  {selectedName}
-                </h2>
-                <p className="mt-1 text-sm text-gray-600">
-                  {selectedLicenses.length} active {selectedLicenses.length === 1 ? "agent" : "agents"}{" "}
-                  licensed
-                </p>
-                {selectedLicenses.length > 0 ? (
-                  <ul className="mt-3 space-y-1 text-sm">
-                    {selectedLicenses.map(({ agent, contract }) => (
-                      <li key={contract.id} className="flex items-center justify-between gap-2">
-                        <span className="min-w-0 truncate text-gray-900">{agent.name}</span>
-                        <button
-                          type="button"
-                          onClick={() => setEditor({ mode: "edit", contract })}
-                          className={ROW_BUTTON_CLASS}
-                        >
-                          Edit<span className="sr-only"> licenses for {agent.name}</span>
-                        </button>
-                      </li>
+                {/*
+                 * One row: title and counts share a baseline on the left, toggle on
+                 * the right. A long state name truncates rather than wrapping.
+                 */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-baseline gap-x-2">
+                    <h2
+                      id={`${id}-detail-title`}
+                      className="min-w-0 truncate text-base font-semibold text-gray-900"
+                    >
+                      {selectedName}
+                    </h2>
+                    <p role="status" className="shrink-0 whitespace-nowrap text-xs text-gray-600">
+                      {selectedAgentCount === 1 ? "Agent" : "Agents"}: {selectedAgentCount} |{" "}
+                      {byCarrier.length === 1 ? "Carrier" : "Carriers"}: {byCarrier.length}
+                    </p>
+                  </div>
+                  <div
+                    role="group"
+                    aria-label="Group by"
+                    className="inline-flex shrink-0 rounded-md bg-gray-100 p-0.5 text-xs"
+                  >
+                    {viewOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        aria-pressed={stateView === option.value}
+                        onClick={() => setStateView(option.value)}
+                        className={`whitespace-nowrap rounded px-2 py-1 font-medium ${
+                          stateView === option.value
+                            ? "bg-white text-gray-900 shadow-xs ring-1 ring-gray-200"
+                            : "text-gray-600 hover:text-gray-900"
+                        }`}
+                      >
+                        {option.label}
+                      </button>
                     ))}
-                  </ul>
+                  </div>
+
+                </div>
+
+                {selectedRows.length > 0 ? (
+                  <>
+                    
+                    <ul className="mt-6 space-y-4 text-sm p-2  ">
+                      {selectedGroups.map((group) => (
+                        <li key={group.key} className="border-b border-gray-200 pb-4 ">
+                          <p className="font-semibold text-gray-900">{group.title}</p>
+                          <ul aria-label={group.label} className=" pl-4 list-disc" >
+                            {group.chips.map((chip) => (
+                              // Clicking the line opens Edit; the name link goes to the
+                              // profile instead. The states button is the keyboard way in.
+                              <li
+                                key={chip.id}
+                                onClick={() => setEditor({ mode: "edit", contract: chip.contract })}
+                                className="cursor-pointer rounded hover:bg-gray-50"
+                              >
+                                {/* Name stays whole; a long code list wraps on the right. */}
+                                <div className="flex items-baseline justify-between gap-2">
+                                  <span className="shrink-0">
+                                    <Link
+                                      href={chip.href}
+                                      onClick={(event) => event.stopPropagation()}
+                                      className="text-xs text-gray-500 hover:text-gray-800 hover:underline"
+                                    >
+                                      {chip.name}
+                                    </Link>
+                                    {chip.inactive ? (
+                                      <span className="text-xs text-gray-400"> (inactive)</span>
+                                    ) : null}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      setEditor({ mode: "edit", contract: chip.contract });
+                                    }}
+                                    title={chip.editLabel}
+                                    className="min-w-0 rounded px-1 text-right text-xs tabular-nums text-gray-400 hover:text-gray-800"
+                                  >
+                                    {stateSummary(chip.states)}
+                                    <span className="sr-only">. {chip.editLabel}</span>
+                                  </button>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
                 ) : (
-                  <p className="mt-3 text-sm text-gray-500">No active agents are licensed in {selectedName}.</p>
+                  <p className="mt-3 text-sm text-gray-500">
+                    No agents can operate in {selectedName} via any carrier yet.
+                  </p>
                 )}
               </>
             ) : (
@@ -375,7 +555,9 @@ export function ContractsView({ initialContracts, initialNotes, agents }: Contra
                 <h2 id={`${id}-detail-title`} className="text-base font-semibold text-gray-900">
                   No state selected
                 </h2>
-                <p className="mt-1 text-sm text-gray-600">Click a state on the map to see its licensed agents.</p>
+                <p className="mt-1 text-sm text-gray-600">
+                  Click a state on the map to view the agents and carriers that can operate in that state.
+                </p>
               </>
             )}
           </div>
@@ -384,221 +566,59 @@ export function ContractsView({ initialContracts, initialNotes, agents }: Contra
 
       <section aria-labelledby={`${id}-table-title`} className="mt-8">
         <h2 id={`${id}-table-title`} className="mb-3 text-base font-semibold text-gray-900">
-          All licenses
+          Appointments
         </h2>
         {rows.length === 0 ? (
           <EmptyState
-            title="No contracts yet"
-            description="Add a contract to list an agent's licensed states."
+            title="No appointments yet"
+            description="Add a contract to list where an agent can write."
             action={addButton}
           />
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-gray-200">
-            <table className="min-w-full text-left text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  {COLUMNS.map((heading) => (
-                    <th
-                      key={heading}
-                      scope="col"
-                      className="whitespace-nowrap px-4 py-2.5 font-medium text-gray-600"
-                    >
-                      {heading}
-                    </th>
-                  ))}
-                  <th scope="col" className="px-4 py-2.5">
-                    <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 border-t border-gray-200">
-                {rows.map(({ contract, agent }) => {
-                  const expanded = expandedIds.has(contract.id);
-                  const detailsId = `${id}-details-${contract.id}`;
-                  const states = normalizeStates(contract.licensedStates);
-
-                  return (
-                    <Fragment key={contract.id}>
-                      <tr className={expanded ? "bg-gray-50" : undefined}>
-                        <td className="px-4 py-2.5">
-                          <button
-                            type="button"
-                            onClick={() => toggleExpanded(contract.id)}
-                            aria-expanded={expanded}
-                            aria-controls={expanded ? detailsId : undefined}
-                            className="-ml-1 flex items-center gap-1 whitespace-nowrap rounded-md px-1 py-0.5 text-gray-900 hover:bg-gray-100"
-                          >
-                            {agent}
-                            <svg
-                              aria-hidden="true"
-                              viewBox="0 0 20 20"
-                              className={`size-4 shrink-0 text-gray-500 transition-transform ${expanded ? "rotate-90" : ""}`}
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth={1.5}
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            >
-                              <path d="M8 5l5 5-5 5" />
-                            </svg>
-                          </button>
-                        </td>
-                        <td className="px-4 py-2.5 tabular-nums text-gray-600">{states.length}</td>
-                        <td className="px-4 py-2.5 text-right">
-                          <button
-                            type="button"
-                            onClick={() => setEditor({ mode: "edit", contract })}
-                            className={ROW_BUTTON_CLASS}
-                          >
-                            Edit<span className="sr-only"> licenses for {agent}</span>
-                          </button>
-                        </td>
-                      </tr>
-                      {expanded ? (
-                        <tr id={detailsId} className="bg-gray-50">
-                          <td colSpan={COLUMNS.length + 1} className="px-4 pb-4 pt-1">
-                            <div className="grid gap-4 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
-                              <section>
-                                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                  Licensed states
-                                </h3>
-                                {states.length > 0 ? (
-                                  <ul className="mt-2 space-y-0.5 text-sm text-gray-700">
-                                    {states.map((code) => (
-                                      <li key={code}>{US_STATE_NAMES[code] ?? code}</li>
-                                    ))}
-                                  </ul>
-                                ) : (
-                                  <p className="mt-2 text-sm text-gray-500">None</p>
-                                )}
-                              </section>
-                              <section>
-                                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                  Notes
-                                </h3>
-                                <NoteList
-                                  notes={notes.filter((note) => note.contractId === contract.id)}
-                                  labels={FIELD_LABELS}
-                                />
-                              </section>
-                            </div>
-                          </td>
-                        </tr>
-                      ) : null}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            rows={rows}
+            columns={columns}
+            getRowId={({ contract }) => contract.id}
+            unit={["appointment", "appointments"]}
+            searchPlaceholder="Search agent, carrier or state…"
+            renderDetails={({ contract, states }) => (
+              <div className="grid gap-4 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
+                <section>
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    States
+                  </h3>
+                  {states.length > 0 ? (
+                    <ul className="mt-2 space-y-0.5 text-sm text-gray-700">
+                      {states.map((code) => (
+                        <li key={code}>{US_STATE_NAMES[code] ?? code}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-sm text-gray-500">None yet</p>
+                  )}
+                </section>
+                <section>
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    Notes
+                  </h3>
+                  <NoteList
+                    notes={notes.filter((note) => note.contractId === contract.id)}
+                    labels={APPOINTMENT_FIELD_LABELS}
+                  />
+                </section>
+              </div>
+            )}
+          />
         )}
       </section>
 
-      <ModalDialog dialogRef={dialogRef} labelledBy={`${id}-title`} onClose={handleClose}>
-        {editor ? (
-          <form onSubmit={handleSubmit} className="p-6">
-            <h2 id={`${id}-title`} className="text-base font-semibold text-gray-900">
-              {editing ? `Edit licenses for ${agentName(editing.agentId)}` : "Add contract"}
-            </h2>
-            <p className="mt-1 text-sm text-gray-600">
-              {editing
-                ? "Saving records a note of what changed. Nothing is saved anywhere yet; refreshing undoes it."
-                : "Not saved anywhere yet. The contract stays on the page until you refresh."}
-            </p>
-
-            <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              {editing ? (
-                <Field
-                  label="Agent"
-                  htmlFor={`${id}-agent`}
-                  hint="The agent can't be changed."
-                  hintId={`${id}-agent-hint`}
-                  className="sm:col-span-2"
-                >
-                  <input
-                    id={`${id}-agent`}
-                    type="text"
-                    readOnly
-                    value={agentName(editing.agentId)}
-                    aria-describedby={`${id}-agent-hint`}
-                    className={`${INPUT_CLASS} bg-gray-50 text-gray-600`}
-                  />
-                </Field>
-              ) : (
-                <Field
-                  label="Agent"
-                  htmlFor={`${id}-agent`}
-                  hint={
-                    agentError ??
-                    (pickedContract
-                      ? `${agentName(pickedAgentId)} already has a contract. Saving updates it.`
-                      : undefined)
-                  }
-                  hintId={`${id}-agent-error`}
-                  error={agentError !== null}
-                  className="sm:col-span-2"
-                >
-                  <select
-                    id={`${id}-agent`}
-                    name="agentId"
-                    required
-                    value={pickedAgentId}
-                    aria-invalid={agentError ? true : undefined}
-                    aria-describedby={agentError || pickedContract ? `${id}-agent-error` : undefined}
-                    onChange={(event) => {
-                      setPickedAgentId(event.target.value);
-                      setAgentError(null);
-                    }}
-                    className={INPUT_CLASS}
-                  >
-                    <option value="">Choose an agent</option>
-                    {sortedAgents.map((agent) => (
-                      <option key={agent.id} value={agent.id}>
-                        {agent.name}
-                        {contractFor(agent.id) ? " (has contract)" : ""}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-              )}
-              <fieldset className="sm:col-span-2" aria-describedby={`${id}-states-hint`}>
-                <legend className="block text-sm font-medium text-gray-900">Licensed states</legend>
-                <p id={`${id}-states-hint`} className="mt-1 text-xs text-gray-500">
-                  Leave all unchecked if the agent holds no licenses yet.
-                </p>
-                <div
-                  key={formContract?.id ?? "new"}
-                  className="mt-2 grid max-h-64 grid-cols-2 gap-x-4 gap-y-1.5 overflow-y-auto rounded-md border border-gray-200 p-3 sm:grid-cols-3"
-                >
-                  {US_STATES.map((state) => (
-                    <label key={state.code} className="flex items-center gap-2 text-sm text-gray-900">
-                      <input
-                        type="checkbox"
-                        name="licensedStates"
-                        value={state.code}
-                        defaultChecked={formContract?.licensedStates.includes(state.code)}
-                        className="size-4 shrink-0 accent-gray-900"
-                      />
-                      <span className="min-w-0 truncate" title={state.name}>
-                        {state.name}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-            </div>
-
-            <div className="mt-6 flex justify-end gap-2">
-              <button type="button" onClick={closeDialog} className={GHOST_BUTTON_CLASS}>
-                Cancel
-              </button>
-              <button type="submit" className={PRIMARY_BUTTON_CLASS}>
-                {formContract ? "Save changes" : "Add contract"}
-              </button>
-            </div>
-          </form>
-        ) : null}
-      </ModalDialog>
+      <AppointmentDialog
+        editor={editor}
+        agents={agents}
+        carriers={carriers}
+        onSave={saveContract}
+        onClose={() => setEditor(null)}
+      />
     </>
   );
 }

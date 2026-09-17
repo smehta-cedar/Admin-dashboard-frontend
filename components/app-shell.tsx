@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
+import { BrandLogo } from "./brand-logo";
 import { Navbar } from "./navbar";
 import { Sidebar, type NavItem } from "./sidebar";
 
@@ -57,7 +58,7 @@ export function AppShell({ title, navItems, children }: AppShellProps) {
       <Navbar title={title} onMenuClick={openDrawer} drawerId={drawerId} />
 
       <div className="lg:flex">
-        <aside className="hidden lg:sticky lg:top-14 lg:block lg:h-[calc(100dvh-3.5rem)] lg:w-60 lg:shrink-0 lg:overflow-y-auto lg:border-r lg:border-gray-200">
+        <aside className="hidden lg:sticky lg:top-14 lg:block lg:h-[calc(100dvh-3.5rem)] lg:w-60 lg:shrink-0 lg:overflow-y-auto lg:border-r lg:border-line lg:bg-surface-muted">
           <Sidebar items={navItems} />
         </aside>
         <main id="main" className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
@@ -76,8 +77,12 @@ export function AppShell({ title, navItems, children }: AppShellProps) {
         className="fixed inset-y-0 left-0 right-auto m-0 h-dvh max-h-none w-72 max-w-[85vw] bg-white shadow-xl backdrop:bg-gray-900/40 lg:hidden"
       >
         <div className="flex h-full flex-col">
-          <div className="flex h-14 shrink-0 items-center justify-between border-b border-gray-200 px-4">
-            <span className="text-base font-semibold text-gray-900">{title}</span>
+          <div className="relative flex h-14 shrink-0 items-center justify-between border-b border-line px-4">
+            <div aria-hidden="true" className="bg-brand-gradient absolute inset-x-0 top-0 h-0.5" />
+            <div className="flex items-center gap-3">
+              <BrandLogo height={30} />
+              <span className="sr-only">{title}</span>
+            </div>
             <button
               type="button"
               onClick={closeDrawer}
@@ -89,7 +94,7 @@ export function AppShell({ title, navItems, children }: AppShellProps) {
               </svg>
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto bg-surface-muted">
             <Sidebar items={navItems} onLinkClick={closeDrawer} />
           </div>
         </div>

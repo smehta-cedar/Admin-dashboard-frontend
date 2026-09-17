@@ -37,7 +37,16 @@ export default async function CarrierProfilePage(props: PageProps<"/carriers/[id
         .filter((contract) => contract.carrierId === id)
         .flatMap((contract) => {
           const agent = agentsById.get(contract.agentId);
-          return agent ? [{ id: agent.id, name: agent.name, status: agent.status }] : [];
+          return agent
+            ? [
+                {
+                  id: agent.id,
+                  name: agent.name,
+                  status: agent.status,
+                  appointedStates: [...new Set(contract.appointedStates)].sort(),
+                },
+              ]
+            : [];
         })
         .sort(byName)}
       logins={logins

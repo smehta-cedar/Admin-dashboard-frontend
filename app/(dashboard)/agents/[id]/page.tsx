@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import { getAgent, getAgentNotes, getAgents } from "@/lib/agents";
 import { getCarrierContracts } from "@/lib/carrier-contracts";
 import { getCarriers } from "@/lib/carriers";
-import { getContracts } from "@/lib/contracts";
 import { getLogins } from "@/lib/logins";
 import { AgentProfile } from "./agent-profile";
 
@@ -18,10 +17,9 @@ export default async function AgentProfilePage(props: PageProps<"/agents/[id]">)
   const agent = await getAgent(id);
   if (!agent) notFound();
 
-  const [agents, notes, contracts, carrierContracts, logins, carriers] = await Promise.all([
+  const [agents, notes, carrierContracts, logins, carriers] = await Promise.all([
     getAgents(),
     getAgentNotes(),
-    getContracts(),
     getCarrierContracts(),
     getLogins(),
     getCarriers(),
@@ -35,12 +33,21 @@ export default async function AgentProfilePage(props: PageProps<"/agents/[id]">)
     <AgentProfile
       agent={agent}
       allAgents={agents.map(({ id, name, status }) => ({ id, name, status })).sort(byName)}
-      licensedStates={contracts.find((contract) => contract.agentId === id)?.licensedStates ?? []}
+      // States come only from carrier appointments; there are no carrier-less licenses.
       carriers={carrierContracts
         .filter((contract) => contract.agentId === id)
         .flatMap((contract) => {
           const carrier = carriersById.get(contract.carrierId);
-          return carrier ? [{ id: carrier.id, name: carrier.name, status: carrier.status }] : [];
+          return carrier
+            ? [
+                {
+                  id: carrier.id,
+                  name: carrier.name,
+                  status: carrier.status,
+                  appointedStates: [...new Set(contract.appointedStates)].sort(),
+                },
+              ]
+            : [];
         })
         .sort(byName)}
       logins={logins

@@ -6,7 +6,8 @@
     "createdAt": "2026-07-14T15:00:00.000Z",
     "changes": [
       { "field": "agentId", "from": "", "to": "Maria Alva" },
-      { "field": "carrierId", "from": "", "to": "Humana" }
+      { "field": "carrierId", "from": "", "to": "Humana" },
+      { "field": "appointedStates", "from": "", "to": "FL, LA, TX" }
     ]
   },
   {
@@ -16,7 +17,8 @@
     "createdAt": "2026-09-03T14:40:00.000Z",
     "changes": [
       { "field": "agentId", "from": "", "to": "Pri Natz" },
-      { "field": "carrierId", "from": "", "to": "Americo" }
+      { "field": "carrierId", "from": "", "to": "Americo" },
+      { "field": "appointedStates", "from": "", "to": "OR, TX, WA" }
     ]
   }
 ]

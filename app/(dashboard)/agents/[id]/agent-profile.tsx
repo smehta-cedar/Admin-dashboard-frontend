@@ -11,19 +11,21 @@ import { AgentSwitcher } from "./agent-switcher";
 
 /*
  * Read-only profile for one agent: identity, then everything linked to them —
- * licensed states, contracted carriers, logins, and change notes. Editing
- * stays on the Agents, Contracts and Logins pages. Carrier names link to
- * their profiles.
+ * the states they can write in, contracted carriers, logins, and change notes.
+ * Editing stays on the Agents, Contracts and Logins pages. Carrier names link
+ * to their profiles.
+ *
+ * States come from carrier appointments only: "States" is the union across
+ * every appointment ("via carriers"), and each carrier row lists the states
+ * that appointment covers.
  */
 
 type AgentProfileProps = {
   agent: AgentRecord;
   /** Every agent, sorted by name, for the switcher. */
   allAgents: Pick<AgentRecord, "id" | "name" | "status">[];
-  /** State codes, as stored on the agent's contract. */
-  licensedStates: string[];
-  /** Contracted carriers, sorted by name. */
-  carriers: { id: string; name: string; status: CarrierStatus }[];
+  /** Contracted carriers, sorted by name, each with its appointed state codes in code order. */
+  carriers: { id: string; name: string; status: CarrierStatus; appointedStates: string[] }[];
   /** Sorted by carrier name. */
   logins: (LoginRecord & { carrierName: string })[];
   /** Newest first. */
@@ -32,7 +34,22 @@ type AgentProfileProps = {
 
 const LOGIN_COLUMNS = ["Carrier", "Writing number", "Portal username", "Password", "Status"];
 
-export function AgentProfile({ agent, allAgents, licensedStates, carriers, logins, notes }: AgentProfileProps) {
+/** A state code chip, with the full name on hover and for screen readers. */
+function StateChip({ code }: { code: string }) {
+  return (
+    <li
+      title={US_STATE_NAMES[code]}
+      className="rounded-md bg-gray-100 px-2 py-1 font-mono text-xs font-medium text-gray-700"
+    >
+      {code}
+      {US_STATE_NAMES[code] ? <span className="sr-only"> ({US_STATE_NAMES[code]})</span> : null}
+    </li>
+  );
+}
+
+export function AgentProfile({ agent, allAgents, carriers, logins, notes }: AgentProfileProps) {
+  const states = [...new Set(carriers.flatMap((carrier) => carrier.appointedStates))].sort();
+
   return (
     <ProfileShell
       back={{ href: "/agents", label: "Agents" }}
@@ -48,35 +65,37 @@ export function AgentProfile({ agent, allAgents, licensedStates, carriers, login
       ]}
     >
       <ProfileSection
-        title="Licensed states"
-        count={licensedStates.length}
-        emptyMessage="No licensed states recorded."
+        title="States"
+        count={states.length}
+        emptyMessage="Not appointed in any states through a carrier yet."
       >
+        <p className="mb-2 text-xs text-gray-500">Via carrier appointments</p>
         <ul className="flex flex-wrap gap-1.5">
-          {licensedStates
-            .slice()
-            .sort()
-            .map((code) => (
-              <li
-                key={code}
-                title={US_STATE_NAMES[code]}
-                className="rounded-md bg-gray-100 px-2 py-1 font-mono text-xs font-medium text-gray-700"
-              >
-                {code}
-                {US_STATE_NAMES[code] ? <span className="sr-only"> ({US_STATE_NAMES[code]})</span> : null}
-              </li>
-            ))}
+          {states.map((code) => (
+            <StateChip key={code} code={code} />
+          ))}
         </ul>
       </ProfileSection>
 
       <ProfileSection title="Carriers" count={carriers.length} emptyMessage="Not contracted with any carriers.">
         <ul className="divide-y divide-gray-200 rounded-lg border border-gray-200 text-sm">
           {carriers.map((carrier) => (
-            <li key={carrier.id} className="flex items-center justify-between gap-4 px-4 py-2.5">
-              <Link href={`/carriers/${carrier.id}`} className="text-gray-900 hover:underline">
-                {carrier.name}
-              </Link>
-              <StatusBadge status={carrier.status} />
+            <li key={carrier.id} className="flex flex-col gap-2 px-4 py-2.5">
+              <div className="flex items-center justify-between gap-4">
+                <Link href={`/carriers/${carrier.id}`} className="text-gray-900 hover:underline">
+                  {carrier.name}
+                </Link>
+                <StatusBadge status={carrier.status} />
+              </div>
+              {carrier.appointedStates.length > 0 ? (
+                <ul aria-label={`States with ${carrier.name}`} className="flex flex-wrap gap-1">
+                  {carrier.appointedStates.map((code) => (
+                    <StateChip key={code} code={code} />
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-gray-400">No states yet</p>
+              )}
             </li>
           ))}
         </ul>

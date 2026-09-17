@@ -2,10 +2,14 @@
 type Status = "active" | "pending" | "inactive";
 
 const STATUS_STYLES: Record<Status, string> = {
-  active: "bg-green-50 text-green-700",
+  /* Brand-adjacent green; still reads as "good". */
+  active: "bg-brand-soft text-brand-ink",
   pending: "bg-amber-50 text-amber-700",
   inactive: "bg-gray-100 text-gray-600",
 };
+
+/** Sort order for status columns: active, then pending, then inactive. */
+export const statusRank = (status: Status) => ["active", "pending", "inactive"].indexOf(status);
 
 export function StatusBadge({ status }: { status: Status }) {
   return (

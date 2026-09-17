@@ -4,6 +4,6 @@
  */
 
 /** Display order. A carrier's lines are stored in this order too. */
-export const LINES_OF_BUSINESS = ["General", "MAPD", "Supp/Ancillary", "Life", "Annuities"] as const;
+export const LINES_OF_BUSINESS = ["General", "Supp/Ancillary", "MAPD", "Life", "Annuities"] as const;
 
 export type LineOfBusiness = (typeof LINES_OF_BUSINESS)[number];

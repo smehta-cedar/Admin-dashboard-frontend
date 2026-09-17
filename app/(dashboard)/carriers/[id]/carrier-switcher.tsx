@@ -26,7 +26,7 @@ export function CarrierSwitcher({ currentId, carriers }: CarrierSwitcherProps) {
         id={selectId}
         value={currentId}
         onChange={(event) => router.push(`/carriers/${event.target.value}`)}
-        className="rounded-md border border-gray-300 bg-white py-1.5 pl-3 pr-8 text-sm text-gray-900 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+        className="rounded-md border border-gray-300 bg-white py-1.5 pl-3 pr-8 text-sm text-gray-900 focus:border-brand-strong focus:outline-none focus:ring-1 focus:ring-brand-strong"
       >
         <optgroup label="Active">
           {active.map((carrier) => (

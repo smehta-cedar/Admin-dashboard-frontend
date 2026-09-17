@@ -26,7 +26,7 @@ export function ProfileShell({ back, title, status, subtitle, actions, identity,
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link
           href={back.href}
-          className="-ml-1 inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+          className="-ml-1 inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-sm font-medium text-gray-600 hover:bg-brand-soft hover:text-brand-ink"
         >
           <svg
             aria-hidden="true"
@@ -45,7 +45,8 @@ export function ProfileShell({ back, title, status, subtitle, actions, identity,
         {actions}
       </div>
 
-      <header className="mt-3 mb-6 border-b border-gray-200 pb-4">
+      <header className="mt-3 mb-6 border-b border-line pb-4">
+        <div aria-hidden="true" className="bg-brand-gradient mb-3 h-1 w-10 rounded-full" />
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{title}</h1>
           <StatusBadge status={status} />
@@ -90,7 +91,7 @@ export function ProfileSection({ title, count, emptyMessage, children }: Profile
       <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
         {title}
         {count !== undefined ? (
-          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium normal-case tracking-normal tabular-nums text-gray-600">
+          <span className="rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium normal-case tracking-normal tabular-nums text-brand-ink">
             {count}
           </span>
         ) : null}

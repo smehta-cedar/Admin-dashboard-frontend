@@ -1,21 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useId, useState, type FormEvent } from "react";
-import { GHOST_BUTTON_CLASS, INPUT_CLASS, PRIMARY_BUTTON_CLASS } from "@/components/classes";
+import { useEffect, useId, useState } from "react";
+import { PRIMARY_BUTTON_CLASS } from "@/components/classes";
 import { EmptyState } from "@/components/empty-state";
-import { Field } from "@/components/field";
-import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
 import { PageHeader } from "@/components/page-header";
 import type { AgentRecord } from "@/lib/agents";
-import type {
-  CarrierContractField,
-  CarrierContractNote,
-  CarrierContractRecord,
-} from "@/lib/carrier-contracts";
+import type { CarrierContractNote, CarrierContractRecord } from "@/lib/carrier-contracts";
 import type { CarrierRecord } from "@/lib/carriers";
-import { diffValues, nextId } from "@/lib/change-notes";
 import { LINES_OF_BUSINESS } from "@/lib/lines-of-business";
+import { stateSummary } from "@/lib/us-states";
+import {
+  AppointmentDialog,
+  normalizeStates,
+  saveAppointment,
+  type AppointmentEditor,
+  type AppointmentError,
+  type AppointmentValues,
+} from "../appointment-dialog";
 import { AgentCarrierList } from "./agent-carrier-list";
 import { AgentsPerCarrierChart } from "./agents-per-carrier-chart";
 
@@ -34,15 +36,24 @@ import { AgentsPerCarrierChart } from "./agents-per-carrier-chart";
  * agents appear: `agents` holds active agents only (status is edited on the
  * Agents page), and a contract for any other agent stays in state but is never
  * shown or counted, ready for when that agent is active again. A card shows
- * its contracted agents as initials and does not expand; editing, removing and
- * notes will live on the carrier profile. The add-agent icon top-right opens
- * Add contract for that carrier. Add is dummy: contracts and notes live in
- * component state only, and a refresh brings back the JSON.
+ * its contracted agents as initials (appointed states on hover) and does not
+ * expand. The add-agent icon top-right opens Add contract for that carrier.
+ *
+ * Each contract (appointment) lists the states the agent is appointed in with
+ * that carrier; empty means none yet, not every state. The Agents list below
+ * shows each carrier chip with its states, and clicking the states opens Edit.
+ * Every add and edit opens the shared AppointmentDialog (../appointment-dialog.tsx),
+ * the same one Contracts by state uses; its state grid offers only the
+ * carrier's availableStates. Add and edit are dummy: contracts and
+ * notes live in component state only, and a refresh brings back the JSON.
  */
 
 /** An active agent. Inactive agents are never passed in. */
 type AgentOption = Pick<AgentRecord, "id" | "name">;
-type CarrierOption = Pick<CarrierRecord, "id" | "name" | "linesOfBusiness" | "status">;
+type CarrierOption = Pick<
+  CarrierRecord,
+  "id" | "name" | "linesOfBusiness" | "status" | "availableStates"
+>;
 
 type CarrierContractsViewProps = {
   initialContracts: CarrierContractRecord[];
@@ -52,30 +63,10 @@ type CarrierContractsViewProps = {
 };
 
 /**
- * Which dialog is open. Add may start on a carrier (from that carrier's card);
- * edit holds the contract as it was when the dialog opened.
- */
-type Editor =
-  | { mode: "add"; carrierId: string; agentId?: string }
-  | { mode: "edit"; contract: CarrierContractRecord };
-
-type ContractValues = Omit<CarrierContractRecord, "id">;
-
-/**
  * Picks colors only; never shown as text. Full: every active agent contracted.
  * Partial: some. None: no active agent.
  */
 type Coverage = "full" | "partial" | "none";
-
-/** Also the order changes are compared and listed in. */
-const FIELD_LABELS: Record<CarrierContractField, string> = {
-  agentId: "Agent",
-  carrierId: "Carrier",
-};
-
-const FIELDS = Object.keys(FIELD_LABELS) as CarrierContractField[];
-
-const EMPTY_VALUES = { agentId: "", carrierId: "" };
 
 const COVERAGE_STYLES: Record<Coverage, { bar: string }> = {
   full: { bar: "bg-green-500" },
@@ -134,17 +125,15 @@ export function CarrierContractsView({
   carriers,
 }: CarrierContractsViewProps) {
   const [contracts, setContracts] = useState(initialContracts);
-  // Notes are still written on add; the carrier profile will show them.
-  const [, setNotes] = useState(initialNotes);
+  // Notes are still written on add and edit; the carrier profile will show them.
+  const [notes, setNotes] = useState(initialNotes);
   const [unsavedCount, setUnsavedCount] = useState(0);
-  const [editor, setEditor] = useState<Editor | null>(null);
-  const [agentError, setAgentError] = useState<string | null>(null);
+  const [editor, setEditor] = useState<AppointmentEditor | null>(null);
   // Off: only carriers with an active agent contracted. On: every carrier.
   const [showAll, setShowAll] = useState(false);
   // Shown when a change lands on a carrier the toggle hides. Keyed by a
   // counter, so a second hidden change restarts the timer even with the same message.
   const [hiddenNotice, setHiddenNotice] = useState<{ key: number; message: string } | null>(null);
-  const { dialogRef, close: closeDialog } = useModalDialog(editor !== null);
   const id = useId();
 
   const activeAgents = [...agents].sort(byName);
@@ -153,12 +142,8 @@ export function CarrierContractsView({
     agents.find((agent) => agent.id === agentId)?.name ?? `Agent ${agentId}`;
   const carrierName = (carrierId: string) =>
     carriers.find((carrier) => carrier.id === carrierId)?.name ?? `Carrier ${carrierId}`;
-
-  /** Values as notes show them: agent and carrier by name. */
-  const shownValues = (values: ContractValues) => ({
-    agentId: agentName(values.agentId),
-    carrierId: carrierName(values.carrierId),
-  });
+  const availableStates = (carrierId: string) =>
+    carriers.find((carrier) => carrier.id === carrierId)?.availableStates ?? [];
 
   /** Coverage of one carrier among active agents, given a set of contracts. */
   const coverageOf = (carrierId: string, from: CarrierContractRecord[]) => {
@@ -189,7 +174,11 @@ export function CarrierContractsView({
     const { coverage, contractedActive } = coverageOf(carrier.id, contracts);
     const carrierContracts = contracts
       .filter((contract) => contract.carrierId === carrier.id && activeAgentIds.has(contract.agentId))
-      .map((contract) => ({ contract, agent: agentName(contract.agentId) }))
+      .map((contract) => ({
+        contract,
+        agent: agentName(contract.agentId),
+        states: normalizeStates(contract.appointedStates),
+      }))
       .sort((a, b) => a.agent.localeCompare(b.agent));
     return { carrier, coverage, contractedActive, carrierContracts };
   });
@@ -217,79 +206,36 @@ export function CarrierContractsView({
   };
 
   /**
-   * Adds or edits a contract, writing a note when something changed. Returns
-   * an error message instead when the agent already has a contract there.
+   * Adds or edits a contract through saveAppointment, then flags a carrier the
+   * toggle now hides. Returns the dialog's error message, if any.
    */
-  const saveContract = (values: ContractValues, editing?: CarrierContractRecord): string | null => {
-    // One contract per agent per carrier. Messages name agents and carriers, never IDs.
-    const duplicate = contracts.some(
-      (contract) =>
-        contract.id !== editing?.id &&
-        contract.agentId === values.agentId &&
-        contract.carrierId === values.carrierId,
-    );
-    if (duplicate) {
-      return `${agentName(values.agentId)} already has a contract with ${carrierName(values.carrierId)}.`;
-    }
-
-    const changes = diffValues(
-      FIELDS,
-      editing ? shownValues(editing) : EMPTY_VALUES,
-      shownValues(values),
-    );
+  const saveContract = (
+    values: AppointmentValues,
+    editing?: CarrierContractRecord,
+  ): AppointmentError | null => {
+    const result = saveAppointment({
+      contracts,
+      notes,
+      values,
+      editing,
+      agentName,
+      carrierName,
+      availableStates,
+    });
+    if (result.error !== null) return result.error;
     // Saving an edit with nothing changed just closes, without a note.
-    if (changes.length === 0) return null;
+    if (!result.changed) return null;
 
-    const contractId = editing?.id ?? nextId(contracts);
-    const saved = { id: contractId, ...values };
-    const nextContracts = editing
-      ? contracts.map((contract) => (contract.id === contractId ? saved : contract))
-      : [...contracts, saved];
-    setContracts(nextContracts);
-    setNotes((current) => [
-      {
-        id: nextId(current),
-        contractId,
-        kind: editing ? "edited" : "added",
-        createdAt: new Date().toISOString(),
-        changes,
-      },
-      ...current,
-    ]);
+    setContracts(result.contracts);
+    setNotes(result.notes);
     setUnsavedCount((count) => count + 1);
     noticeIfHidden(
       values.carrierId,
-      nextContracts,
+      result.contracts,
       `${agentName(values.agentId)} saved at ${carrierName(values.carrierId)}.`,
     );
     return null;
   };
-
-  // Runs for every close: Cancel, Escape, backdrop click, or a save. Clearing
-  // the editor unmounts the form, which resets it.
-  const handleClose = () => {
-    setEditor(null);
-    setAgentError(null);
-  };
-
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!editor) return;
-
-    const data = new FormData(event.currentTarget);
-    const text = (field: CarrierContractField) => String(data.get(field) ?? "").trim();
-    const error = saveContract(
-      { agentId: text("agentId"), carrierId: text("carrierId") },
-      editor.mode === "edit" ? editor.contract : undefined,
-    );
-    if (error) {
-      setAgentError(error);
-      return;
-    }
-    closeDialog();
-  };
-
-  const editing = editor?.mode === "edit" ? editor.contract : undefined;
 
   return (
     <>
@@ -303,14 +249,14 @@ export function CarrierContractsView({
                   type="checkbox"
                   checked={showAll}
                   onChange={(event) => changeShowAll(event.target.checked)}
-                  className="size-4 accent-gray-900"
+                  className="size-4 accent-brand-strong"
                 />
                 Show all carriers
               </label>
             ) : null}
             <button
               type="button"
-              onClick={() => setEditor({ mode: "add", carrierId: "" })}
+              onClick={() => setEditor({ mode: "add" })}
               className={PRIMARY_BUTTON_CLASS}
             >
               Add contract
@@ -419,7 +365,7 @@ export function CarrierContractsView({
                                 onClick={() => setEditor({ mode: "add", carrierId: carrier.id })}
                                 aria-label={`Add agent to ${carrier.name}`}
                                 title="Add agent"
-                                className="grid size-8 shrink-0 place-items-center rounded-lg bg-indigo-50 text-indigo-600 transition-colors hover:bg-indigo-600 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+                                className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand-soft text-brand-ink transition-colors hover:bg-brand-strong hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
                               >
                                 <AddAgentIcon className="size-4" />
                               </button>
@@ -430,14 +376,16 @@ export function CarrierContractsView({
                               aria-label={`Agents contracted with ${carrier.name}`}
                               className="flex flex-1 flex-wrap content-start gap-1.5"
                             >
-                              {shown.map(({ contract, agent }) => (
+                              {shown.map(({ contract, agent, states }) => (
                                 <li
                                   key={contract.id}
-                                  title={agent}
+                                  title={`${agent} · ${states.length > 0 ? states.join(", ") : "No states"}`}
                                   className={`${AGENT_TILE_CLASS} ${AGENT_COLOR_CLASS}`}
                                 >
                                   <span aria-hidden="true">{initials(agent)}</span>
-                                  <span className="sr-only">{agent}</span>
+                                  <span className="sr-only">
+                                    {agent}, {stateSummary(states)}
+                                  </span>
                                 </li>
                               ))}
                               {hiddenCount > 0 ? (
@@ -523,84 +471,21 @@ export function CarrierContractsView({
                 carriers={rows.map((row) => row.carrier)}
                 contracts={contracts}
                 headingId={`${id}-agents-title`}
-                onAdd={(agentId) => setEditor({ mode: "add", carrierId: "", agentId })}
+                onAdd={(agentId) => setEditor({ mode: "add", agentId })}
+                onEdit={(contract) => setEditor({ mode: "edit", contract })}
               />
             </>
           )}
         </>
       )}
 
-      <ModalDialog dialogRef={dialogRef} labelledBy={`${id}-title`} onClose={handleClose}>
-        {editor ? (
-          <form onSubmit={handleSubmit} className="p-6">
-            <h2 id={`${id}-title`} className="text-base font-semibold text-gray-900">
-              {editing
-                ? `Edit ${agentName(editing.agentId)} at ${carrierName(editing.carrierId)}`
-                : "Add contract"}
-            </h2>
-            <p className="mt-1 text-sm text-gray-600">
-              {editing
-                ? "Saving records a note of what changed. Nothing is saved anywhere yet; refreshing undoes it."
-                : "Not saved anywhere yet. The contract stays in the list until you refresh."}
-            </p>
-
-            <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <Field
-                label="Agent"
-                htmlFor={`${id}-agent`}
-                hint={agentError ?? undefined}
-                hintId={`${id}-agent-error`}
-                error
-              >
-                <select
-                  id={`${id}-agent`}
-                  name="agentId"
-                  required
-                  defaultValue={editing ? editing.agentId : editor.mode === "add" ? (editor.agentId ?? "") : ""}
-                  aria-invalid={agentError ? true : undefined}
-                  aria-describedby={agentError ? `${id}-agent-error` : undefined}
-                  onChange={() => setAgentError(null)}
-                  className={INPUT_CLASS}
-                >
-                  <option value="">Choose an agent</option>
-                  {activeAgents.map((agent) => (
-                    <option key={agent.id} value={agent.id}>
-                      {agent.name}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Carrier" htmlFor={`${id}-carrier`}>
-                <select
-                  id={`${id}-carrier`}
-                  name="carrierId"
-                  required
-                  defaultValue={editing ? editing.carrierId : editor.mode === "add" ? editor.carrierId : ""}
-                  onChange={() => setAgentError(null)}
-                  className={INPUT_CLASS}
-                >
-                  <option value="">Choose a carrier</option>
-                  {[...carriers].sort(byName).map((carrier) => (
-                    <option key={carrier.id} value={carrier.id}>
-                      {carrier.name}
-                      {carrier.status === "inactive" ? " (inactive)" : ""}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            </div>
-
-            <div className="mt-6 flex justify-end gap-2">
-              <button type="button" onClick={closeDialog} className={GHOST_BUTTON_CLASS}>
-                Cancel
-              </button>
-              <button type="submit" className={PRIMARY_BUTTON_CLASS}>
-                {editing ? "Save changes" : "Add contract"}
-              </button>
-            </div>
-          </form>
-        ) : null}
-      </ModalDialog>
+      <AppointmentDialog
+        editor={editor}
+        agents={activeAgents}
+        carriers={carriers}
+        onSave={saveContract}
+        onClose={() => setEditor(null)}
+      />
     </>
   );
 }

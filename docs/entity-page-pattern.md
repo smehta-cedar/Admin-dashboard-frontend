@@ -37,9 +37,10 @@ Shared pieces (extracted when Carriers landed — use these, don't copy):
 | `components/empty-state.tsx` | `EmptyState` (title, description, `action`) |
 | `components/field.tsx` | `Field` (label + input + hint/error) |
 | `components/note-list.tsx` | `NoteList` (generic; pass `labels={FIELD_LABELS}`) |
-| `components/status-badge.tsx` | `StatusBadge` |
+| `components/data-table.tsx` | `DataTable`, `DataTableColumn<T>`, `DataTableRowContext` (sort + search + expandable rows, §6) |
+| `components/status-badge.tsx` | `StatusBadge`, `statusRank` (sort order: active, pending, inactive) |
 | `components/modal-dialog.tsx` | `useModalDialog(open)` → `{ dialogRef, close }`, `ModalDialog` |
-| `components/classes.ts` | `INPUT_CLASS`, `PRIMARY_BUTTON_CLASS`, `GHOST_BUTTON_CLASS`, `ROW_BUTTON_CLASS` |
+| `components/classes.ts` | `INPUT_CLASS`, `PRIMARY_BUTTON_CLASS`, `GHOST_BUTTON_CLASS`, `ROW_BUTTON_CLASS`, `TOOLBAR_INPUT_CLASS` |
 | `lib/change-notes.ts` | `nextId`, `fieldText`, `diffValues(FIELDS, before, after, redact?)`, `FieldChange<F>` |
 
 Constants a client view needs from an entity (like `LINES_OF_BUSINESS`) go in
@@ -103,36 +104,83 @@ Table  — or EmptyState with the same Add button when the list is empty
 
 ## 6. Table
 
+Every entity list renders through `DataTable` (`components/data-table.tsx`).
+It uses TanStack Table v9 (`@tanstack/react-table`) for sorting and filtering
+only; the markup and classes are ours. v9's API is not v8's: `useTable` +
+`tableFeatures`, not `useReactTable` + `getCoreRowModel`. Read the skills in
+`node_modules/@tanstack/react-table/skills/` before changing it.
+
+```tsx
+<DataTable
+  rows={agents}            // current client state; adds/edits show at once
+  columns={columns}        // DataTableColumn<T>[], stable (module const or useMemo)
+  getRowId={(agent) => agent.id}
+  unit={["agent", "agents"]}
+  searchPlaceholder="Search name, NPN, email…"
+  emptyMessage="No logins for Humana."   // optional; rows empty, no search
+  renderDetails={(agent) => …}           // optional; see §7
+/>
+```
+
+A column: `{ id, header, cell(row, ctx), className?, sortValue?, searchText?, srOnlyHeader? }`.
+
+- **Sort:** a column with `sortValue` gets a header button. Clicks cycle
+  ascending → descending → the order `rows` came in (so the view's default
+  order, e.g. ID order or Logins' agent-then-carrier, is the "cleared" state).
+  One column at a time. Numbers compare numerically (`Number(id)`, counts);
+  text ignores case and sorts "2" before "10". Status columns sort by
+  `statusRank`. The sorted `th` gets `aria-sort`; the arrow icon is `aria-hidden`.
+- **Search:** one box above the table (sr-only label "Search <plural>",
+  Escape clears). Every word typed must appear in the row's combined
+  `searchText` across columns, ignoring case, so "maria humana" works. Include
+  aliases (Agents, Carriers) and state names (Contracts by state). **Never** give a
+  password column `searchText` or `sortValue`.
+- **Count:** beside the search, `aria-live="polite"`: "12 agents", or
+  "3 of 12 agents" while searching.
+- **No match:** one row, "No agents match “foo”." with a Clear search button.
+  `EmptyState` is still used by the view when the list itself is empty.
+- **Filters that live in the URL** (Logins' carrier) stay in the view and
+  narrow `rows` before they reach `DataTable`; `TOOLBAR_INPUT_CLASS` styles them.
+- Actions column: `{ id: "actions", header: "Actions", srOnlyHeader: true, className: "text-right" }`.
+  When it needs `setEditor`, build `columns` with `useMemo` in the view
+  (spread a module-level `COLUMNS` for the rest if it helps).
+- Out of scope for now: server-side pagination/filtering, in-cell editing, CSV export.
+
+Styling (inside `DataTable`):
+
 - Wrapper: `overflow-x-auto rounded-lg border border-gray-200`;
   table `min-w-full text-left text-sm`.
 - Head: `bg-gray-50`; `th scope="col"`, `whitespace-nowrap px-4 py-2.5 font-medium text-gray-600`.
-- Body: `divide-y divide-gray-200 border-t border-gray-200`; cells `px-4 py-2.5`.
+- Body: `divide-y divide-gray-200 border-t border-gray-200`; cells `px-4 py-2.5` + column `className`.
 - Column order used on Agents: **ID, NPN, Name, Status, Email, Phone, [actions]**.
-  Keep columns in a `COLUMNS` array; the actions column has an sr-only "Actions" header.
 - IDs and codes: `font-mono text-gray-600`. Secondary text: `text-gray-600`.
   Primary name: `text-gray-900`, `whitespace-nowrap`.
 - Status badge: `rounded-md px-2 py-0.5 text-xs font-medium capitalize` +
-  `active: bg-green-50 text-green-700`, `inactive: bg-gray-100 text-gray-600`
+  `active: bg-brand-soft text-brand-ink`, `inactive: bg-gray-100 text-gray-600`
   (and `pending: bg-amber-50 text-amber-700`, used only by Logins).
 - Row action: text button `Edit` with sr-only entity name
   (`Edit<span className="sr-only"> {name}</span>`), right-aligned.
 - Secondary/list data (aliases, notes) does **not** go in the main row — see §7.
 
+Profile pages' small related tables stay plain `<table>`s for now.
+
 ## 7. Expandable row (name dropdown)
 
-- The name cell is a `<button>`: name, then a chevron (`M8 5l5 5-5 5`) that
-  rotates 90° when open. `aria-expanded`, and `aria-controls` pointing at the
-  details row while it is open.
-- Open state: `Set<string>` of IDs; several rows can be open; all start closed.
+- `DataTable` owns the open state (a `Set` of row IDs; several rows can be
+  open; all start closed; a search or sort keeps them open). It passes each
+  cell `ctx = { expanded, toggleExpanded, detailsId }`.
+- The name cell renders the toggle `<button>`: name (or a profile link plus a
+  separate chevron button with `aria-label="Details for <name>"`), chevron
+  (`M8 5l5 5-5 5`) that rotates 90° when open. `aria-expanded={ctx.expanded}`,
+  `aria-controls={ctx.expanded ? ctx.detailsId : undefined}`.
 - Open parent row and details row both get `bg-gray-50`.
-- Details row: one `<td colSpan={COLUMNS.length + 1} className="px-4 pb-4 pt-1">`
-  with a grid `sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]` (stacks on mobile).
+- `renderDetails(row)` fills one full-width `<td className="px-4 pb-4 pt-1">`; use
+  a grid `sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]` (stacks on mobile).
 - Sections inside: small heading
   `text-xs font-semibold uppercase tracking-wide text-gray-500`, then content.
   Agents shows **Aliases** (one per line, or "None") and **Notes**
   (cards: `rounded-md border border-gray-200 bg-white px-3 py-2`, or
   "No changes recorded yet.").
-- Wrap each pair of rows in `<Fragment key={id}>`.
 
 ## 8. Add / edit dialog
 
@@ -173,15 +221,20 @@ Count increments on every add and every edit that changed something.
 
 | Use | Classes |
 | --- | --- |
-| Primary button | `rounded-md bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-700` |
+| Primary button | `rounded-md bg-brand-strong px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand` |
 | Ghost button | `rounded-md px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100` |
 | Row text button | `rounded-md px-2 py-1 text-sm font-medium text-gray-700 hover:bg-gray-100` |
-| Input / select | `mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 aria-invalid:border-red-600` |
+| Input / select | `mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-brand-strong focus:outline-none focus:ring-1 focus:ring-brand-strong aria-invalid:border-red-600` |
 | Label | `block text-sm font-medium text-gray-900` |
 | Hint / error | `mt-1 text-xs text-gray-500` / `text-red-700` |
 | Warning banner | `rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800` |
 
-Palette is Tailwind grays with green (active), amber (warning), red (error).
+Palette is Tailwind grays plus the Cedar Grove brand tokens in `app/globals.css`
+(`brand`, `brand-strong`, `brand-ink`, `brand-soft`, `accent`, `line`,
+`surface-muted`, `bg-brand-gradient`), with amber (warning) and red (error).
+Use the tokens, never raw hex. `brand` (logo teal) is decorative only; use
+`brand-strong` behind white text and `brand-ink` for brand-coloured text.
+Active status uses `brand-soft` / `brand-ink`.
 
 ## 11. Accessibility checklist
 
@@ -218,6 +271,79 @@ adds two variations on the Agents form: a required checkbox group
 (`<fieldset>` + `<legend>`, "at least one" checked in `onSubmit`, error on
 each checkbox via `aria-invalid`/`aria-describedby`), and a name uniqueness
 check against other carriers' names *and* aliases, ignoring case.
+
+### Contracts
+
+Files: [lib/carrier-contracts.ts](../lib/carrier-contracts.ts),
+[app/(dashboard)/contracts/by-carriers/](../app/(dashboard)/contracts/by-carriers/),
+[app/(dashboard)/contracts/by-state/](../app/(dashboard)/contracts/by-state/).
+
+**Two layers of states.**
+
+| Field | Meaning | Edited on |
+| --- | --- | --- |
+| `CarrierRecord.availableStates` | Carrier footprint: states the carrier is available in for the agency | Carriers |
+| `CarrierContractRecord.appointedStates` | States one agent may write for that carrier, always ⊆ the carrier's `availableStates` | Contracts (both views) |
+
+**One source of truth for where agents write: carrier appointments.** A
+`CarrierContractRecord` is one agent appointed with one carrier, with
+`appointedStates` (state codes). There are no carrier-less agent licenses: an
+agent can write in a state only through an appointment that lists it. The
+carrier footprint is only the ceiling; it never makes an agent appointed.
+
+- Both lists follow the same rules: empty means none yet, never "every state";
+  a stored row missing the field loads as `[]` with a `console.warn`; values
+  are unique codes in code order. Notes label them "Available states" (carrier)
+  and "States" (appointment).
+- `StateCheckboxes` ([components/state-checkboxes.tsx](../components/state-checkboxes.tsx))
+  is the one state fieldset (heading, Select all, scrolling grid): every state on the Carriers dialog, only the carrier's
+  `availableStates` in the contract dialog.
+- One appointment per agent + carrier, checked in the form.
+- Empty `appointedStates` means appointed nowhere yet, never "every state".
+- A stored row missing `appointedStates` loads as `[]` with a `console.warn`.
+- Notes label the field "States"; values are codes in code order joined with
+  ", ", so reordering alone never records a change.
+
+**One dialog.** Every add and edit on both pages opens `AppointmentDialog`
+([contracts/appointment-dialog.tsx](../app/(dashboard)/contracts/appointment-dialog.tsx)):
+agent, carrier and the state checkbox grid. Add starts empty (or with the
+agent or carrier it was opened from); Edit starts filled in. `saveAppointment`
+there is the pure save: duplicate check, ceiling check, note diff, next
+contracts and notes. Each view keeps its own state and passes `onSave`, which
+returns an `AppointmentError` (`{ field, message }`) shown under that field.
+
+- The grid follows the chosen carrier and offers only its `availableStates`.
+  No carrier chosen, or a carrier with none: a quiet hint, no boxes.
+- `saveAppointment` rejects any state outside the ceiling with an error naming
+  the states.
+- Editing a contract with states outside the ceiling (older data, or a carrier
+  whose footprint shrank) shows an amber "Saving removes …" warning; those boxes
+  aren't offered, so saving strips them and the note records it. Contracts are
+  never shrunk automatically when a carrier's footprint changes.
+
+**By carriers**: chips in the Agents list show each appointment's states
+(`stateSummary`) and open Edit.
+
+**By state** is a read view over appointments, not a separate record (the map,
+groupings and copy stay appointment-based; since appointments sit within the
+ceiling, a state's By carrier list only holds carriers available there):
+
+- The map counts distinct active agents with at least one appointment in the
+  state.
+- A selected state lists the same appointments By agent (carriers under each
+  agent) or By carrier (agents under each carrier). Names link to profiles;
+  the rest of a line opens Edit.
+- The Appointments table (Agent, Carrier, States, Edit) searches state codes
+  and names. Add contract and Edit open the shared dialog.
+
+**Profiles** derive states the same way: the agent profile shows the union
+across appointments plus each carrier's states; the carrier profile shows its
+available states in the identity grid and each agent's appointed states on the
+agent rows.
+
+**Carriers** show `availableStates` as a States column (`stateSummary`, sorted
+by count, searchable by code and name) and edit them with `StateCheckboxes` in
+the add/edit dialog. Empty is allowed.
 
 ### Logins
 

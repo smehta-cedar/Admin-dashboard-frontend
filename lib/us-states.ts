@@ -1,6 +1,6 @@
 /*
  * US states and DC. Plain constants, safe to import from client components
- * (lib/contracts.ts is server-only).
+ * (lib/carrier-contracts.ts is server-only).
  */
 
 export type UsState = { code: string; name: string };
@@ -63,3 +63,12 @@ export const US_STATES: UsState[] = [
 export const US_STATE_NAMES: Record<string, string> = Object.fromEntries(
   US_STATES.map((state) => [state.code, state.name]),
 );
+
+/**
+ * State codes as text, every code in code order joined with " · " (e.g.
+ * "FL · LA · TX"), never shortened to a count. "No states" when empty.
+ */
+export function stateSummary(codes: string[]): string {
+  if (codes.length === 0) return "No states";
+  return [...codes].sort().join(" · ");
+}
