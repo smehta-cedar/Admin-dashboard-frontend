@@ -1,9 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { ROW_BUTTON_CLASS } from "@/components/classes";
-import { ProfileSection, ProfileShell } from "@/components/profile-shell";
+import { useEffect, useId, useState, type ReactNode } from "react";
+import { ProfileBackLink } from "@/components/profile-shell";
 import { StatusBadge } from "@/components/status-badge";
 import type { AgentNote, AgentRecord } from "@/lib/agents";
 import type {
@@ -21,36 +20,54 @@ import {
   type AppointmentValues,
 } from "../../contracts/appointment-dialog";
 import { CredentialValue } from "../../logins/credential-value";
+import {
+  AgentDialog,
+  saveAgent,
+  type AgentEditor,
+  type AgentError,
+  type AgentValues,
+} from "../agent-dialog";
 import { AgentNotes } from "./agent-notes";
 import { AgentSwitcher } from "./agent-switcher";
 
 /*
  * Profile for one agent: identity, then everything linked to them — the states
- * they can write in, contracted carriers, logins, and change notes. Logins and
- * the agent's own fields are still edited on their pages; the one thing editable
- * here is appointing this agent to a carrier.
+ * they can write in, contracted carriers, what is still pending, logins, and
+ * change notes. Logins are still edited on their page. Two things are editable
+ * here: the agent's own fields (Edit opens the same AgentDialog as the Agents
+ * list) and appointing this agent to a carrier.
+ *
+ * Layout: the name row (initials, name, status, Edit) sits above one header
+ * card holding the contact details and the licensed states, one small card
+ * per state: the code beside its licence number (the state's name is the tooltip). Below it two rows of two panels on wide screens:
+ * Carriers beside Pending, then Logins beside Notes. They stack otherwise.
  *
  * States show in two places. "Licensed states" is the agent's own licences
- * (AgentRecord.licensedStates, edited on Agents): where they may write at all,
- * whoever the carrier. Each carrier row then lists where they can actually
- * write with that carrier — a state counts only when it is licensed, inside
- * the carrier's footprint, and listed on the appointment. There is no combined
- * list across carriers. Carrier names link to their profiles.
+ * (AgentRecord.licensedStates): where they may write at all, whoever the
+ * carrier, each with the licence number that state issued
+ * (AgentRecord.licenseNumbers) or "No number yet". Each carrier row then lists where they can actually write with that
+ * carrier — a state counts only when it is licensed, inside the carrier's
+ * footprint, and listed on the appointment. There is no combined list across
+ * carriers. Carrier names link to their profiles.
+ *
+ * Pending is worked out from what is on the page, not stored: there are no
+ * task records yet. See `pendingItems`.
  *
  * "Add carrier" opens the shared AppointmentDialog
  * (../../contracts/appointment-dialog.tsx) in add mode with this agent
  * pre-filled — the same form and the same saveAppointment as Contracts, so the
- * duplicate and available-states checks are identical. It is dummy like the
- * rest: contracts and notes live in component state, and a refresh brings back
- * the JSON.
+ * duplicate and available-states checks are identical. It is all dummy like the
+ * rest: the agent, contracts and notes live in component state, and a refresh
+ * brings back the JSON. page.tsx keys this component by agent ID, so switching
+ * agents starts that state again.
  */
 
 type CarrierOption = Pick<CarrierRecord, "id" | "name" | "status" | "availableStates">;
 
 type AgentProfileProps = {
-  agent: AgentRecord;
-  /** Every agent, sorted by name, for the switcher. */
-  allAgents: Pick<AgentRecord, "id" | "name" | "status">[];
+  initialAgent: AgentRecord;
+  /** Every agent, sorted by name: the switcher's options and the NPN uniqueness check. */
+  allAgents: Pick<AgentRecord, "id" | "name" | "status" | "npn">[];
   /** Every carrier, sorted by name, for the Add carrier dialog. */
   carriers: CarrierOption[];
   /** Every contract, not just this agent's: the duplicate check and new IDs need them all. */
@@ -59,20 +76,65 @@ type AgentProfileProps = {
   initialContractNotes: CarrierContractNote[];
   /** Sorted by carrier name. */
   logins: (LoginRecord & { carrierName: string })[];
-  /** Newest first. */
-  notes: AgentNote[];
+  /** Every agent's notes, newest first: new note IDs need them all. Only this agent's are shown. */
+  initialNotes: AgentNote[];
 };
+
+const CARRIER_COLUMNS = ["Carrier", "Writable states", "Status"];
 
 const LOGIN_COLUMNS = ["Carrier", "Writing number", "Portal username", "Password", "Status"];
 
 const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
+
+const LINK_CLASS = "font-medium text-fg hover:text-brand-ink hover:underline";
+
+const LABEL_CLASS = "text-xs font-medium text-fg-subtle";
+
+const TH_CLASS = `whitespace-nowrap px-3 py-2 ${LABEL_CLASS}`;
+
+/** Soft brand fill, so it reads as the one action of its row rather than as row text. */
+const PANEL_BUTTON_CLASS =
+  "inline-flex items-center gap-1.5 rounded-md bg-brand-soft px-2.5 py-1 text-sm font-medium text-brand-ink shadow-sm hover:bg-brand-strong hover:text-white";
+
+/** Pencil tip. */
+function EditIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M13.5 3.5 16.5 6.5 7 16H4v-3z" />
+      <path d="M11.5 5.5 14.5 8.5" />
+    </svg>
+  );
+}
+
+/** "Maria Alva" → "MA"; a single word gives one letter. */
+function initials(name: string) {
+  const words = name.split(/\s+/).filter(Boolean);
+  const letters = words.length > 1 ? [words[0], words[words.length - 1]] : words;
+  return letters.map((word) => word[0].toUpperCase()).join("");
+}
+
+/** "Humana", "Humana and UHC", "Humana, UHC and WellCare". */
+function listText(items: string[]) {
+  return items.length < 2
+    ? items.join("")
+    : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
 
 /** A state code chip, with the full name on hover and for screen readers. */
 function StateChip({ code }: { code: string }) {
   return (
     <li
       title={US_STATE_NAMES[code]}
-      className="rounded-md bg-surface-muted px-2 py-1 font-mono text-xs font-medium text-fg-muted"
+      className="rounded-md bg-surface-muted px-2 py-1 font-mono text-xs font-medium text-fg-muted ring-1 ring-inset ring-line"
     >
       {code}
       {US_STATE_NAMES[code] ? <span className="sr-only"> ({US_STATE_NAMES[code]})</span> : null}
@@ -80,22 +142,238 @@ function StateChip({ code }: { code: string }) {
   );
 }
 
+/** A state's licence number (click to copy), or a quiet "No number yet". */
+function LicenseNumber({ value, className }: { value: string | undefined; className: string }) {
+  const [status, setStatus] = useState<"idle" | "copied" | "failed">("idle");
+
+  useEffect(() => {
+    if (status === "idle") return;
+    const timeout = setTimeout(() => setStatus("idle"), 1500);
+    return () => clearTimeout(timeout);
+  }, [status]);
+
+  if (!value) {
+    return <span className={`text-xs text-fg-faint ${className}`}>No number yet</span>;
+  }
+
+  const copy = async () => {
+    try {
+      if (!navigator.clipboard) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(value);
+      setStatus("copied");
+    } catch {
+      setStatus("failed");
+    }
+  };
+
+  return (
+    <span className={`relative inline-flex min-w-0 ${className}`}>
+      <button
+        type="button"
+        onClick={copy}
+        title={`Licence number ${value} (click to copy)`}
+        className="-mx-1 cursor-pointer truncate rounded-md px-1 py-0.5 font-mono text-xs text-fg hover:bg-surface-hover"
+      >
+        <span className="sr-only">Licence number </span>
+        {value}
+        <span className="sr-only"> (copy)</span>
+      </button>
+      <span
+        aria-live="polite"
+        className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 -translate-x-1/2 whitespace-nowrap"
+      >
+        {status !== "idle" ? (
+          <span
+            className={`rounded px-1.5 py-0.5 text-xs font-medium text-tooltip-fg ${status === "failed" ? "bg-danger-strong" : "bg-tooltip"}`}
+          >
+            {status === "copied" ? "Copied" : "Couldn't copy"}
+          </span>
+        ) : null}
+      </span>
+    </span>
+  );
+}
+
+/** The count pill beside a heading. */
+function Count({ value }: { value: number }) {
+  return (
+    <span className="rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium tabular-nums text-brand-ink">
+      {value}
+    </span>
+  );
+}
+
+/** One "label  value" row on the header card; the parent grid lines the values up. An empty value shows "—". */
+function Detail({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="contents">
+      <dt className={LABEL_CLASS}>{label}</dt>
+      <dd className="min-w-0 break-words text-sm text-fg">
+        {children || <span className="text-fg-subtle">—</span>}
+      </dd>
+    </div>
+  );
+}
+
+type PanelProps = {
+  title: string;
+  count: number;
+  /** Shown at the end of the title row, e.g. an Add button. */
+  action?: ReactNode;
+  children: ReactNode;
+};
+
+/** A titled card holding one related list, inset from the card's edges by the body padding. */
+function Panel({ title, count, action, children }: PanelProps) {
+  const headingId = useId();
+
+  return (
+    <section
+      aria-labelledby={headingId}
+      className="min-w-0 overflow-hidden rounded-xl border border-line bg-surface shadow-sm"
+    >
+      <div className="flex min-h-13 items-center justify-between gap-3 border-b border-line px-5 py-2.5">
+        <h2 id={headingId} className="flex items-center gap-2 text-sm font-semibold text-fg">
+          {title}
+          <Count value={count} />
+        </h2>
+        {action}
+      </div>
+      <div className="p-4 sm:p-5">{children}</div>
+    </section>
+  );
+}
+
+/** What a panel shows instead of its list when there is nothing in it. */
+function PanelEmpty({ children }: { children: ReactNode }) {
+  return <p className="text-sm text-fg-subtle">{children}</p>;
+}
+
+type PendingItem = { key: string; title: string; detail: string; href?: string; linkLabel?: string };
+
+type PendingInput = {
+  agent: AgentRecord;
+  agentCarriers: (CarrierOption & { writable: string[] })[];
+  logins: AgentProfileProps["logins"];
+};
+
+/**
+ * What still needs doing for this agent, worked out from the page's own data:
+ * missing licences or licence numbers, appointments that can't write anywhere yet, licensed
+ * states no carrier covers, carriers without a login, logins without a
+ * contract, and logins still pending.
+ */
+function pendingItems({ agent, agentCarriers, logins }: PendingInput): PendingItem[] {
+  const items: PendingItem[] = [];
+
+  if (agent.licensedStates.length === 0) {
+    items.push({
+      key: "licences",
+      title: "Record licensed states",
+      detail: "Without a licence this agent can't write anywhere, whatever the carrier.",
+    });
+  }
+
+  const unnumbered = agent.licensedStates.filter((code) => !agent.licenseNumbers[code]);
+  if (unnumbered.length > 0) {
+    items.push({
+      key: "licence-numbers",
+      title: `Record the licence ${unnumbered.length === 1 ? "number" : "numbers"} for ${listText(unnumbered)}`,
+      detail: "Licensed there, but the state's licence number isn't on file. Add it with Edit.",
+    });
+  }
+
+  for (const carrier of agentCarriers) {
+    if (carrier.writable.length === 0) {
+      items.push({
+        key: `states-${carrier.id}`,
+        title: `Finish the ${carrier.name} contract`,
+        detail: "Appointed, but with no writable states yet.",
+        href: "/contracts",
+        linkLabel: "Contracts",
+      });
+    }
+  }
+
+  const covered = new Set(agentCarriers.flatMap((carrier) => carrier.writable));
+  const uncovered = agent.licensedStates.filter((code) => !covered.has(code));
+  if (uncovered.length > 0 && agentCarriers.length > 0) {
+    items.push({
+      key: "uncovered",
+      title: `No carrier in ${listText(uncovered)}`,
+      detail: `Licensed there, but no appointment lists ${uncovered.length === 1 ? "it" : "them"}.`,
+    });
+  } else if (agent.licensedStates.length > 0 && agentCarriers.length === 0) {
+    items.push({
+      key: "no-carriers",
+      title: "Appoint to a carrier",
+      detail: "Licensed, but not contracted with any carrier yet.",
+    });
+  }
+
+  // One line however many carriers, so a new agent's list stays short.
+  const withoutLogin = agentCarriers.filter(
+    (carrier) => !logins.some((login) => login.carrierId === carrier.id),
+  );
+  if (withoutLogin.length > 0) {
+    items.push({
+      key: "no-login",
+      title: `Add ${withoutLogin.length === 1 ? "a login" : "logins"} for ${listText(withoutLogin.map((carrier) => carrier.name))}`,
+      detail: "Contracted, but no writing number or portal login recorded.",
+      href: withoutLogin.length === 1 ? `/logins?carrier=${withoutLogin[0].id}` : "/logins",
+      linkLabel: "Logins",
+    });
+  }
+
+  for (const login of logins) {
+    if (!agentCarriers.some((carrier) => carrier.id === login.carrierId)) {
+      items.push({
+        key: `uncontracted-${login.id}`,
+        title: `${login.carrierName} login has no contract`,
+        detail: "A login is recorded, but this agent isn't appointed with the carrier.",
+      });
+    }
+  }
+
+  for (const login of logins) {
+    if (login.status === "pending") {
+      items.push({
+        key: `pending-${login.id}`,
+        title: `${login.carrierName} login is pending`,
+        detail: `Writing number ${login.writingNumber || "not set"}. Mark it active once the carrier confirms.`,
+        href: `/logins?carrier=${login.carrierId}`,
+        linkLabel: "Logins",
+      });
+    }
+  }
+
+  return items;
+}
+
 export function AgentProfile({
-  agent,
+  initialAgent,
   allAgents,
   carriers,
   initialContracts,
   initialContractNotes,
   logins,
-  notes,
+  initialNotes,
 }: AgentProfileProps) {
+  const [agent, setAgent] = useState(initialAgent);
+  const [allNotes, setAllNotes] = useState(initialNotes);
   const [contracts, setContracts] = useState(initialContracts);
   const [contractNotes, setContractNotes] = useState(initialContractNotes);
   const [unsavedCount, setUnsavedCount] = useState(0);
+  const [agentEditor, setAgentEditor] = useState<AgentEditor | null>(null);
   const [editor, setEditor] = useState<AppointmentEditor | null>(null);
+  const licensedHeadingId = useId();
+
+  // An edit here shows at once in the switcher too.
+  const agents = allAgents.map((other) => (other.id === agent.id ? agent : other));
+  const notes = allNotes.filter((note) => note.agentId === agent.id);
 
   const agentName = (agentId: string) =>
-    allAgents.find((other) => other.id === agentId)?.name ?? `Agent ${agentId}`;
+    agents.find((other) => other.id === agentId)?.name ?? `Agent ${agentId}`;
   const carrierName = (carrierId: string) =>
     carriers.find((carrier) => carrier.id === carrierId)?.name ?? `Carrier ${carrierId}`;
   const availableStates = (carrierId: string) =>
@@ -123,6 +401,20 @@ export function AgentProfile({
     })
     .sort(byName);
 
+  const pending = pendingItems({ agent, agentCarriers, logins });
+
+  /** Edits this agent. Returns the dialog's error, if any. */
+  const saveAgentEdit = (values: AgentValues): AgentError | null => {
+    const result = saveAgent({ agents, notes: allNotes, values, editing: agent });
+    if (result.error !== null) return result.error;
+    if (!result.changed) return null;
+
+    setAgent(result.agent);
+    setAllNotes(result.notes);
+    setUnsavedCount((count) => count + 1);
+    return null;
+  };
+
   /** Appoints this agent to a carrier. Returns the dialog's error message, if any. */
   const saveContract = (
     values: AppointmentValues,
@@ -149,134 +441,252 @@ export function AgentProfile({
   };
 
   return (
-    <ProfileShell
-      back={{ href: "/agents", label: "Agents" }}
-      title={agent.name}
-      status={agent.status}
-      actions={<AgentSwitcher currentId={agent.id} agents={allAgents} />}
-      subtitle={<span className="font-mono">Agent #{agent.id}</span>}
-      identity={[
-        { label: "NPN", value: <span className="font-mono">{agent.npn}</span> },
-        { label: "Email", value: agent.email },
-        { label: "Phone", value: agent.phone },
-        { label: "Aliases", value: agent.aliases.join(", ") },
-      ]}
-      banner={
-        <div role="status">
-          {unsavedCount > 0 ? (
-            <p className="mb-4 rounded-md bg-warn-soft px-3 py-2 text-sm text-warn-ink">
-              {unsavedCount === 1 ? "1 change" : `${unsavedCount} changes`} made on this page only.
-              Nothing is saved yet, so refreshing undoes {unsavedCount === 1 ? "it" : "them"}.
+    <div className="mx-auto max-w-7xl">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <ProfileBackLink href="/agents" label="Agents" />
+        <AgentSwitcher currentId={agent.id} agents={agents} />
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3.5">
+          <span
+            aria-hidden="true"
+            className="flex size-12 shrink-0 items-center justify-center rounded-full bg-brand-soft text-base font-semibold text-brand-ink"
+          >
+            {initials(agent.name)}
+          </span>
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold tracking-tight text-fg">{agent.name}</h1>
+            <div className="mt-0.5 flex">
+              <StatusBadge status={agent.status} />
+            </div>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setAgentEditor({ mode: "edit", agent })}
+          className={PANEL_BUTTON_CLASS}
+        >
+          <EditIcon className="size-3.5 shrink-0" />
+          Edit<span className="sr-only"> {agent.name}</span>
+        </button>
+      </div>
+
+      <header className="mt-4 p-2 grid overflow-hidden rounded-xl border border-line bg-surface shadow-sm lg:grid-cols-[auto_minmax(0,1fr)]">
+        <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] content-start items-baseline gap-x-6 gap-y-3 px-5 py-4 lg:max-w-md">
+          <Detail label="NPN">
+            {agent.npn ? <span className="font-mono">{agent.npn}</span> : null}
+          </Detail>
+          <Detail label="Email">
+            {agent.email ? (
+              <a href={`mailto:${agent.email}`} className="hover:text-brand-ink hover:underline">
+                {agent.email}
+              </a>
+            ) : null}
+          </Detail>
+          <Detail label="Phone">
+            {agent.phone ? (
+              <a href={`tel:${agent.phone}`} className="hover:text-brand-ink hover:underline">
+                {agent.phone}
+              </a>
+            ) : null}
+          </Detail>
+          <Detail label="Aliases">{agent.aliases.join(", ")}</Detail>
+        </dl>
+
+        <section
+          aria-labelledby={licensedHeadingId}
+          className="min-w-0 border-t border-line px-5 py-4 lg:border-l lg:border-t-0"
+        >
+          <h2
+            id={licensedHeadingId}
+            title="Personal licences, whoever the carrier."
+            className="flex items-center gap-2 text-sm font-semibold text-fg"
+          >
+            Licensed states
+            <Count value={agent.licensedStates.length} />
+          </h2>
+
+          {agent.licensedStates.length === 0 ? (
+            <p className="mt-2 text-sm text-fg-subtle">
+              No licences recorded, so this agent can&apos;t write anywhere yet.
             </p>
-          ) : null}
-        </div>
-      }
-    >
-      <ProfileSection
-        title="Licensed states"
-        count={agent.licensedStates.length}
-        emptyMessage="No licences recorded, so this agent can't write anywhere yet."
-      >
-        <p className="mb-2 text-xs text-fg-subtle">
-          Personal licences, whoever the carrier. Edited on Agents.
-        </p>
-        <ul className="flex flex-wrap gap-1.5">
-          {agent.licensedStates.map((code) => (
-            <StateChip key={code} code={code} />
-          ))}
-        </ul>
-      </ProfileSection>
-
-      <ProfileSection
-        title="Carriers"
-        count={agentCarriers.length}
-        action={
-          carriers.length > 0 ? (
-            <button
-              type="button"
-              onClick={() => setEditor({ mode: "add", agentId: agent.id })}
-              className={ROW_BUTTON_CLASS}
-            >
-              <span aria-hidden="true">+ </span>Add carrier
-              <span className="sr-only"> for {agent.name}</span>
-            </button>
-          ) : null
-        }
-      >
-        {agentCarriers.length === 0 ? (
-          <p className="text-sm text-fg-subtle">Not contracted with any carriers.</p>
-        ) : (
-          <ul className="divide-y divide-line rounded-lg border border-line text-sm">
-            {agentCarriers.map((carrier) => (
-              <li key={carrier.id} className="flex flex-col gap-2 px-4 py-2.5">
-                <div className="flex items-center justify-between gap-4">
-                  <Link href={`/carriers/${carrier.id}`} className="text-fg hover:underline">
-                    {carrier.name}
-                  </Link>
-                  <StatusBadge status={carrier.status} />
-                </div>
-                {carrier.writable.length > 0 ? (
-                  <ul
-                    aria-label={`States writable with ${carrier.name}`}
-                    className="flex flex-wrap gap-1"
-                  >
-                    {carrier.writable.map((code) => (
-                      <StateChip key={code} code={code} />
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-xs text-fg-faint">No states yet</p>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </ProfileSection>
-
-      <ProfileSection title="Logins" count={logins.length} emptyMessage="No logins recorded.">
-        <div className="overflow-x-auto rounded-lg border border-line">
-          <table className="min-w-full text-left text-sm">
-            <thead className="bg-surface-muted">
-              <tr>
-                {LOGIN_COLUMNS.map((heading) => (
-                  <th
-                    key={heading}
-                    scope="col"
-                    className="whitespace-nowrap px-4 py-2.5 font-medium text-fg-muted"
-                  >
-                    {heading}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line border-t border-line">
-              {logins.map((login) => (
-                <tr key={login.id}>
-                  <td className="whitespace-nowrap px-4 py-2.5">
-                    <Link href={`/carriers/${login.carrierId}`} className="text-fg hover:underline">
-                      {login.carrierName}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-2.5 font-mono text-fg-muted">{login.writingNumber}</td>
-                  <td className="px-4 py-2.5 text-fg-muted">
-                    <CredentialValue value={login.username} label="username" />
-                  </td>
-                  <td className="px-4 py-2.5 text-fg-muted">
-                    <CredentialValue value={login.portalPassword} label="password" secret />
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <StatusBadge status={login.status} />
-                  </td>
-                </tr>
+          ) : (
+            <ul className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-2">
+              {agent.licensedStates.map((code) => (
+                <li
+                  key={code}
+                  title={US_STATE_NAMES[code]}
+                  className="flex items-baseline justify-between rounded-lg bg-surface-muted px-3 py-2 ring-1 ring-inset ring-line"
+                >
+                  <span className="font-mono text-sm font-bold text-fg">
+                    {code}
+                    {US_STATE_NAMES[code] ? (
+                      <span className="sr-only"> ({US_STATE_NAMES[code]})</span>
+                    ) : null}
+                  </span>
+                  <LicenseNumber value={agent.licenseNumbers[code]} className="min-w-0 " />
+                </li>
               ))}
-            </tbody>
-          </table>
-        </div>
-      </ProfileSection>
+            </ul>
+          )}
+        </section>
+      </header>
 
-      <ProfileSection title="Notes" count={notes.length}>
-        <AgentNotes notes={notes} />
-      </ProfileSection>
+      <div role="status">
+        {unsavedCount > 0 ? (
+          <p className="mt-4 rounded-md bg-warn-soft px-3 py-2 text-sm text-warn-ink">
+            {unsavedCount === 1 ? "1 change" : `${unsavedCount} changes`} made on this page only.
+            Nothing is saved yet, so refreshing undoes {unsavedCount === 1 ? "it" : "them"}.
+          </p>
+        ) : null}
+      </div>
+
+      <div className="mt-5 grid items-start gap-5 xl:grid-cols-2">
+
+        <Panel
+          title="Carriers"
+          count={agentCarriers.length}
+          action={
+            carriers.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setEditor({ mode: "add", agentId: agent.id })}
+                className={PANEL_BUTTON_CLASS} 
+              >
+                <span aria-hidden="true">+ </span>Add carrier
+                <span className="sr-only"> for {agent.name}</span>
+              </button>
+            ) : null
+          }
+        >
+          {agentCarriers.length === 0 ? (
+            <PanelEmpty>Not contracted with any carriers.</PanelEmpty>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-line">
+              <table className="min-w-full text-left text-sm">
+                <thead className="bg-surface-muted">
+                  <tr>
+                    {CARRIER_COLUMNS.map((heading) => (
+                      <th key={heading} scope="col" className={TH_CLASS}>
+                        {heading}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line border-t border-line">
+                  {agentCarriers.map((carrier) => (
+                    <tr key={carrier.id}>
+                      <td className="px-3 py-2.5 align-middle sm:whitespace-nowrap">
+                        <Link href={`/carriers/${carrier.id}`} className={LINK_CLASS}>
+                          {carrier.name}
+                        </Link>
+                      </td>
+                      <td className="w-full px-3 py-2.5">
+                        {carrier.writable.length > 0 ? (
+                          <ul
+                            aria-label={`States writable with ${carrier.name}`}
+                            className="flex flex-wrap gap-1"
+                          >
+                            {carrier.writable.map((code) => (
+                              <StateChip key={code} code={code} />
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-xs text-fg-faint">No states yet</p>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <StatusBadge status={carrier.status} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+
+        <Panel title="Pending" count={pending.length}>
+          {pending.length === 0 ? (
+            <PanelEmpty>Nothing pending. Licences, contracts and logins all line up.</PanelEmpty>
+          ) : (
+            <ul className="divide-y divide-line rounded-lg border border-line text-sm">
+              {pending.map((item) => (
+                <li key={item.key} className="flex items-start gap-3 px-4 py-3">
+                  <span
+                    aria-hidden="true"
+                    className="mt-1.5 size-2 shrink-0 rounded-full bg-warn-ink"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-fg">{item.title}</p>
+                    <p className="mt-0.5 text-xs text-fg-muted">{item.detail}</p>
+                  </div>
+                  {item.href ? (
+                    <Link
+                      href={item.href}
+                      className="shrink-0 whitespace-nowrap text-xs font-medium text-brand-ink hover:underline"
+                    >
+                      {item.linkLabel}
+                      <span aria-hidden="true"> →</span>
+                    </Link>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+        <Panel title="Logins" count={logins.length}>
+          {logins.length === 0 ? (
+            <PanelEmpty>No logins recorded.</PanelEmpty>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-line">
+              <table className="min-w-full text-left text-sm">
+                <thead className="bg-surface-muted">
+                  <tr>
+                    {LOGIN_COLUMNS.map((heading) => (
+                      <th key={heading} scope="col" className={TH_CLASS}>
+                        {heading}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line border-t border-line">
+                  {logins.map((login) => (
+                    <tr key={login.id}>
+                      <td className="min-w-24 px-3 py-2.5">
+                        <Link href={`/carriers/${login.carrierId}`} className={LINK_CLASS}>
+                          {login.carrierName}
+                        </Link>
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2.5 font-mono text-fg-muted">
+                        {login.writingNumber}
+                      </td>
+                      <td className="px-3 py-2.5 text-fg-muted">
+                        <CredentialValue value={login.username} label="username" />
+                      </td>
+                      <td className="px-3 py-2.5 text-fg-muted">
+                        <CredentialValue value={login.portalPassword} label="password" secret />
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <StatusBadge status={login.status} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+        <Panel title="Notes" count={notes.length}>
+          {/* Cancels NoteList's own top margin; the panel body already pads. */}
+          <div className="-mt-2">
+            <AgentNotes notes={notes} />
+          </div>
+        </Panel>
+      </div>
+
+      <AgentDialog editor={agentEditor} onSave={saveAgentEdit} onClose={() => setAgentEditor(null)} />
 
       {/* Agent locked to this profile: the only option, already chosen. */}
       <AppointmentDialog
@@ -286,6 +696,6 @@ export function AgentProfile({
         onSave={saveContract}
         onClose={() => setEditor(null)}
       />
-    </ProfileShell>
+    </div>
   );
 }

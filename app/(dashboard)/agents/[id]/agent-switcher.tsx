@@ -18,8 +18,8 @@ export function AgentSwitcher({ currentId, agents }: AgentSwitcherProps) {
   const inactive = agents.filter((agent) => agent.status !== "active");
 
   return (
-    <div className="flex items-center gap-2">
-      <label htmlFor={selectId} className="text-sm font-medium text-fg-muted">
+    <div className="flex flex-col items-end gap-1">
+      <label htmlFor={selectId} className="text-xs test-start font-medium text-fg-muted">
         Switch agent
       </label>
       <select

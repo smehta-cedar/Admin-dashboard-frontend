@@ -5,6 +5,7 @@
     "aliases": ["Maria Lopez"],
     "status": "active",
     "licensedStates": ["AZ", "CA", "FL", "GA", "LA", "NM", "NV", "TX"],
+    "licenseNumbers": { "AZ": "17654321", "CA": "0M48213", "FL": "W482913", "GA": "3098217", "LA": "784512", "NM": "1800013467", "NV": "3482291", "TX": "2104587" },
     "npn": "17654321",
     "email": "maria.alvarez@example.com",
     "phone": "(555)010-2231"
@@ -15,6 +16,7 @@
     "aliases": ["Jim Carter", "Carter Insurance Group"],
     "status": "active",
     "licensedStates": ["AL", "FL", "GA", "LA", "NC", "SC", "TN", "TX"],
+    "licenseNumbers": { "AL": "0782214", "FL": "P219044", "GA": "3150982", "LA": "801266", "NC": "18234567", "SC": "1045873", "TN": "2398104", "TX": "2217340" },
     "npn": "18234567",
     "email": "jcarter@example.com",
     "phone": "(555)010-4410"
@@ -25,6 +27,7 @@
     "aliases": [],
     "status": "active",
     "licensedStates": ["CA", "NV", "OR", "TX", "WA"],
+    "licenseNumbers": { "CA": "4K19027", "NV": "3519842", "OR": "19876543", "WA": "1120457" },
     "npn": "19876543",
     "email": "priya.n@example.com",
     "phone": "(555)010-3365"
@@ -35,6 +38,7 @@
     "aliases": ["Bob Klein"],
     "status": "inactive",
     "licensedStates": ["AR", "OK", "TX"],
+    "licenseNumbers": { "AR": "16543210", "OK": "100284519", "TX": "1987702" },
     "npn": "16543210",
     "email": "bob.klein@example.com",
     "phone": "(555)010-7788"
@@ -45,6 +49,7 @@
     "aliases": [],
     "status": "active",
     "licensedStates": ["FL", "GA", "LA", "NJ", "NY", "PA"],
+    "licenseNumbers": { "FL": "G104882", "GA": "3276415", "LA": "812093", "NJ": "1648820", "NY": "LA-1523907", "PA": "951204" },
     "npn": "21456789",
     "email": "brandon.wahl@example.com",
     "phone": "(555)010-9902"
@@ -55,6 +60,7 @@
     "aliases": ["Tom Nguyen"],
     "status": "inactive",
     "licensedStates": [],
+    "licenseNumbers": {},
     "npn": "20123456",
     "email": "tom.nguyen@example.com",
     "phone": "(555)010-6120"

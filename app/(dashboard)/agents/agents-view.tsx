@@ -1,28 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useId, useMemo, useState, type FormEvent } from "react";
-import {
-  GHOST_BUTTON_CLASS,
-  INPUT_CLASS,
-  PRIMARY_BUTTON_CLASS,
-  ROW_BUTTON_CLASS,
-} from "@/components/classes";
+import { useMemo, useState } from "react";
+import { PRIMARY_BUTTON_CLASS, ROW_BUTTON_CLASS } from "@/components/classes";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
-import { Field } from "@/components/field";
-import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
 import { PageHeader } from "@/components/page-header";
-import { StateCheckboxes } from "@/components/state-checkboxes";
 import { StatusBadge, statusRank } from "@/components/status-badge";
-import type { AgentField, AgentNote, AgentRecord } from "@/lib/agents";
-import { diffValues, nextId } from "@/lib/change-notes";
-import { formatPhone, phoneDigits } from "@/lib/phone";
+import type { AgentNote, AgentRecord } from "@/lib/agents";
+import { phoneDigits } from "@/lib/phone";
 import { US_STATE_NAMES, stateSummary } from "@/lib/us-states";
+import { AgentDialog, saveAgent, type AgentEditor, type AgentError, type AgentValues } from "./agent-dialog";
 
 /*
- * Agents table with dummy add and edit dialogs. Every add or edit records a
- * note listing what changed. The table sorts by header and filters by search.
+ * Agents table with dummy add and edit, through the shared AgentDialog
+ * (./agent-dialog.tsx), which an agent's profile opens too. Every add or edit
+ * records a note listing what changed. The table sorts by header and filters
+ * by search.
  * A name links to the agent's profile, which shows their aliases and notes;
  * rows don't expand. States are the agent's own licensedStates —
  * where they may write at all; which of those they can actually write with a
@@ -37,36 +31,12 @@ type AgentsViewProps = {
   initialNotes: AgentNote[];
 };
 
-/** Which dialog is open. Edit holds the agent as it was when the dialog opened. */
-type Editor = { mode: "add" } | { mode: "edit"; agent: AgentRecord };
-
-type AgentValues = Omit<AgentRecord, "id">;
-
-/** Also the order changes are compared and listed in. */
-export const FIELD_LABELS: Record<AgentField, string> = {
-  name: "Name",
-  aliases: "Aliases",
-  status: "Status",
-  npn: "NPN",
-  email: "Email",
-  phone: "Phone",
-  licensedStates: "Licensed states",
-};
-
-const FIELDS = Object.keys(FIELD_LABELS) as AgentField[];
-
-
-const EMPTY_VALUES = { name: "", aliases: [], npn: "", email: "", phone: "", licensedStates: [] };
-
 export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
   const [agents, setAgents] = useState(initialAgents);
   // Not shown here (the profile lists notes); new ones are still recorded.
-  const [, setNotes] = useState(initialNotes);
+  const [notes, setNotes] = useState(initialNotes);
   const [unsavedCount, setUnsavedCount] = useState(0);
-  const [editor, setEditor] = useState<Editor | null>(null);
-  const [npnError, setNpnError] = useState<string | null>(null);
-  const { dialogRef, close: closeDialog } = useModalDialog(editor !== null);
-  const id = useId();
+  const [editor, setEditor] = useState<AgentEditor | null>(null);
 
   // Sort and search run in DataTable. Search covers aliases too, so an agent can
   // be found by any name they appear under on statements.
@@ -136,7 +106,11 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
         className: "tabular-nums text-fg-muted",
         sortValue: (agent) => agent.licensedStates.length,
         searchText: (agent) =>
-          agent.licensedStates.flatMap((code) => [code, US_STATE_NAMES[code] ?? ""]),
+          agent.licensedStates.flatMap((code) => [
+            code,
+            US_STATE_NAMES[code] ?? "",
+            agent.licenseNumbers[code] ?? "",
+          ]),
       },
       {
         id: "actions",
@@ -157,64 +131,20 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
     [],
   );
 
-  // Runs for every close: Cancel, Escape, backdrop click, or a save. Clearing
-  // the editor unmounts the form, which resets it.
-  const handleClose = () => {
-    setEditor(null);
-    setNpnError(null);
-  };
+  /** Adds or edits an agent. Returns the dialog's error, if any. */
+  const handleSave = (values: AgentValues): AgentError | null => {
+    const editing = editor?.mode === "edit" ? editor.agent : undefined;
+    const result = saveAgent({ agents, notes, values, editing });
+    if (result.error !== null) return result.error;
+    if (!result.changed) return null;
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!editor) return;
-
-    const data = new FormData(event.currentTarget);
-    const text = (field: AgentField) => String(data.get(field) ?? "").trim();
-    const values: AgentValues = {
-      name: text("name"),
-      aliases: text("aliases")
-        .split(",")
-        .map((alias) => alias.trim())
-        .filter(Boolean),
-      status: text("status") === "inactive" ? "inactive" : "active",
-      npn: text("npn"),
-      email: text("email"),
-      phone: formatPhone(text("phone")),
-      licensedStates: [
-        ...new Set(data.getAll("licensedStates").map((code) => String(code).trim()).filter(Boolean)),
-      ].sort(),
-    };
-
-    const editingId = editor.mode === "edit" ? editor.agent.id : null;
-    const npnOwner = agents.find((agent) => agent.id !== editingId && agent.npn === values.npn);
-    if (npnOwner) {
-      setNpnError(`NPN ${values.npn} already belongs to ${npnOwner.name}.`);
-      return;
-    }
-
-    const agentId = editingId ?? nextId(agents);
-    const changes = diffValues(FIELDS, editor.mode === "edit" ? editor.agent : EMPTY_VALUES, values);
-
-    // Saving an edit with nothing changed just closes, without a note.
-    if (changes.length > 0) {
-      setAgents((current) =>
-        editor.mode === "edit"
-          ? current.map((agent) => (agent.id === agentId ? { id: agentId, ...values } : agent))
-          : [...current, { id: agentId, ...values }],
-      );
-      setNotes((current) => [
-        {
-          id: nextId(current),
-          agentId,
-          kind: editor.mode === "edit" ? "edited" : "added",
-          createdAt: new Date().toISOString(),
-          changes,
-        },
-        ...current,
-      ]);
-      setUnsavedCount((count) => count + 1);
-    }
-    closeDialog();
+    const saved = result.agent;
+    setAgents((current) =>
+      editing ? current.map((agent) => (agent.id === saved.id ? saved : agent)) : [...current, saved],
+    );
+    setNotes(result.notes);
+    setUnsavedCount((count) => count + 1);
+    return null;
   };
 
   const addButton = (
@@ -222,8 +152,6 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
       Add agent
     </button>
   );
-
-  const editing = editor?.mode === "edit" ? editor.agent : undefined;
 
   return (
     <>
@@ -254,131 +182,7 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
         />
       )}
 
-      <ModalDialog dialogRef={dialogRef} labelledBy={`${id}-title`} onClose={handleClose}>
-        {editor ? (
-          <form onSubmit={handleSubmit} className="p-6">
-            <h2 id={`${id}-title`} className="text-base font-semibold text-fg">
-              {editing ? `Edit ${editing.name}` : "Add agent"}
-            </h2>
-            <p className="mt-1 text-sm text-fg-muted">
-              {editing
-                ? "Saving records a note of what changed. Nothing is saved anywhere yet; refreshing undoes it."
-                : "Not saved anywhere yet. The agent stays in the list until you refresh."}
-            </p>
-
-            <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <Field label="Name" htmlFor={`${id}-name`} className="sm:col-span-2">
-                <input
-                  id={`${id}-name`}
-                  name="name"
-                  type="text"
-                  required
-                  pattern=".*\S.*"
-                  autoComplete="off"
-                  defaultValue={editing?.name}
-                  className={INPUT_CLASS}
-                />
-              </Field>
-              <Field
-                label="Aliases"
-                optional
-                htmlFor={`${id}-aliases`}
-                hint="Other names on statements, separated by commas."
-                hintId={`${id}-aliases-hint`}
-                className="sm:col-span-2"
-              >
-                <input
-                  id={`${id}-aliases`}
-                  name="aliases"
-                  type="text"
-                  autoComplete="off"
-                  aria-describedby={`${id}-aliases-hint`}
-                  defaultValue={editing?.aliases.join(", ")}
-                  className={INPUT_CLASS}
-                />
-              </Field>
-              <Field label="Status" htmlFor={`${id}-status`}>
-                <select
-                  id={`${id}-status`}
-                  name="status"
-                  defaultValue={editing?.status ?? "active"}
-                  className={INPUT_CLASS}
-                >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </select>
-              </Field>
-              <Field
-                label="NPN"
-                htmlFor={`${id}-npn`}
-                hint={npnError ?? undefined}
-                hintId={`${id}-npn-error`}
-                error
-              >
-                <input
-                  id={`${id}-npn`}
-                  name="npn"
-                  type="text"
-                  required
-                  pattern=".*\S.*"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  defaultValue={editing?.npn}
-                  aria-invalid={npnError ? true : undefined}
-                  aria-describedby={npnError ? `${id}-npn-error` : undefined}
-                  onChange={() => setNpnError(null)}
-                  className={INPUT_CLASS}
-                />
-              </Field>
-              <Field label="Email" htmlFor={`${id}-email`}>
-                <input
-                  id={`${id}-email`}
-                  name="email"
-                  type="email"
-                  required
-                  autoComplete="off"
-                  defaultValue={editing?.email}
-                  className={INPUT_CLASS}
-                />
-              </Field>
-              <Field label="Phone" htmlFor={`${id}-phone`}>
-                <input
-                  id={`${id}-phone`}
-                  name="phone"
-                  type="tel"
-                  required
-                  pattern=".*\S.*"
-                  autoComplete="off"
-                  defaultValue={editing?.phone}
-                  className={INPUT_CLASS}
-                />
-              </Field>
-
-              <StateCheckboxes
-                legend="Licensed states"
-                name="licensedStates"
-                defaultChecked={editing?.licensedStates}
-                className="mt-4 sm:col-span-2"
-                legendClassName="font-semibold"
-                describedBy={`${id}-licensed-hint`}
-              >
-                <p id={`${id}-licensed-hint`} className="mt-1 text-xs text-fg-subtle">
-                  Where this agent holds a licence. Leave all unchecked if none.
-                </p>
-              </StateCheckboxes>
-            </div>
-
-            <div className="mt-6 flex justify-end gap-2">
-              <button type="button" onClick={closeDialog} className={GHOST_BUTTON_CLASS}>
-                Cancel
-              </button>
-              <button type="submit" className={PRIMARY_BUTTON_CLASS}>
-                {editing ? "Save changes" : "Add agent"}
-              </button>
-            </div>
-          </form>
-        ) : null}
-      </ModalDialog>
+      <AgentDialog editor={editor} onSave={handleSave} onClose={() => setEditor(null)} />
     </>
   );
 }

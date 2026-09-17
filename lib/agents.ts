@@ -13,6 +13,12 @@ import "server-only";
  * An agent can write with a carrier in a state only when the state is in both,
  * and an appointment lists it. Empty means licensed nowhere, never "everywhere".
  *
+ * licenseNumbers holds the licence number the state issued, per licensed state.
+ * The agent dialog requires one for every licensed state, so a state can't be
+ * added without its number. Older rows may still lack one: they load as they
+ * are and show "No number yet" until edited. A number for a state the agent
+ * isn't licensed in is dropped when the agent loads.
+ *
  * Writing numbers are not stored on agents or carriers. They live with
  * Logins in lib/logins.ts (one agent's producer ID at one carrier).
  *
@@ -40,6 +46,11 @@ export type AgentRecord = {
    * and in code order. Empty when licensed nowhere yet (not "all states").
    */
   licensedStates: string[];
+  /**
+   * Licence number by state code, for states in licensedStates only. Required
+   * per licensed state when saving; only older rows can be missing an entry.
+   */
+  licenseNumbers: Record<string, string>;
   /** National Producer Number. Unique across agents. */
   npn: string;
   email: string;
@@ -71,23 +82,35 @@ export type AgentNote = {
   changes: AgentChange[];
 };
 
-/** An agent as the JSON may hold it: older rows have no licensedStates. */
-type StoredAgent = Omit<AgentRecord, "licensedStates"> & { licensedStates?: string[] };
+/** An agent as the JSON may hold it: older rows have no licensedStates or licenseNumbers. */
+type StoredAgent = Omit<AgentRecord, "licensedStates" | "licenseNumbers"> & {
+  licensedStates?: string[];
+  /** Partial: the JSON lists different states per agent. */
+  licenseNumbers?: Partial<Record<string, string>>;
+};
 
 /**
  * A stored agent with licensedStates unique and in code order, and the phone
  * in the display format. Missing licensedStates becomes [] (with a console
- * warning naming the agent).
+ * warning naming the agent). licenseNumbers keeps only non-blank numbers for
+ * licensed states, in code order; missing becomes {}.
  */
 function toRecord(agent: StoredAgent): AgentRecord {
   if (!Array.isArray(agent.licensedStates)) {
     console.warn(`Agent ${agent.id} has no licensedStates; treating them as licensed in no states.`);
   }
-  const states = Array.isArray(agent.licensedStates) ? agent.licensedStates : [];
+  const states = [...new Set(Array.isArray(agent.licensedStates) ? agent.licensedStates : [])].sort();
+  const numbers = agent.licenseNumbers ?? {};
   return {
     ...agent,
     phone: formatPhone(agent.phone),
-    licensedStates: [...new Set(states)].sort(),
+    licensedStates: states,
+    licenseNumbers: Object.fromEntries(
+      states.flatMap((code) => {
+        const number = (numbers[code] ?? "").trim();
+        return number ? [[code, number]] : [];
+      }),
+    ),
   };
 }
 

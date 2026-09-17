@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { NoteList } from "@/components/note-list";
 import type { AgentNote } from "@/lib/agents";
-import { FIELD_LABELS } from "../agents-view";
+import { AGENT_FIELD_LABELS } from "../agent-dialog";
 
 const subscribe = () => () => {};
 
@@ -20,5 +20,5 @@ export function AgentNotes({ notes }: { notes: AgentNote[] }) {
   );
 
   if (!hydrated) return <p className="text-sm text-fg-subtle">Loading notes…</p>;
-  return <NoteList notes={notes} labels={FIELD_LABELS} />;
+  return <NoteList notes={notes} labels={AGENT_FIELD_LABELS} />;
 }

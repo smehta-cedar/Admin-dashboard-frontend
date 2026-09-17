@@ -19,7 +19,8 @@ type StateCheckboxesProps = {
   disabledTitle?: (state: UsState) => string;
   /** Codes checked when the grid first renders. */
   defaultChecked?: string[];
-  onChange?: () => void;
+  /** Runs on every change with the checked codes, in code order. */
+  onChange?: (checkedCodes: string[]) => void;
   className?: string;
   /** Extra classes for the heading only, e.g. a heavier weight. */
   legendClassName?: string;
@@ -65,7 +66,7 @@ export function StateCheckboxes({
 
   const update = (next: Set<string>) => {
     setChecked(next);
-    onChange?.();
+    onChange?.([...next].sort());
   };
 
   const toggle = (code: string) => {

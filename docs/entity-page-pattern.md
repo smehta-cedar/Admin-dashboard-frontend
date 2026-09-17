@@ -324,6 +324,7 @@ Files: [lib/carrier-contracts.ts](../lib/carrier-contracts.ts),
 | Field | Meaning | Edited on |
 | --- | --- | --- |
 | `AgentRecord.licensedStates` | Personal licences: where the agent may write at all, whoever the carrier | Agents |
+| `AgentRecord.licenseNumbers` | The licence number each state issued, `{ TX: "2104587" }`. Only for licensed states, and **required** for each one: the agent dialog shows a required input per checked state and `saveAgent` rejects a licensed state without a number. Only older stored rows can lack one ("No number yet", and a Pending item). Not a ceiling — it never affects writable states | Agents |
 | `CarrierRecord.availableStates` | Carrier footprint: states the carrier is available in for the agency | Carriers |
 | `CarrierContractRecord.appointedStates` | States one agent may write for that carrier, always ⊆ `licensedStates ∩ availableStates` | Contracts (both views) |
 
@@ -418,11 +419,36 @@ note are identical. That makes `agent-profile.tsx` a client component holding
 contracts, notes and the unsaved count; `page.tsx` passes **every** carrier (the
 dialog's options) and **every** contract and contract note (the duplicate check
 and `nextId` need the full lists), and the profile picks out the agent's own
-rows. `ProfileShell` takes a `banner` slot for the `role="status"` unsaved
-banner, between the header and the sections; `ProfileSection` takes an `action`
-slot for the button beside its title (`ROW_BUTTON_CLASS`, "+ Add carrier").
-The carrier profile stays read-only for now; the matching button there would be
-Add agent.
+rows.
+
+The agent profile has its own layout in `agent-profile.tsx` rather than
+`ProfileShell` (it shares only `ProfileBackLink`). Top to bottom:
+
+- **Name row**: initials, name, status badge under it, and **Edit**, which opens
+  the same `AgentDialog` as the Agents list
+  ([agents/agent-dialog.tsx](../app/(dashboard)/agents/agent-dialog.tsx):
+  `AgentDialog` + pure `saveAgent`, the same shape as `carrier-dialog.tsx`;
+  `AGENT_FIELD_LABELS` lives there). The profile keeps the agent in state, so
+  `page.tsx` keys it by agent ID, passes `npn` in `allAgents` for the uniqueness
+  check, and passes **every** agent note (new note IDs need them all).
+- **Header card**: NPN / email / phone / aliases as stacked "label  value" rows,
+  beside the licensed states, one small card per state: the code over that
+  state's licence number (`licenseNumbers[code]`), or a faint "No number yet".
+  The state's full name is the card's tooltip and sr-only text.
+- The `role="status"` unsaved banner (agent edits and new appointments both count).
+- **Panels**, two per row from `xl` up, each with a padded body (`p-4 sm:p-5`)
+  so its table or list sits inset in its own `rounded-lg border border-line` box: Carriers (a table: Carrier, Writable
+  states, Status; "+ Add carrier" in its title row) beside Logins, then Pending
+  beside Notes.
+- **Pending** is derived by `pendingItems`, not stored — there are no task
+  records yet: no licences, licensed states with no licence number, an appointment with no writable states, licensed
+  states no appointment covers, carriers with no login (one line), a login with
+  no contract, and logins whose status is pending. Swap it for real tasks when
+  they exist.
+
+The carrier profile still uses `ProfileShell` / `ProfileSection` (`banner` and
+`action` slots included) and stays read-only for now; the matching button
+there would be Add agent.
 
 **Agents** and **Carriers** each show their own list as a States column
 (`stateSummary`, sorted by count, searchable by code and name) and edit it with

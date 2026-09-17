@@ -32,8 +32,11 @@ export default async function AgentProfilePage(props: PageProps<"/agents/[id]">)
 
   return (
     <AgentProfile
-      agent={agent}
-      allAgents={agents.map(({ id, name, status }) => ({ id, name, status })).sort(byName)}
+      // The profile keeps the agent in state (it can be edited there), so a
+      // switch to another agent has to start that state again.
+      key={agent.id}
+      initialAgent={agent}
+      allAgents={agents.map(({ id, name, status, npn }) => ({ id, name, status, npn })).sort(byName)}
       // Every carrier, so Add carrier can appoint this agent to any of them. The
       // profile picks out this agent's contracts; states come only from those
       // appointments, as there are no carrier-less licenses.
@@ -46,7 +49,7 @@ export default async function AgentProfilePage(props: PageProps<"/agents/[id]">)
         .filter((login) => login.agentId === id)
         .map((login) => ({ ...login, carrierName: carrierName(login.carrierId) }))
         .sort((a, b) => a.carrierName.localeCompare(b.carrierName))}
-      notes={notes.filter((note) => note.agentId === id)}
+      initialNotes={notes}
     />
   );
 }

@@ -8,6 +8,30 @@ import { StatusBadge } from "@/components/status-badge";
  * Server-safe; pass client pieces in as children.
  */
 
+/** The "‹ Agents" link at the top of a profile, back to the entity's list. */
+export function ProfileBackLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Link
+      href={href}
+      className="-ml-1 inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-sm font-medium text-fg-muted hover:bg-brand-soft hover:text-brand-ink"
+    >
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 20 20"
+        className="size-4 shrink-0"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M12 5l-5 5 5 5" />
+      </svg>
+      {label}
+    </Link>
+  );
+}
+
 type ProfileShellProps = {
   back: { href: string; label: string };
   title: string;
@@ -39,24 +63,7 @@ export function ProfileShell({
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link
-          href={back.href}
-          className="-ml-1 inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-sm font-medium text-fg-muted hover:bg-brand-soft hover:text-brand-ink"
-        >
-          <svg
-            aria-hidden="true"
-            viewBox="0 0 20 20"
-            className="size-4 shrink-0"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.5}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M12 5l-5 5 5 5" />
-          </svg>
-          {back.label}
-        </Link>
+        <ProfileBackLink href={back.href} label={back.label} />
         {actions}
       </div>
 
