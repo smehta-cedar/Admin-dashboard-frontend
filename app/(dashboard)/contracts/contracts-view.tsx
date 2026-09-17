@@ -21,7 +21,7 @@ import {
   type AppointmentEditor,
   type AppointmentError,
   type AppointmentValues,
-} from "../appointment-dialog";
+} from "./appointment-dialog";
 
 /*
  * Contracts by state: where agents can write, as a view over carrier
@@ -36,7 +36,7 @@ import {
  * carrier, state code or name), and expands to show its states and notes.
  *
  * Add contract, the table's Edit and a state panel line all open the shared
- * AppointmentDialog (../appointment-dialog.tsx), the same form Contracts by
+ * AppointmentDialog (./appointment-dialog.tsx), the same form Contracts by
  * carrier uses; Edit opens it filled in, and its state grid offers only the
  * carrier's availableStates. Since every appointment stays within that
  * ceiling, a state's By carrier list only holds carriers available there.
@@ -83,13 +83,13 @@ const COLUMNS: DataTableColumn<AppointmentRow>[] = [
         onClick={toggleExpanded}
         aria-expanded={expanded}
         aria-controls={expanded ? detailsId : undefined}
-        className="-ml-1 flex items-center gap-1 whitespace-nowrap rounded-md px-1 py-0.5 text-gray-900 hover:bg-gray-100"
+        className="-ml-1 flex items-center gap-1 whitespace-nowrap rounded-md px-1 py-0.5 text-fg hover:bg-surface-hover"
       >
         {agent.name}
         <svg
           aria-hidden="true"
           viewBox="0 0 20 20"
-          className={`size-4 shrink-0 text-gray-500 transition-transform ${expanded ? "rotate-90" : ""}`}
+          className={`size-4 shrink-0 text-fg-subtle transition-transform ${expanded ? "rotate-90" : ""}`}
           fill="none"
           stroke="currentColor"
           strokeWidth={1.5}
@@ -108,10 +108,10 @@ const COLUMNS: DataTableColumn<AppointmentRow>[] = [
     header: "Carrier",
     cell: ({ carrier }) => (
       <span className="whitespace-nowrap">
-        <Link href={`/carriers/${carrier.id}`} className="text-gray-900 hover:underline">
+        <Link href={`/carriers/${carrier.id}`} className="text-fg hover:underline">
           {carrier.name}
         </Link>
-        {carrier.status === "inactive" ? <span className="text-gray-400"> (inactive)</span> : null}
+        {carrier.status === "inactive" ? <span className="text-fg-faint"> (inactive)</span> : null}
       </span>
     ),
     sortValue: ({ carrier }) => carrier.name,
@@ -121,11 +121,11 @@ const COLUMNS: DataTableColumn<AppointmentRow>[] = [
     id: "states",
     header: "States",
     cell: ({ states }) => (
-      <span className={states.length === 0 ? "text-gray-400" : undefined}>
+      <span className={states.length === 0 ? "text-fg-faint" : undefined}>
         {stateSummary(states)}
       </span>
     ),
-    className: "tabular-nums text-gray-600",
+    className: "tabular-nums text-fg-muted",
     sortValue: ({ states }) => states.length,
     searchText: ({ states }) => states.flatMap((code) => [code, US_STATE_NAMES[code] ?? ""]),
   },
@@ -321,7 +321,7 @@ export function ContractsView({ initialContracts, initialNotes, agents, carriers
                 {item.name}
               </Link>
               {item.status === "inactive" ? (
-                <span className="font-normal text-gray-400"> (inactive)</span>
+                <span className="font-normal text-fg-faint"> (inactive)</span>
               ) : null}
             </>
           ),
@@ -343,11 +343,11 @@ export function ContractsView({ initialContracts, initialNotes, agents, carriers
         title="Contracts by state"
         inlineDescription
         description={
-          <dl className="flex flex-wrap items-center divide-x divide-gray-200">
+          <dl className="flex flex-wrap items-center divide-x divide-line">
             {stats.map((stat) => (
               <div key={stat.label} className="flex items-baseline gap-2 px-3 first:pl-0 last:pr-0">
                 <dt>{stat.label}</dt>
-                <dd className="font-semibold tabular-nums text-gray-900">{stat.value}</dd>
+                <dd className="font-semibold tabular-nums text-fg">{stat.value}</dd>
               </div>
             ))}
           </dl>
@@ -357,7 +357,7 @@ export function ContractsView({ initialContracts, initialNotes, agents, carriers
 
       <div role="status">
         {unsavedCount > 0 ? (
-          <p className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <p className="mb-4 rounded-md bg-warn-soft px-3 py-2 text-sm text-warn-ink">
             {unsavedCount === 1 ? "1 change" : `${unsavedCount} changes`} made on this page only.
             Nothing is saved yet, so refreshing (or leaving the page) undoes{" "}
             {unsavedCount === 1 ? "it" : "them"}.
@@ -377,7 +377,7 @@ export function ContractsView({ initialContracts, initialNotes, agents, carriers
            * The zoom buttons (top-right) and legend (bottom-left) sit outside the
            * scroller, so they stay pinned while the map pans under them.
            */}
-          <div className="relative rounded-lg border border-gray-200 p-4">
+          <div className="relative rounded-lg border border-line p-4">
             <div
               className="flex overflow-auto"
               style={{
@@ -394,13 +394,13 @@ export function ContractsView({ initialContracts, initialNotes, agents, carriers
               </div>
             </div>
 
-            <div className="absolute right-3 top-3 z-10 flex flex-col divide-y divide-gray-200 overflow-hidden rounded-md bg-white/90 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-gray-200/80">
+            <div className="absolute right-3 top-3 z-10 flex flex-col divide-y divide-line overflow-hidden rounded-md bg-surface/90 text-sm font-medium text-fg-muted shadow-sm ring-1 ring-line/80">
               <button
                 type="button"
                 onClick={() => changeZoom(MAP_ZOOM.buttonStep)}
                 disabled={mapZoom >= MAP_ZOOM.max}
                 aria-label="Zoom in"
-                className="flex size-7 items-center justify-center hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent"
+                className="flex size-7 items-center justify-center hover:bg-surface-hover disabled:opacity-40 disabled:hover:bg-transparent"
               >
                 +
               </button>
@@ -409,20 +409,20 @@ export function ContractsView({ initialContracts, initialNotes, agents, carriers
                 onClick={() => changeZoom(-MAP_ZOOM.buttonStep)}
                 disabled={mapZoom <= MAP_ZOOM.min}
                 aria-label="Zoom out"
-                className="flex size-7 items-center justify-center hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent"
+                className="flex size-7 items-center justify-center hover:bg-surface-hover disabled:opacity-40 disabled:hover:bg-transparent"
               >
                 −
               </button>
             </div>
 
-            <div className="absolute bottom-3 left-3 z-10 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md bg-white/90 px-2 py-1.5 text-xs text-gray-600 shadow-sm ring-1 ring-gray-200/80">
+            <div className="absolute bottom-3 left-3 z-10 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md bg-surface/90 px-2 py-1.5 text-xs text-fg-muted shadow-sm ring-1 ring-line/80">
               <span>Active agents appointed</span>
               <ul className="flex items-center gap-2">
                 {MAP_BUCKETS.map((bucket) => (
                   <li key={bucket.label} className="flex items-center gap-1">
                     <span
                       aria-hidden="true"
-                      className={`size-3 rounded-sm ring-1 ring-inset ring-gray-900/10 ${bucket.swatch}`}
+                      className={`size-3 rounded-sm ring-1 ring-inset ring-line ${bucket.swatch}`}
                     />
                     <span className="tabular-nums">{bucket.label}</span>
                   </li>
@@ -433,7 +433,7 @@ export function ContractsView({ initialContracts, initialNotes, agents, carriers
         </section>
 
         <section aria-labelledby={`${id}-detail-title`} className="min-w-0">
-          <label htmlFor={`${id}-state`} className="block text-sm font-medium text-gray-900">
+          <label htmlFor={`${id}-state`} className="block text-sm font-medium text-fg">
             State
           </label>
           <select
@@ -450,7 +450,7 @@ export function ContractsView({ initialContracts, initialNotes, agents, carriers
             ))}
           </select>
 
-          <div className="mt-4 rounded-lg border border-gray-200 p-4">
+          <div className="mt-4 rounded-lg border border-line p-4">
             {selectedName ? (
               <>
                 {/*
@@ -461,11 +461,11 @@ export function ContractsView({ initialContracts, initialNotes, agents, carriers
                   <div className="flex min-w-0 items-baseline gap-x-2">
                     <h2
                       id={`${id}-detail-title`}
-                      className="min-w-0 truncate text-base font-semibold text-gray-900"
+                      className="min-w-0 truncate text-base font-semibold text-fg"
                     >
                       {selectedName}
                     </h2>
-                    <p role="status" className="shrink-0 whitespace-nowrap text-xs text-gray-600">
+                    <p role="status" className="shrink-0 whitespace-nowrap text-xs text-fg-muted">
                       {selectedAgentCount === 1 ? "Agent" : "Agents"}: {selectedAgentCount} |{" "}
                       {byCarrier.length === 1 ? "Carrier" : "Carriers"}: {byCarrier.length}
                     </p>
@@ -473,7 +473,7 @@ export function ContractsView({ initialContracts, initialNotes, agents, carriers
                   <div
                     role="group"
                     aria-label="Group by"
-                    className="inline-flex shrink-0 rounded-md bg-gray-100 p-0.5 text-xs"
+                    className="inline-flex shrink-0 rounded-md bg-surface-muted p-0.5 text-xs"
                   >
                     {viewOptions.map((option) => (
                       <button
@@ -483,8 +483,8 @@ export function ContractsView({ initialContracts, initialNotes, agents, carriers
                         onClick={() => setStateView(option.value)}
                         className={`whitespace-nowrap rounded px-2 py-1 font-medium ${
                           stateView === option.value
-                            ? "bg-white text-gray-900 shadow-xs ring-1 ring-gray-200"
-                            : "text-gray-600 hover:text-gray-900"
+                            ? "bg-surface text-fg shadow-xs ring-1 ring-line"
+                            : "text-fg-muted hover:text-fg"
                         }`}
                       >
                         {option.label}
@@ -499,8 +499,8 @@ export function ContractsView({ initialContracts, initialNotes, agents, carriers
                     
                     <ul className="mt-6 space-y-4 text-sm p-2  ">
                       {selectedGroups.map((group) => (
-                        <li key={group.key} className="border-b border-gray-200 pb-4 ">
-                          <p className="font-semibold text-gray-900">{group.title}</p>
+                        <li key={group.key} className="border-b border-line pb-4 ">
+                          <p className="font-semibold text-fg">{group.title}</p>
                           <ul aria-label={group.label} className=" pl-4 list-disc" >
                             {group.chips.map((chip) => (
                               // Clicking the line opens Edit; the name link goes to the
@@ -508,7 +508,7 @@ export function ContractsView({ initialContracts, initialNotes, agents, carriers
                               <li
                                 key={chip.id}
                                 onClick={() => setEditor({ mode: "edit", contract: chip.contract })}
-                                className="cursor-pointer rounded hover:bg-gray-50"
+                                className="cursor-pointer rounded hover:bg-surface-hover"
                               >
                                 {/* Name stays whole; a long code list wraps on the right. */}
                                 <div className="flex items-baseline justify-between gap-2">
@@ -516,12 +516,12 @@ export function ContractsView({ initialContracts, initialNotes, agents, carriers
                                     <Link
                                       href={chip.href}
                                       onClick={(event) => event.stopPropagation()}
-                                      className="text-xs text-gray-500 hover:text-gray-800 hover:underline"
+                                      className="text-xs text-fg-subtle hover:text-fg hover:underline"
                                     >
                                       {chip.name}
                                     </Link>
                                     {chip.inactive ? (
-                                      <span className="text-xs text-gray-400"> (inactive)</span>
+                                      <span className="text-xs text-fg-faint"> (inactive)</span>
                                     ) : null}
                                   </span>
                                   <button
@@ -531,7 +531,7 @@ export function ContractsView({ initialContracts, initialNotes, agents, carriers
                                       setEditor({ mode: "edit", contract: chip.contract });
                                     }}
                                     title={chip.editLabel}
-                                    className="min-w-0 rounded px-1 text-right text-xs tabular-nums text-gray-400 hover:text-gray-800"
+                                    className="min-w-0 rounded px-1 text-right text-xs tabular-nums text-fg-faint hover:text-fg"
                                   >
                                     {stateSummary(chip.states)}
                                     <span className="sr-only">. {chip.editLabel}</span>
@@ -545,17 +545,17 @@ export function ContractsView({ initialContracts, initialNotes, agents, carriers
                     </ul>
                   </>
                 ) : (
-                  <p className="mt-3 text-sm text-gray-500">
+                  <p className="mt-3 text-sm text-fg-subtle">
                     No agents can operate in {selectedName} via any carrier yet.
                   </p>
                 )}
               </>
             ) : (
               <>
-                <h2 id={`${id}-detail-title`} className="text-base font-semibold text-gray-900">
+                <h2 id={`${id}-detail-title`} className="text-base font-semibold text-fg">
                   No state selected
                 </h2>
-                <p className="mt-1 text-sm text-gray-600">
+                <p className="mt-1 text-sm text-fg-muted">
                   Click a state on the map to view the agents and carriers that can operate in that state.
                 </p>
               </>
@@ -565,7 +565,7 @@ export function ContractsView({ initialContracts, initialNotes, agents, carriers
       </div>
 
       <section aria-labelledby={`${id}-table-title`} className="mt-8">
-        <h2 id={`${id}-table-title`} className="mb-3 text-base font-semibold text-gray-900">
+        <h2 id={`${id}-table-title`} className="mb-3 text-base font-semibold text-fg">
           Appointments
         </h2>
         {rows.length === 0 ? (
@@ -584,21 +584,21 @@ export function ContractsView({ initialContracts, initialNotes, agents, carriers
             renderDetails={({ contract, states }) => (
               <div className="grid gap-4 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
                 <section>
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
                     States
                   </h3>
                   {states.length > 0 ? (
-                    <ul className="mt-2 space-y-0.5 text-sm text-gray-700">
+                    <ul className="mt-2 space-y-0.5 text-sm text-fg-muted">
                       {states.map((code) => (
                         <li key={code}>{US_STATE_NAMES[code] ?? code}</li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="mt-2 text-sm text-gray-500">None yet</p>
+                    <p className="mt-2 text-sm text-fg-subtle">None yet</p>
                   )}
                 </section>
                 <section>
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
                     Notes
                   </h3>
                   <NoteList

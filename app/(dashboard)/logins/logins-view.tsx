@@ -77,14 +77,14 @@ const COLUMNS: DataTableColumn<LoginRow>[] = [
         onClick={toggleExpanded}
         aria-expanded={expanded}
         aria-controls={expanded ? detailsId : undefined}
-        className="-ml-1 flex items-center gap-1 whitespace-nowrap rounded-md px-1 py-0.5 text-gray-900 hover:bg-gray-100"
+        className="-ml-1 flex items-center gap-1 whitespace-nowrap rounded-md px-1 py-0.5 text-fg hover:bg-surface-hover"
       >
         {agent}
         <span className="sr-only"> at {carrier}</span>
         <svg
           aria-hidden="true"
           viewBox="0 0 20 20"
-          className={`size-4 shrink-0 text-gray-500 transition-transform ${expanded ? "rotate-90" : ""}`}
+          className={`size-4 shrink-0 text-fg-subtle transition-transform ${expanded ? "rotate-90" : ""}`}
           fill="none"
           stroke="currentColor"
           strokeWidth={1.5}
@@ -102,7 +102,7 @@ const COLUMNS: DataTableColumn<LoginRow>[] = [
     id: "carrier",
     header: "Carrier",
     cell: ({ carrier }) => carrier,
-    className: "whitespace-nowrap text-gray-900",
+    className: "whitespace-nowrap text-fg",
     sortValue: ({ carrier }) => carrier,
     searchText: ({ carrier }) => carrier,
   },
@@ -110,7 +110,7 @@ const COLUMNS: DataTableColumn<LoginRow>[] = [
     id: "writingNumber",
     header: "Writing number",
     cell: ({ login }) => login.writingNumber,
-    className: "font-mono text-gray-600",
+    className: "font-mono text-fg-muted",
     sortValue: ({ login }) => login.writingNumber,
     searchText: ({ login }) => login.writingNumber,
   },
@@ -118,7 +118,7 @@ const COLUMNS: DataTableColumn<LoginRow>[] = [
     id: "username",
     header: "Portal username",
     cell: ({ login }) => <CredentialValue value={login.username} label="username" />,
-    className: "text-gray-600",
+    className: "text-fg-muted",
     sortValue: ({ login }) => login.username,
     searchText: ({ login }) => login.username,
   },
@@ -126,7 +126,7 @@ const COLUMNS: DataTableColumn<LoginRow>[] = [
     id: "password",
     header: "Password",
     cell: ({ login }) => <CredentialValue value={login.portalPassword} label="password" secret />,
-    className: "text-gray-600",
+    className: "text-fg-muted",
   },
   {
     id: "status",
@@ -371,13 +371,13 @@ export function LoginsView({ initialLogins, initialNotes, agents, carriers }: Lo
 
       <div role="status">
         {unsavedCount > 0 ? (
-          <p className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <p className="mb-4 rounded-md bg-warn-soft px-3 py-2 text-sm text-warn-ink">
             {unsavedCount === 1 ? "1 change" : `${unsavedCount} changes`} made on this page only.
             Nothing is saved yet, so refreshing undoes {unsavedCount === 1 ? "it" : "them"}.
           </p>
         ) : null}
         {hiddenNotice ? (
-          <p className="mb-4 rounded-md bg-gray-100 px-3 py-2 text-sm text-gray-700">
+          <p className="mb-4 rounded-md bg-surface-muted px-3 py-2 text-sm text-fg-muted">
             {hiddenNotice.message}
           </p>
         ) : null}
@@ -399,7 +399,7 @@ export function LoginsView({ initialLogins, initialNotes, agents, carriers }: Lo
           emptyMessage={`No logins for ${carrierName(carrierFilter)}.`}
           renderDetails={({ login }) => (
             <section className="max-w-2xl">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
                 Notes
               </h3>
               <NoteList
@@ -414,12 +414,12 @@ export function LoginsView({ initialLogins, initialNotes, agents, carriers }: Lo
       <ModalDialog dialogRef={dialogRef} labelledBy={`${id}-title`} onClose={handleClose}>
         {editor ? (
           <form onSubmit={handleSubmit} className="p-6">
-            <h2 id={`${id}-title`} className="text-base font-semibold text-gray-900">
+            <h2 id={`${id}-title`} className="text-base font-semibold text-fg">
               {editing
                 ? `Edit ${agentName(editing.agentId)} at ${carrierName(editing.carrierId)}`
                 : "Add login"}
             </h2>
-            <p className="mt-1 text-sm text-gray-600">
+            <p className="mt-1 text-sm text-fg-muted">
               {editing
                 ? "Saving records a note of what changed. Nothing is saved anywhere yet; refreshing undoes it."
                 : "Not saved anywhere yet. The login stays in the list until you refresh."}

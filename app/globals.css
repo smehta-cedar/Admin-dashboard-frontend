@@ -1,29 +1,183 @@
 @import "tailwindcss";
 
 /*
- * Cedar Grove brand tokens, sampled from assests/ (logo-fullcolor.jpg,
- * Gradient.jpg). The logo teal is too light for text or white-on-teal
- * (2.6:1), so `brand-strong` / `brand-ink` carry anything that must be read.
+ * Light and dark are one definition site: every app color is a semantic token
+ * below, and `html.dark` reassigns the same names. Components say what a color
+ * *means* (bg-surface, text-fg-muted, border-line), never which shade it is, so
+ * a theme change is a change here and nowhere else.
+ *
+ * Brand values are sampled from assests/ (logo-fullcolor.jpg, Gradient.jpg).
+ * The logo teal is too light for text or white-on-teal (2.6:1), so
+ * `brand-strong` / `brand-ink` carry anything that must be read.
  */
+
+/* Dark is driven by a class we control, not the OS query, so the toggle can
+   override the system preference. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
+  /* ---- Brand ---------------------------------------------------------- */
   /* Logo teal: decorative only (strips, indicators, focus rings). */
   --color-brand: #37b38f;
   /* Fills behind white text; 5.2:1 on white. */
   --color-brand-strong: #1d7a61;
-  /* Hover for brand-strong, and brand text on brand-soft; 6.2:1. */
+  /* Hover fill for brand-strong. Separate from brand-ink because in dark the
+     text token lightens while a button fill must stay dark under white text. */
+  --color-brand-hover: #17664f;
+  /* Brand text: on canvas, or on brand-soft; 6.2:1. */
   --color-brand-ink: #17664f;
   /* Tinted surface for active / selected states. */
   --color-brand-soft: #e9f6f1;
   /* Gradient end lime. */
   --color-accent: #73bd66;
-
   /* Logo tagline grey, for secondary text in brand chrome. */
   --color-charcoal: #5f5f5f;
-  /* Shell chrome: tinted rail surface and hairlines. */
+
+  /* ---- Surfaces ------------------------------------------------------- */
+  /* The page behind everything. */
+  --color-canvas: #ffffff;
+  /* Cards, tables, dialogs, popovers — anything raised off the canvas. */
+  --color-surface: #ffffff;
+  /* Tinted recessed surface: nav rail, table headers, expanded rows. */
   --color-surface-muted: #f7faf9;
+  /* Hover wash for ghost buttons and rows. */
+  --color-surface-hover: #eef2f1;
+
+  /* ---- Text ----------------------------------------------------------- */
+  /* Headings and body copy. */
+  --color-fg: #111827;
+  /* Secondary copy: descriptions, table headers, idle nav links. */
+  --color-fg-muted: #4b5563;
+  /* Labels, em-dashes, hints. */
+  --color-fg-subtle: #6b7280;
+  /* Decorative glyphs only (search icon, unsorted arrows). */
+  --color-fg-faint: #9ca3af;
+
+  /* ---- Lines ---------------------------------------------------------- */
+  /* Hairlines: card edges, table rules, dividers. */
   --color-line: #e3e9e7;
+  /* Borders that must be seen as an affordance: inputs, dashed empties. */
+  --color-line-strong: #d1d5db;
+
+  /* ---- Overlays ------------------------------------------------------- */
+  /* Tooltips and transient chips: a contrasting slab over the UI. */
+  --color-tooltip: #111827;
+  --color-tooltip-fg: #ffffff;
+  /* Dialog backdrops. Carries its own alpha, since dark needs a heavier wash
+     to separate a dark panel from the dark page behind it. */
+  --color-scrim: rgb(17 24 39 / 0.4);
+
+  /* ---- Status --------------------------------------------------------- */
+  /* Errors: text on canvas, and input borders. */
+  --color-danger: #b91c1c;
+  --color-danger-strong: #b91c1c;
+  /* Unsaved / pending notices. */
+  --color-warn-ink: #92400e;
+  --color-warn-soft: #fffbeb;
+
+  /* ---- Chips ---------------------------------------------------------- */
+  /* Carrier chips in the by-agent list: a warm neutral, deliberately unlike
+     the sage used for agents so the two lists never read as the same thing. */
+  --color-carrier-chip: #f5ebe0;
+  --color-carrier-chip-ink: #44403c;
+  --color-carrier-chip-muted: #57534e;
+  --color-carrier-chip-faint: #a8a29e;
+  --color-carrier-chip-line: #e7e5e4;
+  /* Warm tint surface in the same family: row hovers, count tiles, bar tracks. */
+  --color-carrier-soft: #f5f5f4;
+
+  /* Agent tiles on a carrier card: a soft sage echoing the coverage bar. */
+  --color-agent-chip: #ebfcf2;
+  --color-agent-chip-ink: #1f3a2d;
+  --color-agent-chip-line: #cfdfd6;
+
+  /* ---- Map choropleth ------------------------------------------------- */
+  /* Five buckets, fewest to most, each paired with a label color that has
+     contrast on it. Light runs pale → deep, so the ink flips at bucket 3. */
+  --color-map-0: #f3f4f6;
+  --color-map-1: #dcfce7;
+  --color-map-2: #86efac;
+  --color-map-3: #22c55e;
+  --color-map-4: #15803d;
+  --color-map-0-ink: #111827;
+  --color-map-1-ink: #111827;
+  --color-map-2-ink: #111827;
+  --color-map-3-ink: #ffffff;
+  --color-map-4-ink: #ffffff;
 
   --gradient-brand: linear-gradient(135deg, #30b48f, #73bd66);
+  /* Filled part of a card's coverage bar; the unfilled remainder is the
+     `surface-muted` track showing through. Dark runs the other way so the bar
+     stays the bright element against the track in both themes. */
+  --gradient-coverage: linear-gradient(rgb(68, 82, 77), rgb(19, 34, 27));
+}
+
+/*
+ * Dark mode, in full. Nothing else in the app needs a `dark:` utility for
+ * anything built on the tokens above.
+ */
+html.dark {
+  --color-brand: #3fc79e;
+  /* Held at the light value: white text on it stays 5.2:1, and it still reads
+     as a raised fill against the dark canvas. */
+  --color-brand-strong: #1d7a61;
+  /* Hover brightens, as it should on a dark UI, but only as far as white text
+     allows: any lighter and the button label drops under 4.5:1. */
+  --color-brand-hover: #1f8469;
+  /* Now a *light* teal, because it is read against brand-soft and the canvas. */
+  --color-brand-ink: #6fd6b2;
+  --color-brand-soft: #14332a;
+  --color-accent: #8ccd80;
+  --color-charcoal: #a9b7b1;
+
+  --color-canvas: #0e1312;
+  --color-surface: #171d1b;
+  --color-surface-muted: #131917;
+  --color-surface-hover: #232b29;
+
+  --color-fg: #e8eeeb;
+  --color-fg-muted: #a9b7b1;
+  --color-fg-subtle: #8c9a94;
+  --color-fg-faint: #6b7873;
+
+  --color-line: #2a3330;
+  --color-line-strong: #3b4643;
+
+  /* Raised rather than inverted: an almost-white chip on a dark app glares. */
+  --color-tooltip: #2d3936;
+  --color-tooltip-fg: #f2f6f4;
+  --color-scrim: rgb(0 0 0 / 0.65);
+
+  --color-danger: #fca5a5;
+  --color-danger-strong: #dc2626;
+  --color-warn-ink: #fcd34d;
+  --color-warn-soft: #2a2312;
+
+  --color-carrier-chip: #2b2522;
+  --color-carrier-chip-ink: #e3dbd4;
+  --color-carrier-chip-muted: #c2b6ad;
+  --color-carrier-chip-faint: #8d827a;
+  --color-carrier-chip-line: #3e3733;
+  --color-carrier-soft: #242020;
+
+  --color-agent-chip: #17352a;
+  --color-agent-chip-ink: #b6e8cf;
+  --color-agent-chip-line: #2c5041;
+
+  --gradient-coverage: linear-gradient(rgb(126, 224, 184), rgb(69, 183, 141));
+
+  /* The ramp runs the other way here — deep → pale — so that "more" still
+     means "stands out" against a dark page. The ink flips at bucket 3 again. */
+  --color-map-0: #1c2421;
+  --color-map-1: #1e4a3b;
+  --color-map-2: #276f57;
+  --color-map-3: #45b78d;
+  --color-map-4: #82e3bb;
+  --color-map-0-ink: #e8eeeb;
+  --color-map-1-ink: #e8eeeb;
+  --color-map-2-ink: #e8eeeb;
+  --color-map-3-ink: #0e1312;
+  --color-map-4-ink: #0e1312;
 }
 
 @theme inline {
@@ -34,10 +188,24 @@
   background-image: var(--gradient-brand);
 }
 
+@utility bg-coverage-gradient {
+  background-image: var(--gradient-coverage);
+}
+
 @layer base {
   html {
     /* Keep #hash targets clear of the sticky navbar (h-14). */
     scroll-padding-top: 3.5rem;
+    /* Native form controls and scrollbars follow the token theme. */
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-canvas text-fg antialiased;
   }
 
   /* Stop the page scrolling behind the open mobile drawer. */

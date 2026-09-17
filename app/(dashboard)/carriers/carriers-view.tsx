@@ -72,7 +72,7 @@ export function CarriersView({ initialCarriers, initialNotes }: CarriersViewProp
         id: "id",
         header: "ID",
         cell: (carrier) => carrier.id,
-        className: "font-mono text-gray-600",
+        className: "font-mono text-fg-muted",
         sortValue: (carrier) => Number(carrier.id),
         searchText: (carrier) => carrier.id,
       },
@@ -83,7 +83,7 @@ export function CarriersView({ initialCarriers, initialNotes }: CarriersViewProp
           <div className="-ml-1 flex items-center gap-0.5 whitespace-nowrap">
             <Link
               href={`/carriers/${carrier.id}`}
-              className="rounded-md px-1 py-0.5 text-gray-900 hover:bg-gray-100 hover:underline"
+              className="rounded-md px-1 py-0.5 text-fg hover:bg-surface-hover hover:underline"
             >
               {carrier.name}
             </Link>
@@ -93,12 +93,12 @@ export function CarriersView({ initialCarriers, initialNotes }: CarriersViewProp
               aria-expanded={expanded}
               aria-controls={expanded ? detailsId : undefined}
               aria-label={`Details for ${carrier.name}`}
-              className="rounded-md p-0.5 hover:bg-gray-100"
+              className="rounded-md p-0.5 hover:bg-surface-hover"
             >
               <svg
                 aria-hidden="true"
                 viewBox="0 0 20 20"
-                className={`size-4 shrink-0 text-gray-500 transition-transform ${expanded ? "rotate-90" : ""}`}
+                className={`size-4 shrink-0 text-fg-subtle transition-transform ${expanded ? "rotate-90" : ""}`}
                 fill="none"
                 stroke="currentColor"
                 strokeWidth={1.5}
@@ -117,7 +117,7 @@ export function CarriersView({ initialCarriers, initialNotes }: CarriersViewProp
         id: "linesOfBusiness",
         header: "Lines of business",
         cell: (carrier) => carrier.linesOfBusiness.join(", "),
-        className: "whitespace-nowrap text-gray-600",
+        className: "whitespace-nowrap text-fg-muted",
         sortValue: (carrier) => carrier.linesOfBusiness.join(", "),
         searchText: (carrier) => carrier.linesOfBusiness,
       },
@@ -125,11 +125,11 @@ export function CarriersView({ initialCarriers, initialNotes }: CarriersViewProp
         id: "availableStates",
         header: "States",
         cell: (carrier) => (
-          <span className={carrier.availableStates.length === 0 ? "text-gray-400" : undefined}>
+          <span className={carrier.availableStates.length === 0 ? "text-fg-faint" : undefined}>
             {stateSummary(carrier.availableStates)}
           </span>
         ),
-        className: "min-w-40 tabular-nums text-gray-600",
+        className: "min-w-40 tabular-nums text-fg-muted",
         sortValue: (carrier) => carrier.availableStates.length,
         searchText: (carrier) =>
           carrier.availableStates.flatMap((code) => [code, US_STATE_NAMES[code] ?? ""]),
@@ -252,7 +252,7 @@ export function CarriersView({ initialCarriers, initialNotes }: CarriersViewProp
 
       <div role="status">
         {unsavedCount > 0 ? (
-          <p className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <p className="mb-4 rounded-md bg-warn-soft px-3 py-2 text-sm text-warn-ink">
             {unsavedCount === 1 ? "1 change" : `${unsavedCount} changes`} made on this page only.
             Nothing is saved yet, so refreshing undoes {unsavedCount === 1 ? "it" : "them"}.
           </p>
@@ -275,21 +275,21 @@ export function CarriersView({ initialCarriers, initialNotes }: CarriersViewProp
           renderDetails={(carrier) => (
             <div className="grid gap-6 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
               <section>
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
                   Aliases
                 </h3>
                 {carrier.aliases.length > 0 ? (
-                  <ul className="mt-2 space-y-1 text-sm text-gray-900">
+                  <ul className="mt-2 space-y-1 text-sm text-fg">
                     {carrier.aliases.map((alias, index) => (
                       <li key={`${index}-${alias}`}>{alias}</li>
                     ))}
                   </ul>
                 ) : (
-                  <p className="mt-2 text-sm text-gray-500">None</p>
+                  <p className="mt-2 text-sm text-fg-subtle">None</p>
                 )}
               </section>
               <section>
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
                   Notes
                 </h3>
                 <NoteList
@@ -305,7 +305,7 @@ export function CarriersView({ initialCarriers, initialNotes }: CarriersViewProp
       <ModalDialog dialogRef={dialogRef} labelledBy={`${id}-title`} onClose={handleClose}>
         {editor ? (
           <form onSubmit={handleSubmit} className="px-6 py-4">
-            <h2 id={`${id}-title`} className="text-base font-semibold text-gray-900">
+            <h2 id={`${id}-title`} className="text-base font-semibold text-fg">
               {editing ? `Edit ${editing.name}` : "Add carrier"}
             </h2>
 
@@ -363,10 +363,10 @@ export function CarriersView({ initialCarriers, initialNotes }: CarriersViewProp
                 </select>
               </Field>
               <fieldset className="mt-4 min-w-0">
-                <legend className="block text-sm font-semibold text-gray-900">Lines of business</legend>
+                <legend className="block text-sm font-semibold text-fg">Lines of business</legend>
                 <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2">
                   {LINES_OF_BUSINESS.map((line) => (
-                    <label key={line} className="flex items-center gap-2 text-sm text-gray-900">
+                    <label key={line} className="flex items-center gap-2 text-sm text-fg">
                       <input
                         type="checkbox"
                         name="linesOfBusiness"
@@ -382,7 +382,7 @@ export function CarriersView({ initialCarriers, initialNotes }: CarriersViewProp
                   ))}
                 </div>
                 {linesError ? (
-                  <p id={`${id}-lines-error`} className="mt-1 text-xs text-red-700">
+                  <p id={`${id}-lines-error`} className="mt-1 text-xs text-danger">
                     {linesError}
                   </p>
                 ) : null}

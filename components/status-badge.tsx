@@ -4,8 +4,8 @@ type Status = "active" | "pending" | "inactive";
 const STATUS_STYLES: Record<Status, string> = {
   /* Brand-adjacent green; still reads as "good". */
   active: "bg-brand-soft text-brand-ink",
-  pending: "bg-amber-50 text-amber-700",
-  inactive: "bg-gray-100 text-gray-600",
+  pending: "bg-warn-soft text-warn-ink",
+  inactive: "bg-surface-hover text-fg-muted",
 };
 
 /** Sort order for status columns: active, then pending, then inactive. */

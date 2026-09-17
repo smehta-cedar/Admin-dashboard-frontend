@@ -65,24 +65,24 @@ export default async function OverviewPage() {
 
       <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => (
-          <div key={stat.label} className="rounded-lg border border-gray-200 p-4">
-            <dt className="text-sm text-gray-600">{stat.label}</dt>
-            <dd className="mt-1 text-2xl font-semibold tabular-nums text-gray-900">{stat.value}</dd>
+          <div key={stat.label} className="rounded-lg border border-line p-4">
+            <dt className="text-sm text-fg-muted">{stat.label}</dt>
+            <dd className="mt-1 text-2xl font-semibold tabular-nums text-fg">{stat.value}</dd>
           </div>
         ))}
       </dl>
 
       {missingCarriers.length > 0 ? (
         <section className="mt-8">
-          <h2 className="text-base font-semibold text-gray-900">Missing statements</h2>
-          <p className="mt-1 text-sm text-gray-600">
+          <h2 className="text-base font-semibold text-fg">Missing statements</h2>
+          <p className="mt-1 text-sm text-fg-muted">
             No data yet for {monthLabel} from these carriers.
           </p>
           <ul className="mt-3 flex flex-wrap gap-2">
             {missingCarriers.map((carrier) => (
               <li
                 key={carrier.code}
-                className="rounded-md bg-amber-50 px-2.5 py-1 text-sm font-medium text-amber-800"
+                className="rounded-md bg-warn-soft px-2.5 py-1 text-sm font-medium text-warn-ink"
               >
                 {carrier.name}
               </li>

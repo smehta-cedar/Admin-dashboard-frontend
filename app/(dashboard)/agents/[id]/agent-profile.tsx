@@ -39,7 +39,7 @@ function StateChip({ code }: { code: string }) {
   return (
     <li
       title={US_STATE_NAMES[code]}
-      className="rounded-md bg-gray-100 px-2 py-1 font-mono text-xs font-medium text-gray-700"
+      className="rounded-md bg-surface-muted px-2 py-1 font-mono text-xs font-medium text-fg-muted"
     >
       {code}
       {US_STATE_NAMES[code] ? <span className="sr-only"> ({US_STATE_NAMES[code]})</span> : null}
@@ -69,7 +69,7 @@ export function AgentProfile({ agent, allAgents, carriers, logins, notes }: Agen
         count={states.length}
         emptyMessage="Not appointed in any states through a carrier yet."
       >
-        <p className="mb-2 text-xs text-gray-500">Via carrier appointments</p>
+        <p className="mb-2 text-xs text-fg-subtle">Via carrier appointments</p>
         <ul className="flex flex-wrap gap-1.5">
           {states.map((code) => (
             <StateChip key={code} code={code} />
@@ -78,11 +78,11 @@ export function AgentProfile({ agent, allAgents, carriers, logins, notes }: Agen
       </ProfileSection>
 
       <ProfileSection title="Carriers" count={carriers.length} emptyMessage="Not contracted with any carriers.">
-        <ul className="divide-y divide-gray-200 rounded-lg border border-gray-200 text-sm">
+        <ul className="divide-y divide-line rounded-lg border border-line text-sm">
           {carriers.map((carrier) => (
             <li key={carrier.id} className="flex flex-col gap-2 px-4 py-2.5">
               <div className="flex items-center justify-between gap-4">
-                <Link href={`/carriers/${carrier.id}`} className="text-gray-900 hover:underline">
+                <Link href={`/carriers/${carrier.id}`} className="text-fg hover:underline">
                   {carrier.name}
                 </Link>
                 <StatusBadge status={carrier.status} />
@@ -94,7 +94,7 @@ export function AgentProfile({ agent, allAgents, carriers, logins, notes }: Agen
                   ))}
                 </ul>
               ) : (
-                <p className="text-xs text-gray-400">No states yet</p>
+                <p className="text-xs text-fg-faint">No states yet</p>
               )}
             </li>
           ))}
@@ -102,34 +102,34 @@ export function AgentProfile({ agent, allAgents, carriers, logins, notes }: Agen
       </ProfileSection>
 
       <ProfileSection title="Logins" count={logins.length} emptyMessage="No logins recorded.">
-        <div className="overflow-x-auto rounded-lg border border-gray-200">
+        <div className="overflow-x-auto rounded-lg border border-line">
           <table className="min-w-full text-left text-sm">
-            <thead className="bg-gray-50">
+            <thead className="bg-surface-muted">
               <tr>
                 {LOGIN_COLUMNS.map((heading) => (
                   <th
                     key={heading}
                     scope="col"
-                    className="whitespace-nowrap px-4 py-2.5 font-medium text-gray-600"
+                    className="whitespace-nowrap px-4 py-2.5 font-medium text-fg-muted"
                   >
                     {heading}
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200 border-t border-gray-200">
+            <tbody className="divide-y divide-line border-t border-line">
               {logins.map((login) => (
                 <tr key={login.id}>
                   <td className="whitespace-nowrap px-4 py-2.5">
-                    <Link href={`/carriers/${login.carrierId}`} className="text-gray-900 hover:underline">
+                    <Link href={`/carriers/${login.carrierId}`} className="text-fg hover:underline">
                       {login.carrierName}
                     </Link>
                   </td>
-                  <td className="px-4 py-2.5 font-mono text-gray-600">{login.writingNumber}</td>
-                  <td className="px-4 py-2.5 text-gray-600">
+                  <td className="px-4 py-2.5 font-mono text-fg-muted">{login.writingNumber}</td>
+                  <td className="px-4 py-2.5 text-fg-muted">
                     <CredentialValue value={login.username} label="username" />
                   </td>
-                  <td className="px-4 py-2.5 text-gray-600">
+                  <td className="px-4 py-2.5 text-fg-muted">
                     <CredentialValue value={login.portalPassword} label="password" secret />
                   </td>
                   <td className="px-4 py-2.5">

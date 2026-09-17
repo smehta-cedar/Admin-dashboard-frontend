@@ -159,7 +159,7 @@ export function DataTable<T extends RowData>({
           <svg
             aria-hidden="true"
             viewBox="0 0 20 20"
-            className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-gray-400"
+            className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-fg-faint"
             fill="none"
             stroke="currentColor"
             strokeWidth={1.5}
@@ -184,16 +184,16 @@ export function DataTable<T extends RowData>({
             className={`${TOOLBAR_INPUT_CLASS} w-full pl-8`}
           />
         </div>
-        <p aria-live="polite" className="text-sm tabular-nums text-gray-600">
+        <p aria-live="polite" className="text-sm tabular-nums text-fg-muted">
           {searching
             ? `${visibleRows.length} of ${rows.length} ${rows.length === 1 ? singular : plural}`
             : `${rows.length} ${rows.length === 1 ? singular : plural}`}
         </p>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-gray-200">
+      <div className="overflow-x-auto rounded-lg border border-line">
         <table className="min-w-full text-left text-sm">
-          <thead className="bg-gray-50">
+          <thead className="bg-surface-muted">
             <tr>
               {columns.map((column) => {
                 if (column.srOnlyHeader) {
@@ -210,13 +210,13 @@ export function DataTable<T extends RowData>({
                     key={column.id}
                     scope="col"
                     aria-sort={sorted === "asc" ? "ascending" : sorted === "desc" ? "descending" : undefined}
-                    className="whitespace-nowrap px-4 py-2.5 font-medium text-gray-600"
+                    className="whitespace-nowrap px-4 py-2.5 font-medium text-fg-muted"
                   >
                     {sortColumn ? (
                       <button
                         type="button"
                         onClick={() => sortColumn.toggleSorting()}
-                        className="-mx-1.5 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-2 focus-visible:outline-brand"
+                        className="-mx-1.5 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 hover:bg-surface-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-brand"
                       >
                         {column.header}
                         <SortIcon direction={sorted} />
@@ -229,10 +229,10 @@ export function DataTable<T extends RowData>({
               })}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200 border-t border-gray-200">
+          <tbody className="divide-y divide-line border-t border-line">
             {visibleRows.length === 0 ? (
               <tr>
-                <td colSpan={colSpan} className="px-4 py-6 text-center text-gray-600">
+                <td colSpan={colSpan} className="px-4 py-6 text-center text-fg-muted">
                   {searching ? (
                     <>
                       No {plural} match “{query.trim()}”.{" "}
@@ -260,7 +260,7 @@ export function DataTable<T extends RowData>({
 
               return (
                 <Fragment key={row.id}>
-                  <tr className={expanded ? "bg-gray-50" : undefined}>
+                  <tr className={expanded ? "bg-surface-muted" : undefined}>
                     {columns.map((column) => (
                       <td key={column.id} className={`px-4 py-2.5 ${column.className ?? ""}`}>
                         {column.cell(row.original, context)}
@@ -268,7 +268,7 @@ export function DataTable<T extends RowData>({
                     ))}
                   </tr>
                   {expanded && renderDetails ? (
-                    <tr id={context.detailsId} className="bg-gray-50">
+                    <tr id={context.detailsId} className="bg-surface-muted">
                       <td colSpan={colSpan} className="px-4 pb-4 pt-1">
                         {renderDetails(row.original)}
                       </td>
@@ -287,7 +287,7 @@ export function DataTable<T extends RowData>({
 /** Up/down arrows: both faint when unsorted; the active one in brand ink when sorted. */
 function SortIcon({ direction }: { direction: false | "asc" | "desc" }) {
   const arrowClass = (arrow: "asc" | "desc") =>
-    direction === arrow ? "text-brand-ink" : direction ? "text-gray-300" : "text-gray-400";
+    direction === arrow ? "text-brand-ink" : direction ? "text-fg-faint/50" : "text-fg-faint";
   return (
     <svg
       aria-hidden="true"

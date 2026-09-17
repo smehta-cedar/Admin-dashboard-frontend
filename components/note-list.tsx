@@ -19,29 +19,29 @@ type NoteListProps<F extends string> = {
  */
 export function NoteList<F extends string>({ notes, labels }: NoteListProps<F>) {
   if (notes.length === 0) {
-    return <p className="mt-2 text-sm text-gray-500">No changes recorded yet.</p>;
+    return <p className="mt-2 text-sm text-fg-subtle">No changes recorded yet.</p>;
   }
 
   return (
     <ol className="mt-2 space-y-2">
       {notes.map((note) => (
-        <li key={note.id} className="rounded-md border border-gray-200 bg-white px-3 py-2">
-          <p className="text-xs text-gray-500">
+        <li key={note.id} className="rounded-md border border-line bg-surface px-3 py-2">
+          <p className="text-xs text-fg-subtle">
             {note.kind === "added" ? "Added" : "Edited"} ·{" "}
             <time dateTime={note.createdAt}>{formatTimestamp(note.createdAt)}</time>
           </p>
-          <ul className="mt-1 space-y-0.5 break-words text-sm text-gray-700">
+          <ul className="mt-1 space-y-0.5 break-words text-sm text-fg-muted">
             {note.changes.map((change) => (
               <li key={change.field}>
                 {change.redacted ? (
                   // Secret value: say only that it was set or changed.
                   <>
-                    <span className="font-medium text-gray-900">{labels[change.field]}</span>{" "}
+                    <span className="font-medium text-fg">{labels[change.field]}</span>{" "}
                     {note.kind === "added" ? "set" : "changed"}
                   </>
                 ) : (
                   <>
-                    <span className="font-medium text-gray-900">{labels[change.field]}:</span>{" "}
+                    <span className="font-medium text-fg">{labels[change.field]}:</span>{" "}
                     {note.kind === "added" ? (
                       change.to
                     ) : (

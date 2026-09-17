@@ -26,7 +26,7 @@ export function ProfileShell({ back, title, status, subtitle, actions, identity,
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link
           href={back.href}
-          className="-ml-1 inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-sm font-medium text-gray-600 hover:bg-brand-soft hover:text-brand-ink"
+          className="-ml-1 inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-sm font-medium text-fg-muted hover:bg-brand-soft hover:text-brand-ink"
         >
           <svg
             aria-hidden="true"
@@ -48,18 +48,18 @@ export function ProfileShell({ back, title, status, subtitle, actions, identity,
       <header className="mt-3 mb-6 border-b border-line pb-4">
         <div aria-hidden="true" className="bg-brand-gradient mb-3 h-1 w-10 rounded-full" />
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{title}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-fg">{title}</h1>
           <StatusBadge status={status} />
         </div>
-        {subtitle ? <p className="mt-1 text-sm text-gray-600">{subtitle}</p> : null}
+        {subtitle ? <p className="mt-1 text-sm text-fg-muted">{subtitle}</p> : null}
 
         <dl className="mt-5 grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
           {identity.map(({ label, value }) => (
             <div key={label} className="min-w-0">
-              <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</dt>
-              <dd className="mt-1 break-words text-sm text-gray-900">
+              <dt className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">{label}</dt>
+              <dd className="mt-1 break-words text-sm text-fg">
                 {value === "" || value === null || value === undefined ? (
-                  <span className="text-gray-500">—</span>
+                  <span className="text-fg-subtle">—</span>
                 ) : (
                   value
                 )}
@@ -88,7 +88,7 @@ export function ProfileSection({ title, count, emptyMessage, children }: Profile
 
   return (
     <section>
-      <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+      <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-fg-subtle">
         {title}
         {count !== undefined ? (
           <span className="rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium normal-case tracking-normal tabular-nums text-brand-ink">
@@ -96,7 +96,7 @@ export function ProfileSection({ title, count, emptyMessage, children }: Profile
           </span>
         ) : null}
       </h2>
-      {empty ? <p className="mt-2 text-sm text-gray-500">{emptyMessage}</p> : <div className="mt-2">{children}</div>}
+      {empty ? <p className="mt-2 text-sm text-fg-subtle">{emptyMessage}</p> : <div className="mt-2">{children}</div>}
     </section>
   );
 }

@@ -29,13 +29,13 @@ export function AgentsPerCarrierChart({ groups, total, scopeText }: AgentsPerCar
   return (
     <section
       aria-labelledby="agents-per-carrier-title"
-      className="mb-10 rounded-lg border border-gray-200 bg-white px-4 py-3"
+      className="mb-10 rounded-lg border border-line bg-surface px-4 py-3"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h2 id="agents-per-carrier-title" className="text-sm font-semibold text-gray-900">
+        <h2 id="agents-per-carrier-title" className="text-sm font-semibold text-fg">
           Policy Type
         </h2>
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-fg-subtle">
           Out of {total} active {total === 1 ? "agent" : "agents"} · {scopeText}
         </p>
       </div>
@@ -43,7 +43,7 @@ export function AgentsPerCarrierChart({ groups, total, scopeText }: AgentsPerCar
       <div className="mt-3 grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
         {groups.map(({ line, bars }) => (
           <div key={line}>
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">{line}</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">{line}</h3>
             <ul className="mt-1.5 space-y-1">
               {[...bars]
                 .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
@@ -53,16 +53,16 @@ export function AgentsPerCarrierChart({ groups, total, scopeText }: AgentsPerCar
                     <li
                       key={bar.id}
                       title={`${bar.name} · ${bar.count} of ${total} active agents`}
-                      className="grid grid-cols-[minmax(0,7.5rem)_minmax(0,1fr)_1.5rem] items-center gap-2 rounded px-1 text-xs hover:bg-gray-50"
+                      className="grid grid-cols-[minmax(0,7.5rem)_minmax(0,1fr)_1.5rem] items-center gap-2 rounded px-1 text-xs hover:bg-surface-hover"
                     >
-                      <span className="truncate text-gray-700">{bar.name}</span>
-                      <span aria-hidden="true" className="h-2.5 overflow-hidden rounded-sm bg-gray-100">
+                      <span className="truncate text-fg-muted">{bar.name}</span>
+                      <span aria-hidden="true" className="h-2.5 overflow-hidden rounded-sm bg-surface-muted">
                         <span
                           className={`block h-full rounded-r-sm ${bar.barClass}`}
                           style={{ width: `${percent}%` }}
                         />
                       </span>
-                      <span className="text-right tabular-nums text-gray-900">
+                      <span className="text-right tabular-nums text-fg">
                         {bar.count}
                         <span className="sr-only">
                           {" "}

@@ -19,6 +19,6 @@ export function CarrierNotes({ notes }: { notes: CarrierNote[] }) {
     () => false,
   );
 
-  if (!hydrated) return <p className="text-sm text-gray-500">Loading notes…</p>;
+  if (!hydrated) return <p className="text-sm text-fg-subtle">Loading notes…</p>;
   return <NoteList notes={notes} labels={FIELD_LABELS} />;
 }

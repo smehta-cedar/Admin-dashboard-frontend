@@ -16,13 +16,13 @@ type FieldProps = {
 export function Field({ label, htmlFor, optional, hint, hintId, error, className, children }: FieldProps) {
   return (
     <div className={className}>
-      <label htmlFor={htmlFor} className="block text-sm font-medium text-gray-900">
+      <label htmlFor={htmlFor} className="block text-sm font-medium text-fg">
         {label}
-        {optional ? <span className="font-normal text-gray-500"> (optional)</span> : null}
+        {optional ? <span className="font-normal text-fg-subtle"> (optional)</span> : null}
       </label>
       {children}
       {hint ? (
-        <p id={hintId} className={`mt-1 text-xs ${error ? "text-red-700" : "text-gray-500"}`}>
+        <p id={hintId} className={`mt-1 text-xs ${error ? "text-danger" : "text-fg-subtle"}`}>
           {hint}
         </p>
       ) : null}

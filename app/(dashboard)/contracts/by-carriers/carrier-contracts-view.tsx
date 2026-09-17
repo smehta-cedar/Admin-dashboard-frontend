@@ -71,13 +71,10 @@ type Coverage = "full" | "partial" | "none";
 const COVERAGE_STYLES: Record<Coverage, { bar: string }> = {
   full: { bar: "bg-green-500" },
   partial: { bar: "bg-amber-400" },
-  none: { bar: "bg-gray-300" },
+  none: { bar: "bg-line-strong" },
 };
 
-/** A card's coverage bar, left (no agents) to right (every active agent). */
-const COVERAGE_GRADIENT = "linear-gradient(rgb(68, 82, 77), rgb(19, 34, 27))";
-
-const SECTION_HEADING_CLASS = "text-xs font-semibold uppercase tracking-wide text-gray-500";
+const SECTION_HEADING_CLASS = "text-xs font-semibold uppercase tracking-wide text-fg-subtle";
 
 /** Initials tiles on a card face; past this, a "+n" tile stands in for the rest. */
 const MAX_FACE_AGENTS = 11;
@@ -85,8 +82,8 @@ const MAX_FACE_AGENTS = 11;
 const AGENT_TILE_CLASS =
   "grid size-8 place-items-center rounded-md text-[11px] font-semibold tracking-wide";
 
-/** Contracted agents: a soft sage that echoes the dark green coverage bar. */
-const AGENT_COLOR_CLASS = "bg-[#ebfcf2] text-[#1f3a2d] ring-1 ring-inset ring-[#cfdfd6]";
+/** Contracted agents: a soft sage that echoes the coverage bar. */
+const AGENT_COLOR_CLASS = "bg-agent-chip text-agent-chip-ink ring-1 ring-inset ring-agent-chip-line";
 
 /** Person with a plus. */
 function AddAgentIcon({ className }: { className?: string }) {
@@ -244,7 +241,7 @@ export function CarrierContractsView({
         actions={
           <>
             {carriers.length > 0 ? (
-              <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm text-gray-700 hover:bg-gray-100">
+              <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm text-fg-muted hover:bg-surface-hover">
                 <input
                   type="checkbox"
                   checked={showAll}
@@ -267,13 +264,13 @@ export function CarrierContractsView({
 
       <div role="status">
         {unsavedCount > 0 ? (
-          <p className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <p className="mb-4 rounded-md bg-warn-soft px-3 py-2 text-sm text-warn-ink">
             {unsavedCount === 1 ? "1 change" : `${unsavedCount} changes`} made on this page only.
             Nothing is saved yet, so refreshing undoes {unsavedCount === 1 ? "it" : "them"}.
           </p>
         ) : null}
         {hiddenNotice ? (
-          <p key={hiddenNotice.key} className="mb-4 rounded-md bg-gray-100 px-3 py-2 text-sm text-gray-700">
+          <p key={hiddenNotice.key} className="mb-4 rounded-md bg-surface-muted px-3 py-2 text-sm text-fg-muted">
             {hiddenNotice.message}
           </p>
         ) : null}
@@ -287,7 +284,7 @@ export function CarrierContractsView({
       ) : (
         <>
           {rows.length === 0 ? (
-            <p className="rounded-lg border border-gray-200 px-4 py-6 text-center text-sm text-gray-600">
+            <p className="rounded-lg border border-line px-4 py-6 text-center text-sm text-fg-muted">
               No carriers have an active agent contracted yet. Turn on Show all carriers, or add a contract.
             </p>
           ) : (
@@ -309,10 +306,10 @@ export function CarrierContractsView({
                 <section aria-labelledby={`${id}-cards-title`}>
                   <h2
                     id={`${id}-cards-title`}
-                    className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-900"
+                    className="mb-3 flex items-center gap-2 text-sm font-semibold text-fg"
                   >
                     Carriers
-                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium tabular-nums text-gray-600">
+                    <span className="rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium tabular-nums text-fg-muted">
                       {cards.length}
                     </span>
                   </h2>
@@ -328,7 +325,7 @@ export function CarrierContractsView({
                       return (
                         <li
                           key={carrier.id}
-                          className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xs transition-shadow hover:shadow-md"
+                          className="overflow-hidden rounded-2xl border border-line bg-surface shadow-xs transition-shadow hover:shadow-md"
                         >
                           <div className="flex min-h-56 flex-col gap-8 px-5 pt-6 pb-1">
                             <div className="flex items-start justify-between gap-3">
@@ -336,12 +333,12 @@ export function CarrierContractsView({
                                 <h3 className="flex max-w-full items-center gap-1">
                                   <Link
                                     href={`/carriers/${carrier.id}`}
-                                    className="truncate font-semibold tracking-tight text-gray-950 hover:underline"
+                                    className="truncate font-semibold tracking-tight text-fg hover:underline"
                                   >
                                     {carrier.name}
                                   </Link>
                                   {carrier.status === "inactive" ? (
-                                    <span className="shrink-0 text-xs font-normal text-gray-400">inactive</span>
+                                    <span className="shrink-0 text-xs font-normal text-fg-faint">inactive</span>
                                   ) : null}
                                 </h3>
                                 {carrier.linesOfBusiness.length > 0 ? (
@@ -352,7 +349,7 @@ export function CarrierContractsView({
                                     {carrier.linesOfBusiness.map((line) => (
                                       <li
                                         key={line}
-                                        className="rounded-md bg-gray-100 px-1.5 py-0.5 text-[9px] font-medium text-gray-600"
+                                        className="rounded-md bg-surface-muted px-1.5 py-0.5 text-[9px] font-medium text-fg-muted"
                                       >
                                         {line}
                                       </li>
@@ -389,7 +386,7 @@ export function CarrierContractsView({
                                 </li>
                               ))}
                               {hiddenCount > 0 ? (
-                                <li className={`${AGENT_TILE_CLASS} bg-gray-100 text-gray-500`}>
+                                <li className={`${AGENT_TILE_CLASS} bg-surface-muted text-fg-subtle`}>
                                   <span aria-hidden="true">+{hiddenCount}</span>
                                   <span className="sr-only">and {hiddenCount} more</span>
                                 </li>
@@ -398,20 +395,20 @@ export function CarrierContractsView({
 
                             {/* Coverage: the gradient spans the track, gray hides the uncontracted share. */}
                             <div className="flex items-center gap-3">
+                              {/* Coverage bar: left (no agents) to right (every active agent). */}
                               <div
                                 aria-hidden="true"
-                                className="relative h-1.5 flex-1 overflow-hidden rounded-full"
-                                style={{ background: COVERAGE_GRADIENT }}
+                                className="bg-coverage-gradient relative h-1.5 flex-1 overflow-hidden rounded-full"
                               >
                                 <div
-                                  className="absolute inset-y-0 right-0 bg-gray-100"
+                                  className="absolute inset-y-0 right-0 bg-surface-muted"
                                   style={{ width: `${100 - percent}%` }}
                                 />
                               </div>
                               <p className="text-sm tabular-nums">
                                 <span aria-hidden="true">
-                                  <span className="font-semibold text-gray-900">{contractedActive}</span>
-                                  <span className="text-gray-400">/{activeAgents.length}</span>
+                                  <span className="font-semibold text-fg">{contractedActive}</span>
+                                  <span className="text-fg-faint">/{activeAgents.length}</span>
                                 </span>
                                 <span className="sr-only">
                                   {contractedActive} of {activeAgents.length} active agents
@@ -430,7 +427,7 @@ export function CarrierContractsView({
               {/* Show all only: carriers with no active agent, kept out of the card grid. */}
               {zeros.length > 0 ? (
                 <div
-                  className={`rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-3 ${
+                  className={`rounded-lg border border-dashed border-line-strong bg-surface-muted px-4 py-3 ${
                     cards.length > 0 ? "mt-4" : ""
                   }`}
                 >
@@ -444,18 +441,18 @@ export function CarrierContractsView({
                     {zeros.map(({ carrier }) => (
                       <li
                         key={carrier.id}
-                        className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white py-0.5 pl-3 pr-1 text-sm text-gray-600"
+                        className="inline-flex items-center gap-1 rounded-full border border-line bg-surface py-0.5 pl-3 pr-1 text-sm text-fg-muted"
                       >
                         <Link href={`/carriers/${carrier.id}`} className="hover:underline">
                           {carrier.name}
                         </Link>
                         {carrier.status === "inactive" ? (
-                          <span className="text-gray-400"> (inactive)</span>
+                          <span className="text-fg-faint"> (inactive)</span>
                         ) : null}
                         <button
                           type="button"
                           onClick={() => setEditor({ mode: "add", carrierId: carrier.id })}
-                          className="rounded-full px-2 py-0.5 text-xs font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                          className="rounded-full px-2 py-0.5 text-xs font-medium text-fg-muted hover:bg-surface-hover hover:text-fg"
                         >
                           <span aria-hidden="true">+ </span>Add agent
                           <span className="sr-only"> to {carrier.name}</span>

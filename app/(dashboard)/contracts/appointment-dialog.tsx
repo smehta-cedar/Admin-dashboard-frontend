@@ -239,12 +239,12 @@ function AppointmentForm({ id, editor, agents, carriers, onSave, close }: Appoin
 
   return (
     <form onSubmit={handleSubmit} className="p-6">
-      <h2 id={`${id}-title`} className="text-base font-semibold text-gray-900">
+      <h2 id={`${id}-title`} className="text-base font-semibold text-fg">
         {editing
           ? `Edit ${agentName(editing.agentId)} at ${carrierName(editing.carrierId)}`
           : "Add contract"}
       </h2>
-      <p className="mt-1 text-sm text-gray-600">
+      <p className="mt-1 text-sm text-fg-muted">
         {editing
           ? "Saving records a note of what changed. Nothing is saved anywhere yet; refreshing undoes it."
           : "Not saved anywhere yet. The contract stays on the page until you refresh."}
@@ -308,19 +308,19 @@ function AppointmentForm({ id, editor, agents, carriers, onSave, close }: Appoin
           footer={
             <>
               {stripped.length > 0 ? (
-                <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                <p className="mt-2 rounded-md bg-warn-soft px-3 py-2 text-xs text-warn-ink">
                   Saving removes {stripped.join(", ")}: {carrier?.name} isn&apos;t available there.
                 </p>
               ) : null}
               {statesError ? (
-                <p id={`${id}-states-error`} className="mt-1 text-xs text-red-700">
+                <p id={`${id}-states-error`} className="mt-1 text-xs text-danger">
                   {statesError}
                 </p>
               ) : null}
             </>
           }
         >
-          <p id={`${id}-states-hint`} className="mt-1 text-xs text-gray-500">
+          <p id={`${id}-states-hint`} className="mt-1 text-xs text-fg-subtle">
             {!carrier
               ? "Choose a carrier to see the states it's available in."
               : ceiling.length === 0

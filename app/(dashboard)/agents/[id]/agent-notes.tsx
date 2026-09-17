@@ -19,6 +19,6 @@ export function AgentNotes({ notes }: { notes: AgentNote[] }) {
     () => false,
   );
 
-  if (!hydrated) return <p className="text-sm text-gray-500">Loading notes…</p>;
+  if (!hydrated) return <p className="text-sm text-fg-subtle">Loading notes…</p>;
   return <NoteList notes={notes} labels={FIELD_LABELS} />;
 }

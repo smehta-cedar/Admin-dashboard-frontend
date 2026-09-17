@@ -75,11 +75,11 @@ export function StateCheckboxes({
   return (
     <fieldset aria-labelledby={`${id}-legend`} aria-describedby={describedBy} className={className}>
       <div className="flex items-center justify-between gap-3">
-        <span id={`${id}-legend`} className={`text-sm text-gray-900 ${legendClassName}`}>
+        <span id={`${id}-legend`} className={`text-sm text-fg ${legendClassName}`}>
           {legend}
         </span>
         {states.length > 0 ? (
-          <label className="flex items-center gap-2 text-xs text-gray-600">
+          <label className="flex items-center gap-2 text-xs text-fg-muted">
             <input
               type="checkbox"
               checked={allChecked}
@@ -95,9 +95,9 @@ export function StateCheckboxes({
       </div>
       {children}
       {states.length > 0 ? (
-        <div className="mt-2 grid max-h-64 grid-cols-2 gap-x-4 gap-y-1.5 overflow-y-auto rounded-md border border-gray-200 p-3 sm:grid-cols-3">
+        <div className="mt-2 grid max-h-64 grid-cols-2 gap-x-4 gap-y-1.5 overflow-y-auto rounded-md border border-line p-3 sm:grid-cols-3">
           {states.map((state) => (
-            <label key={state.code} className="flex items-center gap-2 text-sm text-gray-900">
+            <label key={state.code} className="flex items-center gap-2 text-sm text-fg">
               <input
                 type="checkbox"
                 name={name}

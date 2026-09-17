@@ -69,7 +69,7 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
         id: "id",
         header: "ID",
         cell: (agent) => agent.id,
-        className: "font-mono text-gray-600",
+        className: "font-mono text-fg-muted",
         sortValue: (agent) => Number(agent.id),
         searchText: (agent) => agent.id,
       },
@@ -77,7 +77,7 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
         id: "npn",
         header: "NPN",
         cell: (agent) => agent.npn,
-        className: "font-mono text-gray-600",
+        className: "font-mono text-fg-muted",
         sortValue: (agent) => agent.npn,
         searchText: (agent) => agent.npn,
       },
@@ -88,7 +88,7 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
           <div className="-ml-1 flex items-center gap-0.5 whitespace-nowrap">
             <Link
               href={`/agents/${agent.id}`}
-              className="rounded-md px-1 py-0.5 text-gray-900 hover:bg-gray-100 hover:underline"
+              className="rounded-md px-1 py-0.5 text-fg hover:bg-surface-hover hover:underline"
             >
               {agent.name}
             </Link>
@@ -98,12 +98,12 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
               aria-expanded={expanded}
               aria-controls={expanded ? detailsId : undefined}
               aria-label={`Details for ${agent.name}`}
-              className="rounded-md p-0.5 hover:bg-gray-100"
+              className="rounded-md p-0.5 hover:bg-surface-hover"
             >
               <svg
                 aria-hidden="true"
                 viewBox="0 0 20 20"
-                className={`size-4 shrink-0 text-gray-500 transition-transform ${expanded ? "rotate-90" : ""}`}
+                className={`size-4 shrink-0 text-fg-subtle transition-transform ${expanded ? "rotate-90" : ""}`}
                 fill="none"
                 stroke="currentColor"
                 strokeWidth={1.5}
@@ -129,7 +129,7 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
         id: "email",
         header: "Email",
         cell: (agent) => agent.email,
-        className: "text-gray-600",
+        className: "text-fg-muted",
         sortValue: (agent) => agent.email,
         searchText: (agent) => agent.email,
       },
@@ -137,7 +137,7 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
         id: "phone",
         header: "Phone",
         cell: (agent) => agent.phone,
-        className: "whitespace-nowrap text-gray-600",
+        className: "whitespace-nowrap text-fg-muted",
         searchText: (agent) => agent.phone,
       },
       {
@@ -230,7 +230,7 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
 
       <div role="status">
         {unsavedCount > 0 ? (
-          <p className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <p className="mb-4 rounded-md bg-warn-soft px-3 py-2 text-sm text-warn-ink">
             {unsavedCount === 1 ? "1 change" : `${unsavedCount} changes`} made on this page only.
             Nothing is saved yet, so refreshing undoes {unsavedCount === 1 ? "it" : "them"}.
           </p>
@@ -253,21 +253,21 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
           renderDetails={(agent) => (
             <div className="grid gap-6 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
               <section>
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
                   Aliases
                 </h3>
                 {agent.aliases.length > 0 ? (
-                  <ul className="mt-2 space-y-1 text-sm text-gray-900">
+                  <ul className="mt-2 space-y-1 text-sm text-fg">
                     {agent.aliases.map((alias, index) => (
                       <li key={`${index}-${alias}`}>{alias}</li>
                     ))}
                   </ul>
                 ) : (
-                  <p className="mt-2 text-sm text-gray-500">None</p>
+                  <p className="mt-2 text-sm text-fg-subtle">None</p>
                 )}
               </section>
               <section>
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
                   Notes
                 </h3>
                 <NoteList
@@ -283,10 +283,10 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
       <ModalDialog dialogRef={dialogRef} labelledBy={`${id}-title`} onClose={handleClose}>
         {editor ? (
           <form onSubmit={handleSubmit} className="p-6">
-            <h2 id={`${id}-title`} className="text-base font-semibold text-gray-900">
+            <h2 id={`${id}-title`} className="text-base font-semibold text-fg">
               {editing ? `Edit ${editing.name}` : "Add agent"}
             </h2>
-            <p className="mt-1 text-sm text-gray-600">
+            <p className="mt-1 text-sm text-fg-muted">
               {editing
                 ? "Saving records a note of what changed. Nothing is saved anywhere yet; refreshing undoes it."
                 : "Not saved anywhere yet. The agent stays in the list until you refresh."}

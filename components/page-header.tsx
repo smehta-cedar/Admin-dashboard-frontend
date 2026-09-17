@@ -12,17 +12,17 @@ type PageHeaderProps = {
 export function PageHeader({ title, description, inlineDescription = false, actions }: PageHeaderProps) {
   return (
     <header
-      className={`mb-6 flex flex-wrap justify-between gap-4 border-b border-gray-200 pb-4 ${
+      className={`mb-6 flex flex-wrap justify-between gap-4 border-b border-line pb-4 ${
         inlineDescription ? "items-center" : "items-start"
       }`}
     >
       <div className={inlineDescription ? "flex min-w-0 flex-wrap items-center gap-x-6 gap-y-2" : "min-w-0"}>
-        <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{title}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-fg">{title}</h1>
         {description ? (
           inlineDescription ? (
-            <div className="text-sm text-gray-600">{description}</div>
+            <div className="text-sm text-fg-muted">{description}</div>
           ) : (
-            <p className="mt-1 text-sm text-gray-600">{description}</p>
+            <p className="mt-1 text-sm text-fg-muted">{description}</p>
           )
         ) : null}
       </div>

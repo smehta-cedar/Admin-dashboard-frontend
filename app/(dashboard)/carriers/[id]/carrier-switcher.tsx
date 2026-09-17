@@ -19,14 +19,14 @@ export function CarrierSwitcher({ currentId, carriers }: CarrierSwitcherProps) {
 
   return (
     <div className="flex items-center gap-2">
-      <label htmlFor={selectId} className="text-sm font-medium text-gray-600">
+      <label htmlFor={selectId} className="text-sm font-medium text-fg-muted">
         Switch carrier
       </label>
       <select
         id={selectId}
         value={currentId}
         onChange={(event) => router.push(`/carriers/${event.target.value}`)}
-        className="rounded-md border border-gray-300 bg-white py-1.5 pl-3 pr-8 text-sm text-gray-900 focus:border-brand-strong focus:outline-none focus:ring-1 focus:ring-brand-strong"
+        className="rounded-md border border-line-strong bg-surface py-1.5 pl-3 pr-8 text-sm text-fg focus:border-brand-strong focus:outline-none focus:ring-1 focus:ring-brand-strong"
       >
         <optgroup label="Active">
           {active.map((carrier) => (

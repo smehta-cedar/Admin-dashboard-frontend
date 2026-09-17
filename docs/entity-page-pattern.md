@@ -148,16 +148,16 @@ A column: `{ id, header, cell(row, ctx), className?, sortValue?, searchText?, sr
 
 Styling (inside `DataTable`):
 
-- Wrapper: `overflow-x-auto rounded-lg border border-gray-200`;
+- Wrapper: `overflow-x-auto rounded-lg border border-line`;
   table `min-w-full text-left text-sm`.
-- Head: `bg-gray-50`; `th scope="col"`, `whitespace-nowrap px-4 py-2.5 font-medium text-gray-600`.
-- Body: `divide-y divide-gray-200 border-t border-gray-200`; cells `px-4 py-2.5` + column `className`.
+- Head: `bg-surface-muted`; `th scope="col"`, `whitespace-nowrap px-4 py-2.5 font-medium text-fg-muted`.
+- Body: `divide-y divide-line border-t border-line`; cells `px-4 py-2.5` + column `className`.
 - Column order used on Agents: **ID, NPN, Name, Status, Email, Phone, [actions]**.
-- IDs and codes: `font-mono text-gray-600`. Secondary text: `text-gray-600`.
-  Primary name: `text-gray-900`, `whitespace-nowrap`.
+- IDs and codes: `font-mono text-fg-muted`. Secondary text: `text-fg-muted`.
+  Primary name: `text-fg`, `whitespace-nowrap`.
 - Status badge: `rounded-md px-2 py-0.5 text-xs font-medium capitalize` +
-  `active: bg-brand-soft text-brand-ink`, `inactive: bg-gray-100 text-gray-600`
-  (and `pending: bg-amber-50 text-amber-700`, used only by Logins).
+  `active: bg-brand-soft text-brand-ink`, `inactive: bg-surface-hover text-fg-muted`
+  (and `pending: bg-warn-soft text-warn-ink`, used only by Logins).
 - Row action: text button `Edit` with sr-only entity name
   (`Edit<span className="sr-only"> {name}</span>`), right-aligned.
 - Secondary/list data (aliases, notes) does **not** go in the main row — see §7.
@@ -173,13 +173,13 @@ Profile pages' small related tables stay plain `<table>`s for now.
   separate chevron button with `aria-label="Details for <name>"`), chevron
   (`M8 5l5 5-5 5`) that rotates 90° when open. `aria-expanded={ctx.expanded}`,
   `aria-controls={ctx.expanded ? ctx.detailsId : undefined}`.
-- Open parent row and details row both get `bg-gray-50`.
+- Open parent row and details row both get `bg-surface-muted`.
 - `renderDetails(row)` fills one full-width `<td className="px-4 pb-4 pt-1">`; use
   a grid `sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]` (stacks on mobile).
 - Sections inside: small heading
-  `text-xs font-semibold uppercase tracking-wide text-gray-500`, then content.
+  `text-xs font-semibold uppercase tracking-wide text-fg-subtle`, then content.
   Agents shows **Aliases** (one per line, or "None") and **Notes**
-  (cards: `rounded-md border border-gray-200 bg-white px-3 py-2`, or
+  (cards: `rounded-md border border-line bg-surface px-3 py-2`, or
   "No changes recorded yet.").
 
 ## 8. Add / edit dialog
@@ -190,7 +190,7 @@ Profile pages' small related tables stay plain `<table>`s for now.
   form renders only while the editor is set, so closing (Cancel, Escape,
   backdrop click, save) clears the editor in `onClose` and unmounts/resets the form.
 - Backdrop click closes (`event.target === event.currentTarget`; the form fills the dialog).
-- Classes: `m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-lg bg-white p-0 shadow-xl backdrop:bg-gray-900/40`
+- Classes: `m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-lg bg-surface p-0 shadow-xl backdrop:bg-scrim`
   (`m-auto` is needed because Tailwind preflight zeroes dialog margins).
 - Content: `h2` title (`Add <entity>` / `Edit <name>`), one-line description
   saying it is not saved anywhere, fields grid `mt-5 grid gap-4 sm:grid-cols-2`
@@ -206,14 +206,14 @@ Profile pages' small related tables stay plain `<table>`s for now.
   - Uniqueness: check in `onSubmit`, excluding the record being edited; show
     the error under the field (`aria-invalid`, `aria-describedby`), clear it on change.
     Message names the conflicting record ("NPN 123 already belongs to Maria Alvarez.").
-- `Field` helper: label + input + optional hint/error text (`text-red-700` for errors).
+- `Field` helper: label + input + optional hint/error text (`text-danger` for errors).
 - Inputs: `type="email"`, `type="tel"`, `inputMode="numeric"` for number-like
   IDs (still stored as strings), `autoComplete="off"`.
 
 ## 9. Unsaved banner
 
 `<div role="status">` always rendered; inside, when count > 0:
-`mb-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800` —
+`mb-4 rounded-md bg-warn-soft px-3 py-2 text-sm text-warn-ink` —
 "N changes made on this page only. Nothing is saved yet, so refreshing undoes them."
 Count increments on every add and every edit that changed something.
 
@@ -221,20 +221,54 @@ Count increments on every add and every edit that changed something.
 
 | Use | Classes |
 | --- | --- |
-| Primary button | `rounded-md bg-brand-strong px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand` |
-| Ghost button | `rounded-md px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100` |
-| Row text button | `rounded-md px-2 py-1 text-sm font-medium text-gray-700 hover:bg-gray-100` |
-| Input / select | `mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-brand-strong focus:outline-none focus:ring-1 focus:ring-brand-strong aria-invalid:border-red-600` |
-| Label | `block text-sm font-medium text-gray-900` |
-| Hint / error | `mt-1 text-xs text-gray-500` / `text-red-700` |
-| Warning banner | `rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800` |
+| Primary button | `rounded-md bg-brand-strong px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand` |
+| Ghost button | `rounded-md px-3 py-2 text-sm font-medium text-fg-muted hover:bg-surface-hover hover:text-fg` |
+| Row text button | `rounded-md px-2 py-1 text-sm font-medium text-fg-muted hover:bg-surface-hover hover:text-fg` |
+| Input / select | `mt-1 block w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-fg focus:border-brand-strong focus:outline-none focus:ring-1 focus:ring-brand-strong aria-invalid:border-danger-strong` |
+| Label | `block text-sm font-medium text-fg` |
+| Hint / error | `mt-1 text-xs text-fg-subtle` / `text-danger` |
+| Warning banner | `rounded-md bg-warn-soft px-3 py-2 text-sm text-warn-ink` |
 
-Palette is Tailwind grays plus the Cedar Grove brand tokens in `app/globals.css`
-(`brand`, `brand-strong`, `brand-ink`, `brand-soft`, `accent`, `line`,
-`surface-muted`, `bg-brand-gradient`), with amber (warning) and red (error).
-Use the tokens, never raw hex. `brand` (logo teal) is decorative only; use
-`brand-strong` behind white text and `brand-ink` for brand-coloured text.
-Active status uses `brand-soft` / `brand-ink`.
+### Colour
+
+Every colour is a semantic token defined once in `app/globals.css`, and
+`html.dark` re-points the same names. **Never write a raw Tailwind colour
+(`bg-white`, `text-gray-600`, `border-gray-200`) and never a `dark:` variant on
+anything built from these tokens** — the theme is a variable swap, so pages
+that use the tokens are already correct in both modes.
+
+| Meaning | Token |
+| --- | --- |
+| Page background | `canvas` |
+| Cards, tables, dialogs, popovers | `surface` |
+| Recessed: nav rail, table head, open rows | `surface-muted` |
+| Hover wash on buttons and rows | `surface-hover` |
+| Headings and body copy | `fg` |
+| Secondary copy, table headers, idle nav | `fg-muted` |
+| Labels, hints, em-dashes | `fg-subtle` |
+| Decorative glyphs only | `fg-faint` |
+| Hairlines and dividers | `line` |
+| Input borders, dashed empties | `line-strong` |
+| Dialog backdrop (carries its own alpha) | `scrim` |
+| Tooltips and transient chips | `tooltip` / `tooltip-fg` |
+| Errors | `danger` (text) / `danger-strong` (fills, borders) |
+| Warnings, unsaved notices | `warn-soft` / `warn-ink` |
+| Map choropleth ramp | `map-0`…`map-4` + `map-N-ink` |
+| Carrier chips (by-agent list) | `carrier-chip` + `-ink` / `-muted` / `-faint` / `-line`, and `carrier-soft` for tints |
+| Agent tiles (carrier cards) | `agent-chip` / `agent-chip-ink` / `agent-chip-line` |
+| Coverage bar fill | `bg-coverage-gradient` (the track behind it is `surface-muted`) |
+
+Brand: `brand` (logo teal) is decorative only — strips, focus rings,
+indicators. `brand-strong` is the fill behind white text, `brand-hover` its
+hover, and `brand-ink` is brand-coloured *text* (it is light in dark mode, so
+never use it as a fill). `brand-soft` / `brand-ink` marks active status and the
+current nav item. `bg-brand-gradient` is the logo gradient strip.
+
+Saturated data-viz accents (coverage bars, chart fills) may stay raw Tailwind
+colours; they carry meaning by hue and read on either background.
+
+To change how the app looks in either mode, edit the token block in
+`app/globals.css` — nothing else.
 
 ## 11. Accessibility checklist
 
@@ -276,7 +310,7 @@ check against other carriers' names *and* aliases, ignoring case.
 
 Files: [lib/carrier-contracts.ts](../lib/carrier-contracts.ts),
 [app/(dashboard)/contracts/by-carriers/](../app/(dashboard)/contracts/by-carriers/),
-[app/(dashboard)/contracts/by-state/](../app/(dashboard)/contracts/by-state/).
+[app/(dashboard)/contracts/](../app/(dashboard)/contracts/).
 
 **Two layers of states.**
 

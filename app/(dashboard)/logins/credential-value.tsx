@@ -14,7 +14,7 @@ import { useEffect, useState, type ComponentProps, type ReactNode } from "react"
 const MASK = "••••••••";
 
 const ICON_BUTTON_CLASS =
-  "cursor-pointer rounded-md p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-900";
+  "cursor-pointer rounded-md p-1 text-fg-subtle hover:bg-surface-hover hover:text-fg";
 
 type CopyStatus = "idle" | "copied" | "failed";
 
@@ -71,7 +71,7 @@ export function CredentialValue({ value, label, secret = false }: CredentialValu
       <button
         type="button"
         onClick={copy}
-        className={`-ml-1 cursor-pointer whitespace-pre rounded-md px-1 py-0.5 hover:bg-gray-100 hover:text-gray-900 ${secret ? "font-mono" : ""}`}
+        className={`-ml-1 cursor-pointer whitespace-pre rounded-md px-1 py-0.5 hover:bg-surface-hover hover:text-fg ${secret ? "font-mono" : ""}`}
       >
         {hidden ? (
           <>
@@ -105,7 +105,7 @@ export function CredentialValue({ value, label, secret = false }: CredentialValu
         >
           {status !== "idle" ? (
             <span
-              className={`rounded px-1.5 py-0.5 text-xs font-medium text-white ${status === "failed" ? "bg-red-700" : "bg-gray-900"}`}
+              className={`rounded px-1.5 py-0.5 text-xs font-medium text-tooltip-fg ${status === "failed" ? "bg-danger-strong" : "bg-tooltip"}`}
             >
               {status === "copied" ? "Copied" : "Couldn't copy"}
             </span>
