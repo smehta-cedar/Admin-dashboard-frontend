@@ -408,8 +408,8 @@ its By agent list only agents licensed there):
 states** (`licensedStates`: personal, "whoever the carrier") and, on each
 carrier row, that appointment's writable states; there is no combined
 "Writable states" section across carriers. The carrier profile shows its
-available states in the identity grid and each agent's writable states on the
-agent rows.
+available states as chips on its header card and each agent's writable states
+as chips on the agent rows.
 
 The agent profile is also an entry point: **Add carrier** in the Carriers
 section header opens the same `AppointmentDialog` in add mode with that agent
@@ -421,8 +421,10 @@ dialog's options) and **every** contract and contract note (the duplicate check
 and `nextId` need the full lists), and the profile picks out the agent's own
 rows.
 
-The agent profile has its own layout in `agent-profile.tsx` rather than
-`ProfileShell` (it shares only `ProfileBackLink`). Top to bottom:
+Both profiles lay themselves out from the shared pieces in
+`components/profile-shell.tsx`: `ProfileBackLink`, `ProfileAvatar`, `Detail`,
+`Count`, `StateChip`, `Panel`, `PanelEmpty`, and `PROFILE_LINK_CLASS` /
+`PROFILE_TH_CLASS`. The agent profile, top to bottom:
 
 - **Name row**: initials, name, status badge under it, and **Edit**, which opens
   the same `AgentDialog` as the Agents list
@@ -446,9 +448,13 @@ The agent profile has its own layout in `agent-profile.tsx` rather than
   no contract, and logins whose status is pending. Swap it for real tasks when
   they exist.
 
-The carrier profile still uses `ProfileShell` / `ProfileSection` (`banner` and
-`action` slots included) and stays read-only for now; the matching button
-there would be Add agent.
+The carrier profile (`carrier-profile.tsx`, still a server component) follows
+the same layout: name row (initials, name, status), a header card with
+Carrier ID / aliases / lines of business beside **Available states** as
+`StateChip`s, then panels — Agents (a table: Agent, Writable states, Status)
+beside Notes, and Logins full width under them (`Panel className="xl:col-span-2"`).
+It stays read-only for now; the matching button there would be Add agent in
+the Agents panel's `action` slot.
 
 **Agents** and **Carriers** each show their own list as a States column
 (`stateSummary`, sorted by count, searchable by code and name) and edit it with

@@ -1,12 +1,20 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
-import { StatusBadge } from "@/components/status-badge";
+import { useId, type ReactNode } from "react";
+import { US_STATE_NAMES } from "@/lib/us-states";
 
 /*
- * Layout for one entity's profile page: a back link, the title with its status,
- * an identity grid of key–value pairs, then stacked sections for related lists.
- * Server-safe; pass client pieces in as children.
+ * Shared pieces of an entity's profile page (agent, carrier): the back link,
+ * the initials avatar beside the name, the "label  value" rows of the header
+ * card, and the titled panels holding related lists. Each profile lays these
+ * out itself. No state here, so both server and client profiles can use them.
  */
+
+export const PROFILE_LINK_CLASS = "font-medium text-fg hover:text-brand-ink hover:underline";
+
+export const PROFILE_LABEL_CLASS = "text-xs font-medium text-fg-subtle";
+
+/** Header cell of a panel's small table. */
+export const PROFILE_TH_CLASS = `whitespace-nowrap px-3 py-2 ${PROFILE_LABEL_CLASS}`;
 
 /** The "‹ Agents" link at the top of a profile, back to the entity's list. */
 export function ProfileBackLink({ href, label }: { href: string; label: string }) {
@@ -32,99 +40,91 @@ export function ProfileBackLink({ href, label }: { href: string; label: string }
   );
 }
 
-type ProfileShellProps = {
-  back: { href: string; label: string };
-  title: string;
-  status: "active" | "pending" | "inactive";
-  subtitle?: ReactNode;
-  /** Shown to the right of the back link, e.g. a switcher. */
-  actions?: ReactNode;
-  /** Key–value pairs shown under the title. An empty value shows "—". */
-  identity: { label: string; value: ReactNode }[];
-  /**
-   * Sits between the header and the sections, for a profile that can be edited:
-   * a persistent `role="status"` region holding the unsaved banner. Empty when
-   * there is nothing to say, and then it takes no space.
-   */
-  banner?: ReactNode;
-  children: ReactNode;
-};
+/** "Maria Alva" → "MA"; a single word gives one letter. */
+export function initials(name: string) {
+  const words = name.split(/\s+/).filter(Boolean);
+  const letters = words.length > 1 ? [words[0], words[words.length - 1]] : words;
+  return letters.map((word) => word[0].toUpperCase()).join("");
+}
 
-export function ProfileShell({
-  back,
-  title,
-  status,
-  subtitle,
-  actions,
-  identity,
-  banner,
-  children,
-}: ProfileShellProps) {
+/** The round initials badge that sits beside a profile's name. */
+export function ProfileAvatar({ name }: { name: string }) {
   return (
-    <>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <ProfileBackLink href={back.href} label={back.label} />
-        {actions}
-      </div>
-
-      <header className="mt-3 mb-6 border-b border-line pb-4">
-        <div aria-hidden="true" className="bg-brand-gradient mb-3 h-1 w-10 rounded-full" />
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight text-fg">{title}</h1>
-          <StatusBadge status={status} />
-        </div>
-        {subtitle ? <p className="mt-1 text-sm text-fg-muted">{subtitle}</p> : null}
-
-        <dl className="mt-5 grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
-          {identity.map(({ label, value }) => (
-            <div key={label} className="min-w-0">
-              <dt className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">{label}</dt>
-              <dd className="mt-1 break-words text-sm text-fg">
-                {value === "" || value === null || value === undefined ? (
-                  <span className="text-fg-subtle">—</span>
-                ) : (
-                  value
-                )}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </header>
-
-      {banner}
-      <div className="space-y-8">{children}</div>
-    </>
+    <span
+      aria-hidden="true"
+      className="flex size-12 shrink-0 items-center justify-center rounded-full bg-brand-soft text-base font-semibold text-brand-ink"
+    >
+      {initials(name)}
+    </span>
   );
 }
 
-type ProfileSectionProps = {
+/** A state code chip, with the full name on hover and for screen readers. */
+export function StateChip({ code }: { code: string }) {
+  return (
+    <li
+      title={US_STATE_NAMES[code]}
+      className="rounded-md bg-surface-muted px-2 py-1 font-mono text-xs font-medium text-fg-muted ring-1 ring-inset ring-line"
+    >
+      {code}
+      {US_STATE_NAMES[code] ? <span className="sr-only"> ({US_STATE_NAMES[code]})</span> : null}
+    </li>
+  );
+}
+
+/** The count pill beside a heading. */
+export function Count({ value }: { value: number }) {
+  return (
+    <span className="rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium tabular-nums text-brand-ink">
+      {value}
+    </span>
+  );
+}
+
+/** One "label  value" row on the header card; the parent grid lines the values up. An empty value shows "—". */
+export function Detail({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="contents">
+      <dt className={PROFILE_LABEL_CLASS}>{label}</dt>
+      <dd className="min-w-0 break-words text-sm text-fg">
+        {children || <span className="text-fg-subtle">—</span>}
+      </dd>
+    </div>
+  );
+}
+
+type PanelProps = {
   title: string;
-  /** Shown as a pill beside the title. */
-  count?: number;
-  /** When set and count is 0, this one quiet line replaces the children. */
-  emptyMessage?: string;
+  count: number;
   /** Shown at the end of the title row, e.g. an Add button. */
   action?: ReactNode;
-  children?: ReactNode;
+  /** Extra classes on the card, e.g. a column span. */
+  className?: string;
+  children: ReactNode;
 };
 
-export function ProfileSection({ title, count, emptyMessage, action, children }: ProfileSectionProps) {
-  const empty = emptyMessage !== undefined && count === 0;
+/** A titled card holding one related list, inset from the card's edges by the body padding. */
+export function Panel({ title, count, action, className = "", children }: PanelProps) {
+  const headingId = useId();
 
   return (
-    <section>
-      <div className="flex min-h-7 flex-wrap items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-fg-subtle">
+    <section
+      aria-labelledby={headingId}
+      className={`min-w-0 overflow-hidden rounded-xl border border-line bg-surface shadow-sm ${className}`}
+    >
+      <div className="flex min-h-13 items-center justify-between gap-3 border-b border-line px-5 py-2.5">
+        <h2 id={headingId} className="flex items-center gap-2 text-sm font-semibold text-fg">
           {title}
-          {count !== undefined ? (
-            <span className="rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium normal-case tracking-normal tabular-nums text-brand-ink">
-              {count}
-            </span>
-          ) : null}
+          <Count value={count} />
         </h2>
         {action}
       </div>
-      {empty ? <p className="mt-2 text-sm text-fg-subtle">{emptyMessage}</p> : <div className="mt-2">{children}</div>}
+      <div className="p-4 sm:p-5">{children}</div>
     </section>
   );
+}
+
+/** What a panel shows instead of its list when there is nothing in it. */
+export function PanelEmpty({ children }: { children: ReactNode }) {
+  return <p className="text-sm text-fg-subtle">{children}</p>;
 }

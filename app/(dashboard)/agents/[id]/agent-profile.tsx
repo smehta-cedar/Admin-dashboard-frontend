@@ -1,8 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useId, useState, type ReactNode } from "react";
-import { ProfileBackLink } from "@/components/profile-shell";
+import { useEffect, useId, useState } from "react";
+import {
+  Count,
+  Detail,
+  Panel,
+  PanelEmpty,
+  PROFILE_LINK_CLASS as LINK_CLASS,
+  PROFILE_TH_CLASS as TH_CLASS,
+  ProfileAvatar,
+  ProfileBackLink,
+  StateChip,
+} from "@/components/profile-shell";
 import { StatusBadge } from "@/components/status-badge";
 import type { AgentNote, AgentRecord } from "@/lib/agents";
 import type {
@@ -86,12 +96,6 @@ const LOGIN_COLUMNS = ["Carrier", "Writing number", "Portal username", "Password
 
 const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
 
-const LINK_CLASS = "font-medium text-fg hover:text-brand-ink hover:underline";
-
-const LABEL_CLASS = "text-xs font-medium text-fg-subtle";
-
-const TH_CLASS = `whitespace-nowrap px-3 py-2 ${LABEL_CLASS}`;
-
 /** Soft brand fill, so it reads as the one action of its row rather than as row text. */
 const PANEL_BUTTON_CLASS =
   "inline-flex items-center gap-1.5 rounded-md bg-brand-soft px-2.5 py-1 text-sm font-medium text-brand-ink shadow-sm hover:bg-brand-strong hover:text-white";
@@ -115,31 +119,11 @@ function EditIcon({ className }: { className?: string }) {
   );
 }
 
-/** "Maria Alva" → "MA"; a single word gives one letter. */
-function initials(name: string) {
-  const words = name.split(/\s+/).filter(Boolean);
-  const letters = words.length > 1 ? [words[0], words[words.length - 1]] : words;
-  return letters.map((word) => word[0].toUpperCase()).join("");
-}
-
 /** "Humana", "Humana and UHC", "Humana, UHC and WellCare". */
 function listText(items: string[]) {
   return items.length < 2
     ? items.join("")
     : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
-}
-
-/** A state code chip, with the full name on hover and for screen readers. */
-function StateChip({ code }: { code: string }) {
-  return (
-    <li
-      title={US_STATE_NAMES[code]}
-      className="rounded-md bg-surface-muted px-2 py-1 font-mono text-xs font-medium text-fg-muted ring-1 ring-inset ring-line"
-    >
-      {code}
-      {US_STATE_NAMES[code] ? <span className="sr-only"> ({US_STATE_NAMES[code]})</span> : null}
-    </li>
-  );
 }
 
 /** A state's licence number (click to copy), or a quiet "No number yet". */
@@ -192,61 +176,6 @@ function LicenseNumber({ value, className }: { value: string | undefined; classN
       </span>
     </span>
   );
-}
-
-/** The count pill beside a heading. */
-function Count({ value }: { value: number }) {
-  return (
-    <span className="rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium tabular-nums text-brand-ink">
-      {value}
-    </span>
-  );
-}
-
-/** One "label  value" row on the header card; the parent grid lines the values up. An empty value shows "—". */
-function Detail({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="contents">
-      <dt className={LABEL_CLASS}>{label}</dt>
-      <dd className="min-w-0 break-words text-sm text-fg">
-        {children || <span className="text-fg-subtle">—</span>}
-      </dd>
-    </div>
-  );
-}
-
-type PanelProps = {
-  title: string;
-  count: number;
-  /** Shown at the end of the title row, e.g. an Add button. */
-  action?: ReactNode;
-  children: ReactNode;
-};
-
-/** A titled card holding one related list, inset from the card's edges by the body padding. */
-function Panel({ title, count, action, children }: PanelProps) {
-  const headingId = useId();
-
-  return (
-    <section
-      aria-labelledby={headingId}
-      className="min-w-0 overflow-hidden rounded-xl border border-line bg-surface shadow-sm"
-    >
-      <div className="flex min-h-13 items-center justify-between gap-3 border-b border-line px-5 py-2.5">
-        <h2 id={headingId} className="flex items-center gap-2 text-sm font-semibold text-fg">
-          {title}
-          <Count value={count} />
-        </h2>
-        {action}
-      </div>
-      <div className="p-4 sm:p-5">{children}</div>
-    </section>
-  );
-}
-
-/** What a panel shows instead of its list when there is nothing in it. */
-function PanelEmpty({ children }: { children: ReactNode }) {
-  return <p className="text-sm text-fg-subtle">{children}</p>;
 }
 
 type PendingItem = { key: string; title: string; detail: string; href?: string; linkLabel?: string };
@@ -449,12 +378,7 @@ export function AgentProfile({
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3.5">
-          <span
-            aria-hidden="true"
-            className="flex size-12 shrink-0 items-center justify-center rounded-full bg-brand-soft text-base font-semibold text-brand-ink"
-          >
-            {initials(agent.name)}
-          </span>
+          <ProfileAvatar name={agent.name} />
           <div className="min-w-0">
             <h1 className="text-xl font-semibold tracking-tight text-fg">{agent.name}</h1>
             <div className="mt-0.5 flex">
