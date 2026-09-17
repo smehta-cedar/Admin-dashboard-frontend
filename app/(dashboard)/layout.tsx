@@ -4,7 +4,14 @@ import type { NavItem } from "@/components/sidebar";
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Overview" },
-  { href: "/agents", label: "Agents" },
+  {
+    href: "/agents",
+    label: "Agents",
+    children: [
+      // Opens the first agent; stays highlighted on every /agents/<id>.
+      { href: "/agents/profile", label: "Agent profile", activePrefix: "/agents/" },
+    ],
+  },
   { href: "/carriers", label: "Carriers" },
   { href: "/rulebook", label: "Rulebook" },
   { href: "/logins", label: "Logins" },

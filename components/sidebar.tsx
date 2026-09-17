@@ -9,6 +9,11 @@ import { usePathname } from "next/navigation";
 export type NavItem = {
   href: string;
   label: string;
+  /**
+   * Marks the link active for any path under this prefix instead of its own
+   * href, e.g. a link to one profile that stands for all of them.
+   */
+  activePrefix?: string;
   /** Sub-links rendered indented under this item. */
   children?: NavItem[];
 };
@@ -20,7 +25,8 @@ type SidebarProps = {
 };
 
 /** "/" matches only itself; other items also match their nested routes. */
-function isActive(pathname: string, href: string) {
+function isActive(pathname: string, href: string, activePrefix?: string) {
+  if (activePrefix) return pathname.startsWith(activePrefix);
   if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
@@ -38,7 +44,7 @@ export function Sidebar({ items, onLinkClick }: SidebarProps) {
         {items.map((item) => {
           const children = item.children ?? [];
           const activeChild = children.some((child) =>
-            isActive(pathname, child.href),
+            isActive(pathname, child.href, child.activePrefix),
           );
           // With children, only an exact match marks the parent as the
           // current page; a matching child gets aria-current instead and the
@@ -66,7 +72,7 @@ export function Sidebar({ items, onLinkClick }: SidebarProps) {
               {children.length > 0 && (
                 <ul className="mt-1 ml-3 space-y-1">
                   {children.map((child) => {
-                    const childActive = isActive(pathname, child.href);
+                    const childActive = isActive(pathname, child.href, child.activePrefix);
                     return (
                       <li key={child.href}>
                         <Link

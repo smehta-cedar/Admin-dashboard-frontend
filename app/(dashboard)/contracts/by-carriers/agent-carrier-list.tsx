@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 /*
  * Contracts grouped by agent, as one plain row per active agent: initials and
  * name, how many carriers they are contracted with (count as text plus a thin
@@ -71,7 +73,11 @@ export function AgentCarrierList({ agents, carriers, contracts, onAdd, headingId
                     {initials(agent.name)}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium text-gray-900">{agent.name}</p>
+                    <p className="truncate font-medium text-gray-900">
+                      <Link href={`/agents/${agent.id}`} className="hover:underline">
+                        {agent.name}
+                      </Link>
+                    </p>
                     <div className="mt-1 flex items-center gap-2">
                       <div aria-hidden="true" className="h-1.5 w-20 overflow-hidden rounded-full bg-stone-100">
                         <div className="h-full rounded-full bg-stone-400" style={{ width: `${percent}%` }} />

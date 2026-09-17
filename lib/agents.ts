@@ -62,6 +62,11 @@ export async function getAgents(): Promise<AgentRecord[]> {
   return (agentsJson as AgentRecord[]).slice().sort((a, b) => Number(a.id) - Number(b.id));
 }
 
+/** One agent by internal ID, or null when there is none. */
+export async function getAgent(id: string): Promise<AgentRecord | null> {
+  return (agentsJson as AgentRecord[]).find((agent) => agent.id === id) ?? null;
+}
+
 /** Every agent note, newest first. */
 export async function getAgentNotes(): Promise<AgentNote[]> {
   return (notesJson as AgentNote[])
