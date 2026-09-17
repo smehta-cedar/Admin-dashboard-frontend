@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getAgent, getAgentNotes, getAgents } from "@/lib/agents";
-import { getCarrierContracts } from "@/lib/carrier-contracts";
+import { getCarrierContractNotes, getCarrierContracts } from "@/lib/carrier-contracts";
 import { getCarriers } from "@/lib/carriers";
 import { getLogins } from "@/lib/logins";
 import { AgentProfile } from "./agent-profile";
@@ -17,10 +17,11 @@ export default async function AgentProfilePage(props: PageProps<"/agents/[id]">)
   const agent = await getAgent(id);
   if (!agent) notFound();
 
-  const [agents, notes, carrierContracts, logins, carriers] = await Promise.all([
+  const [agents, notes, carrierContracts, contractNotes, logins, carriers] = await Promise.all([
     getAgents(),
     getAgentNotes(),
     getCarrierContracts(),
+    getCarrierContractNotes(),
     getLogins(),
     getCarriers(),
   ]);
@@ -33,23 +34,14 @@ export default async function AgentProfilePage(props: PageProps<"/agents/[id]">)
     <AgentProfile
       agent={agent}
       allAgents={agents.map(({ id, name, status }) => ({ id, name, status })).sort(byName)}
-      // States come only from carrier appointments; there are no carrier-less licenses.
-      carriers={carrierContracts
-        .filter((contract) => contract.agentId === id)
-        .flatMap((contract) => {
-          const carrier = carriersById.get(contract.carrierId);
-          return carrier
-            ? [
-                {
-                  id: carrier.id,
-                  name: carrier.name,
-                  status: carrier.status,
-                  appointedStates: [...new Set(contract.appointedStates)].sort(),
-                },
-              ]
-            : [];
-        })
+      // Every carrier, so Add carrier can appoint this agent to any of them. The
+      // profile picks out this agent's contracts; states come only from those
+      // appointments, as there are no carrier-less licenses.
+      carriers={carriers
+        .map(({ id, name, status, availableStates }) => ({ id, name, status, availableStates }))
         .sort(byName)}
+      initialContracts={carrierContracts}
+      initialContractNotes={contractNotes}
       logins={logins
         .filter((login) => login.agentId === id)
         .map((login) => ({ ...login, carrierName: carrierName(login.carrierId) }))

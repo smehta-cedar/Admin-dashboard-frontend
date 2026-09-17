@@ -375,6 +375,20 @@ across appointments plus each carrier's states; the carrier profile shows its
 available states in the identity grid and each agent's appointed states on the
 agent rows.
 
+The agent profile is also an entry point: **Add carrier** in the Carriers
+section header opens the same `AppointmentDialog` in add mode with that agent
+pre-filled (`agents` is just that one agent, so it can't be changed), and saves
+through the same `saveAppointment`, so the duplicate and ceiling checks and the
+note are identical. That makes `agent-profile.tsx` a client component holding
+contracts, notes and the unsaved count; `page.tsx` passes **every** carrier (the
+dialog's options) and **every** contract and contract note (the duplicate check
+and `nextId` need the full lists), and the profile picks out the agent's own
+rows. `ProfileShell` takes a `banner` slot for the `role="status"` unsaved
+banner, between the header and the sections; `ProfileSection` takes an `action`
+slot for the button beside its title (`ROW_BUTTON_CLASS`, "+ Add carrier").
+The carrier profile stays read-only for now; the matching button there would be
+Add agent.
+
 **Carriers** show `availableStates` as a States column (`stateSummary`, sorted
 by count, searchable by code and name) and edit them with `StateCheckboxes` in
 the add/edit dialog. Empty is allowed.

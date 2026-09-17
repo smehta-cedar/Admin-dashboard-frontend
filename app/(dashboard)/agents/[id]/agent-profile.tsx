@@ -1,31 +1,60 @@
+"use client";
+
 import Link from "next/link";
+import { useState } from "react";
+import { ROW_BUTTON_CLASS } from "@/components/classes";
 import { ProfileSection, ProfileShell } from "@/components/profile-shell";
 import { StatusBadge } from "@/components/status-badge";
 import type { AgentNote, AgentRecord } from "@/lib/agents";
-import type { CarrierStatus } from "@/lib/carriers";
+import type {
+  CarrierContractNote,
+  CarrierContractRecord,
+} from "@/lib/carrier-contracts";
+import type { CarrierRecord } from "@/lib/carriers";
 import type { LoginRecord } from "@/lib/logins";
 import { US_STATE_NAMES } from "@/lib/us-states";
+import {
+  AppointmentDialog,
+  normalizeStates,
+  saveAppointment,
+  type AppointmentEditor,
+  type AppointmentError,
+  type AppointmentValues,
+} from "../../contracts/appointment-dialog";
 import { CredentialValue } from "../../logins/credential-value";
 import { AgentNotes } from "./agent-notes";
 import { AgentSwitcher } from "./agent-switcher";
 
 /*
- * Read-only profile for one agent: identity, then everything linked to them —
- * the states they can write in, contracted carriers, logins, and change notes.
- * Editing stays on the Agents, Contracts and Logins pages. Carrier names link
- * to their profiles.
+ * Profile for one agent: identity, then everything linked to them — the states
+ * they can write in, contracted carriers, logins, and change notes. Logins and
+ * the agent's own fields are still edited on their pages; the one thing editable
+ * here is appointing this agent to a carrier.
  *
  * States come from carrier appointments only: "States" is the union across
  * every appointment ("via carriers"), and each carrier row lists the states
- * that appointment covers.
+ * that appointment covers. Carrier names link to their profiles.
+ *
+ * "Add carrier" opens the shared AppointmentDialog
+ * (../../contracts/appointment-dialog.tsx) in add mode with this agent
+ * pre-filled — the same form and the same saveAppointment as Contracts, so the
+ * duplicate and available-states checks are identical. It is dummy like the
+ * rest: contracts and notes live in component state, and a refresh brings back
+ * the JSON.
  */
+
+type CarrierOption = Pick<CarrierRecord, "id" | "name" | "status" | "availableStates">;
 
 type AgentProfileProps = {
   agent: AgentRecord;
   /** Every agent, sorted by name, for the switcher. */
   allAgents: Pick<AgentRecord, "id" | "name" | "status">[];
-  /** Contracted carriers, sorted by name, each with its appointed state codes in code order. */
-  carriers: { id: string; name: string; status: CarrierStatus; appointedStates: string[] }[];
+  /** Every carrier, sorted by name, for the Add carrier dialog. */
+  carriers: CarrierOption[];
+  /** Every contract, not just this agent's: the duplicate check and new IDs need them all. */
+  initialContracts: CarrierContractRecord[];
+  /** Every contract note, newest first. Not shown here; new ones are still recorded. */
+  initialContractNotes: CarrierContractNote[];
   /** Sorted by carrier name. */
   logins: (LoginRecord & { carrierName: string })[];
   /** Newest first. */
@@ -33,6 +62,8 @@ type AgentProfileProps = {
 };
 
 const LOGIN_COLUMNS = ["Carrier", "Writing number", "Portal username", "Password", "Status"];
+
+const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
 
 /** A state code chip, with the full name on hover and for screen readers. */
 function StateChip({ code }: { code: string }) {
@@ -47,8 +78,61 @@ function StateChip({ code }: { code: string }) {
   );
 }
 
-export function AgentProfile({ agent, allAgents, carriers, logins, notes }: AgentProfileProps) {
-  const states = [...new Set(carriers.flatMap((carrier) => carrier.appointedStates))].sort();
+export function AgentProfile({
+  agent,
+  allAgents,
+  carriers,
+  initialContracts,
+  initialContractNotes,
+  logins,
+  notes,
+}: AgentProfileProps) {
+  const [contracts, setContracts] = useState(initialContracts);
+  const [contractNotes, setContractNotes] = useState(initialContractNotes);
+  const [unsavedCount, setUnsavedCount] = useState(0);
+  const [editor, setEditor] = useState<AppointmentEditor | null>(null);
+
+  const agentName = (agentId: string) =>
+    allAgents.find((other) => other.id === agentId)?.name ?? `Agent ${agentId}`;
+  const carrierName = (carrierId: string) =>
+    carriers.find((carrier) => carrier.id === carrierId)?.name ?? `Carrier ${carrierId}`;
+  const availableStates = (carrierId: string) =>
+    carriers.find((carrier) => carrier.id === carrierId)?.availableStates ?? [];
+
+  // This agent's carriers, rebuilt from state so a new appointment shows at once.
+  const agentCarriers = contracts
+    .filter((contract) => contract.agentId === agent.id)
+    .flatMap((contract) => {
+      const carrier = carriers.find((option) => option.id === contract.carrierId);
+      return carrier
+        ? [{ ...carrier, appointedStates: normalizeStates(contract.appointedStates) }]
+        : [];
+    })
+    .sort(byName);
+  const states = [...new Set(agentCarriers.flatMap((carrier) => carrier.appointedStates))].sort();
+
+  /** Appoints this agent to a carrier. Returns the dialog's error message, if any. */
+  const saveContract = (
+    values: AppointmentValues,
+    editing?: CarrierContractRecord,
+  ): AppointmentError | null => {
+    const result = saveAppointment({
+      contracts,
+      notes: contractNotes,
+      values,
+      editing,
+      agentName,
+      carrierName,
+      availableStates,
+    });
+    if (result.error !== null) return result.error;
+    if (!result.changed) return null;
+
+    setContracts(result.contracts);
+    setContractNotes(result.notes);
+    setUnsavedCount((count) => count + 1);
+    return null;
+  };
 
   return (
     <ProfileShell
@@ -63,6 +147,16 @@ export function AgentProfile({ agent, allAgents, carriers, logins, notes }: Agen
         { label: "Phone", value: agent.phone },
         { label: "Aliases", value: agent.aliases.join(", ") },
       ]}
+      banner={
+        <div role="status">
+          {unsavedCount > 0 ? (
+            <p className="mb-4 rounded-md bg-warn-soft px-3 py-2 text-sm text-warn-ink">
+              {unsavedCount === 1 ? "1 change" : `${unsavedCount} changes`} made on this page only.
+              Nothing is saved yet, so refreshing undoes {unsavedCount === 1 ? "it" : "them"}.
+            </p>
+          ) : null}
+        </div>
+      }
     >
       <ProfileSection
         title="States"
@@ -77,28 +171,47 @@ export function AgentProfile({ agent, allAgents, carriers, logins, notes }: Agen
         </ul>
       </ProfileSection>
 
-      <ProfileSection title="Carriers" count={carriers.length} emptyMessage="Not contracted with any carriers.">
-        <ul className="divide-y divide-line rounded-lg border border-line text-sm">
-          {carriers.map((carrier) => (
-            <li key={carrier.id} className="flex flex-col gap-2 px-4 py-2.5">
-              <div className="flex items-center justify-between gap-4">
-                <Link href={`/carriers/${carrier.id}`} className="text-fg hover:underline">
-                  {carrier.name}
-                </Link>
-                <StatusBadge status={carrier.status} />
-              </div>
-              {carrier.appointedStates.length > 0 ? (
-                <ul aria-label={`States with ${carrier.name}`} className="flex flex-wrap gap-1">
-                  {carrier.appointedStates.map((code) => (
-                    <StateChip key={code} code={code} />
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-xs text-fg-faint">No states yet</p>
-              )}
-            </li>
-          ))}
-        </ul>
+      <ProfileSection
+        title="Carriers"
+        count={agentCarriers.length}
+        action={
+          carriers.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => setEditor({ mode: "add", agentId: agent.id })}
+              className={ROW_BUTTON_CLASS}
+            >
+              <span aria-hidden="true">+ </span>Add carrier
+              <span className="sr-only"> for {agent.name}</span>
+            </button>
+          ) : null
+        }
+      >
+        {agentCarriers.length === 0 ? (
+          <p className="text-sm text-fg-subtle">Not contracted with any carriers.</p>
+        ) : (
+          <ul className="divide-y divide-line rounded-lg border border-line text-sm">
+            {agentCarriers.map((carrier) => (
+              <li key={carrier.id} className="flex flex-col gap-2 px-4 py-2.5">
+                <div className="flex items-center justify-between gap-4">
+                  <Link href={`/carriers/${carrier.id}`} className="text-fg hover:underline">
+                    {carrier.name}
+                  </Link>
+                  <StatusBadge status={carrier.status} />
+                </div>
+                {carrier.appointedStates.length > 0 ? (
+                  <ul aria-label={`States with ${carrier.name}`} className="flex flex-wrap gap-1">
+                    {carrier.appointedStates.map((code) => (
+                      <StateChip key={code} code={code} />
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-fg-faint">No states yet</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
       </ProfileSection>
 
       <ProfileSection title="Logins" count={logins.length} emptyMessage="No logins recorded.">
@@ -145,6 +258,15 @@ export function AgentProfile({ agent, allAgents, carriers, logins, notes }: Agen
       <ProfileSection title="Notes" count={notes.length}>
         <AgentNotes notes={notes} />
       </ProfileSection>
+
+      {/* Agent locked to this profile: the only option, already chosen. */}
+      <AppointmentDialog
+        editor={editor}
+        agents={[{ id: agent.id, name: agent.name }]}
+        carriers={carriers}
+        onSave={saveContract}
+        onClose={() => setEditor(null)}
+      />
     </ProfileShell>
   );
 }

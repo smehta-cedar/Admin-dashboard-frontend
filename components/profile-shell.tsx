@@ -3,9 +3,9 @@ import type { ReactNode } from "react";
 import { StatusBadge } from "@/components/status-badge";
 
 /*
- * Read-only layout for one entity's profile page: a back link, the title with
- * its status, an identity grid of key–value pairs, then stacked sections for
- * related lists. Server-safe; pass client pieces in as children.
+ * Layout for one entity's profile page: a back link, the title with its status,
+ * an identity grid of key–value pairs, then stacked sections for related lists.
+ * Server-safe; pass client pieces in as children.
  */
 
 type ProfileShellProps = {
@@ -17,10 +17,25 @@ type ProfileShellProps = {
   actions?: ReactNode;
   /** Key–value pairs shown under the title. An empty value shows "—". */
   identity: { label: string; value: ReactNode }[];
+  /**
+   * Sits between the header and the sections, for a profile that can be edited:
+   * a persistent `role="status"` region holding the unsaved banner. Empty when
+   * there is nothing to say, and then it takes no space.
+   */
+  banner?: ReactNode;
   children: ReactNode;
 };
 
-export function ProfileShell({ back, title, status, subtitle, actions, identity, children }: ProfileShellProps) {
+export function ProfileShell({
+  back,
+  title,
+  status,
+  subtitle,
+  actions,
+  identity,
+  banner,
+  children,
+}: ProfileShellProps) {
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -69,6 +84,7 @@ export function ProfileShell({ back, title, status, subtitle, actions, identity,
         </dl>
       </header>
 
+      {banner}
       <div className="space-y-8">{children}</div>
     </>
   );
@@ -80,22 +96,27 @@ type ProfileSectionProps = {
   count?: number;
   /** When set and count is 0, this one quiet line replaces the children. */
   emptyMessage?: string;
+  /** Shown at the end of the title row, e.g. an Add button. */
+  action?: ReactNode;
   children?: ReactNode;
 };
 
-export function ProfileSection({ title, count, emptyMessage, children }: ProfileSectionProps) {
+export function ProfileSection({ title, count, emptyMessage, action, children }: ProfileSectionProps) {
   const empty = emptyMessage !== undefined && count === 0;
 
   return (
     <section>
-      <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-fg-subtle">
-        {title}
-        {count !== undefined ? (
-          <span className="rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium normal-case tracking-normal tabular-nums text-brand-ink">
-            {count}
-          </span>
-        ) : null}
-      </h2>
+      <div className="flex min-h-7 flex-wrap items-center justify-between gap-2">
+        <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-fg-subtle">
+          {title}
+          {count !== undefined ? (
+            <span className="rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium normal-case tracking-normal tabular-nums text-brand-ink">
+              {count}
+            </span>
+          ) : null}
+        </h2>
+        {action}
+      </div>
       {empty ? <p className="mt-2 text-sm text-fg-subtle">{emptyMessage}</p> : <div className="mt-2">{children}</div>}
     </section>
   );
