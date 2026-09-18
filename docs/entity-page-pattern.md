@@ -1,7 +1,7 @@
 # Entity page pattern
 
 How the Agents page is built, written as a reference for the next entity pages
-(Carriers, Rulebook, Logins, Contracts). Reference implementation:
+(Carriers, Rulebook, Logins, Contracts, Users, Agency). Reference implementation:
 
 - [lib/agents.ts](../lib/agents.ts) — types and data access
 - [data/agents.json](../data/agents.json), [data/agent-notes.json](../data/agent-notes.json) — fake data
@@ -42,6 +42,7 @@ Shared pieces (extracted when Carriers landed — use these, don't copy):
 | `components/modal-dialog.tsx` | `useModalDialog(open)` → `{ dialogRef, close }`, `ModalDialog` |
 | `components/classes.ts` | `INPUT_CLASS`, `PRIMARY_BUTTON_CLASS`, `GHOST_BUTTON_CLASS`, `ROW_BUTTON_CLASS`, `TOOLBAR_INPUT_CLASS` |
 | `lib/change-notes.ts` | `nextId`, `fieldText`, `diffValues(FIELDS, before, after, redact?)`, `FieldChange<F>` |
+| `components/license-number.tsx` | `LicenseNumber` (a licensed-state card's number, click to copy, or "No number yet"; agent and agency profiles) |
 
 Constants a client view needs from an entity (like `LINES_OF_BUSINESS`) go in
 a separate client-safe module such as `lib/lines-of-business.ts`, not in the
@@ -598,3 +599,94 @@ Logins-only. The Agent and Carrier status types are unchanged
   the page's props and can be read in developer tools.
 - Supabase plan: don't send passwords with the list. Fetch one login's password
   when it is revealed or copied, from an admin-only query.
+
+### Users
+
+Files: [lib/users.ts](../lib/users.ts), [data/users.json](../data/users.json),
+[app/(dashboard)/users/](../app/(dashboard)/users/) (`users-view.tsx`,
+`user-dialog.tsx`).
+
+The people who sign in. A list only (no profile page); `UserDialog` +
+pure `saveUser` follow the agent-dialog shape.
+
+| Field | Required | Type | Notes |
+| --- | --- | --- | --- |
+| `name` | yes | string | Display name. |
+| `email` | yes | string | What they sign in with. Unique, ignoring case. |
+| `role` | yes | `"admin" \| "staff" \| "agent"` | Default `"staff"` on add. **Stored and shown only** — nothing is gated by it yet; every signed-in user sees the whole app. |
+| `status` | yes | `"active" \| "inactive"` | Inactive users can't sign in (and are signed out on their next request). |
+| `password` | yes | string | Dummy only, like Logins; never trimmed; redacted in notes. |
+| `agentId` | no | string | Only when `role === "agent"`: the `AgentRecord` this user is. Required then, and must exist. |
+
+- Columns: **Name (expands to Notes), Email, Password (masked `CredentialValue`,
+  never sortable or searchable), Role, Status, Linked agent (link to the
+  profile, or —), [actions]**. ID order.
+- Loading: an unknown `role` reads as `"staff"`, an unknown `status` as
+  `"active"` (each with a `console.warn`); an `agentId` on a non-agent role is
+  dropped.
+- Dialog: the Linked agent select renders only while the role is `agent`, so
+  changing the role away from agent clears the link on save. Errors under the
+  field: "Email x already belongs to Y.", "Choose the agent this user signs in
+  as.", "Password can't be blank.".
+- Notes record the linked agent **by name** and the password as
+  `diffValues(FIELDS, before, after, ["password"])` (§Logins).
+
+### Fake session (until Supabase Auth)
+
+Not an entity, but Users is what it signs in against.
+
+- [lib/fake-session.ts](../lib/fake-session.ts) (client-safe): the cookie name
+  `mc-fake-session`, whose value is the user's ID; `setSessionCookie` /
+  `clearSessionCookie` write it from the browser (30 days, `samesite=lax`,
+  **not** HttpOnly or signed — anyone can set it to any ID; it decides only who
+  the app shows as signed in); `SessionUser` (`id, name, email, role`, never the
+  password); `initials`.
+- [lib/session.ts](../lib/session.ts) (server-only): `getSessionUser()` reads
+  the cookie with `cookies()` and resolves it against `getUsers()`; null when
+  missing, unknown, or inactive.
+- [app/login/](../app/login/) sits outside the dashboard group (no shell). The
+  page passes slim `{ id, email, password, status }` rows; the form matches
+  email ignoring case and password exactly, shows "Email or password is wrong."
+  (one message for both, so it doesn't confirm which emails exist) or "That
+  account is inactive.", then sets the cookie and `router.push("/")` +
+  `router.refresh()`. A signed-in visitor to `/login` is redirected to `/`.
+- The **soft gate** is the dashboard layout
+  ([app/(dashboard)/layout.tsx](../app/(dashboard)/layout.tsx)): no session →
+  `redirect("/login")`. Checked on the server so nothing flashes; no
+  middleware/proxy. Reading `cookies()` there makes every dashboard route
+  render per request, which a session needs anyway. The layout passes the
+  `SessionUser` to `AppShell` → `Navbar`, whose avatar menu shows name, email
+  and Sign out (clears the cookie, `router.push("/login")` + `refresh()`).
+- Non-goals for now: Supabase Auth, hashing, HttpOnly cookies, role-based
+  route or field permissions.
+
+### Agency
+
+Files: [lib/agency.ts](../lib/agency.ts), [data/agency.json](../data/agency.json),
+[data/agency-notes.json](../data/agency-notes.json),
+[app/(dashboard)/agency/](../app/(dashboard)/agency/) (`agency-profile.tsx`,
+`agency-dialog.tsx`).
+
+The one org record for this shop: its identity, licence footprint and roster.
+**A singleton**: `data/agency.json` is one object, not an array, so
+`AgencyRecord` has no `id`, `AgencyField` is `keyof AgencyRecord`,
+`AgencyNote` has no `agencyId`, and there is no list page, no back link and no
+add. `getAgency()` returns the object; `getAgencyNotes()` the notes, newest
+first.
+
+- Same producer shape as `AgentRecord` (name, aliases, status, npn,
+  licensedStates, licenseNumbers, email, phone), loaded the same way (states
+  sorted and unique, numbers only for licensed states, `formatPhone`).
+- `AgencyDialog` + pure `saveAgency` are the agent dialog with org labels
+  (`AGENCY_FIELD_LABELS`: "Agency name", "Other names", "Agency NPN", …), edit
+  only. Same "every checked state needs its licence number" check; no NPN
+  uniqueness, since nothing else has an agency NPN.
+- Profile layout mirrors the agent profile: name row (avatar, "Agency"
+  eyebrow, name, status, Edit), header card (NPN / email / phone / other names
+  beside licensed-state cards with `LicenseNumber`), unsaved banner, then
+  **Agents** (read-only table of every agent: name → `/agents/[id]`,
+  licensed-state chips, status; "Manage on Agents →") beside **Notes**.
+- Not a participant in contracts or logins: appointments stay on individual
+  agents. Multi-agency is out of scope.
+- Nav: a footer item pinned to the bottom of the rail and drawer
+  (`footerItems` on `AppShell`).

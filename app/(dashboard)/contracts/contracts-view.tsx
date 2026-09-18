@@ -5,6 +5,7 @@ import { useId, useMemo, useState } from "react";
 import { INPUT_CLASS, PRIMARY_BUTTON_CLASS, ROW_BUTTON_CLASS } from "@/components/classes";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
+import { LicenseNumber } from "@/components/license-number";
 import { NoteList } from "@/components/note-list";
 import { PageHeader } from "@/components/page-header";
 import { MAP_BUCKETS, UsMap } from "@/components/us-map";
@@ -28,7 +29,8 @@ import {
  * counts for an agent at a carrier only when the agent is licensed there
  * (Agents), the carrier is available there (Carriers), and the appointment
  * lists it — a licence alone is not an appointment, and an appointment cannot
- * reach past either ceiling.
+ * reach past either ceiling. The selected state's agency licence number sits
+ * under the state name and copies on click.
  *
  * A map colors each state by how many distinct active agents have at least one
  * appointment there. Picking a state lists the same appointments two ways: By
@@ -58,6 +60,8 @@ type ContractsViewProps = {
   initialNotes: CarrierContractNote[];
   agents: AgentOption[];
   carriers: CarrierOption[];
+  /** The agency's licence number per state code; shown under the selected state. */
+  agencyLicenseNumbers: Record<string, string>;
 };
 
 /** How the selected state's appointments are grouped. */
@@ -143,7 +147,13 @@ const MAP_BOX_HEIGHT = 0.78;
 
 const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
 
-export function ContractsView({ initialContracts, initialNotes, agents, carriers }: ContractsViewProps) {
+export function ContractsView({
+  initialContracts,
+  initialNotes,
+  agents,
+  carriers,
+  agencyLicenseNumbers,
+}: ContractsViewProps) {
   const [contracts, setContracts] = useState(initialContracts);
   const [notes, setNotes] = useState(initialNotes);
   const [unsavedCount, setUnsavedCount] = useState(0);
@@ -475,26 +485,30 @@ export function ContractsView({ initialContracts, initialNotes, agents, carriers
             {selectedName ? (
               <>
                 {/*
-                 * One row: title and counts share a baseline on the left, toggle on
-                 * the right. A long state name truncates rather than wrapping.
+                 * State name, then the agency licence for that state (click to
+                 * copy), then agent/carrier counts. Toggle stays top-right.
                  */}
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex min-w-0 items-baseline gap-x-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
                     <h2
                       id={`${id}-detail-title`}
-                      className="min-w-0 truncate text-base font-semibold text-fg"
+                      className="truncate text-lg font-semibold text-fg"
                     >
                       {selectedName}
                     </h2>
-                    <p role="status" className="shrink-0 whitespace-nowrap text-xs text-fg-muted">
-                      {selectedAgentCount === 1 ? "Agent" : "Agents"}: {selectedAgentCount} |{" "}
-                      {byCarrier.length === 1 ? "Carrier" : "Carriers"}: {byCarrier.length}
-                    </p>
+                    <div className="mt-0.5 flex items-baseline text-xs text-fg-muted">
+                      <LicenseNumber
+                        value={selectedCode ? agencyLicenseNumbers[selectedCode] : undefined}
+                        className="text-xs text-fg-muted"
+                      />
+                    </div>
+
                   </div>
+                  <div>
                   <div
                     role="group"
                     aria-label="Group by"
-                    className="inline-flex shrink-0 rounded-md bg-surface-muted p-0.5 text-xs"
+                    className="inline-flex shrink-0 rounded-md bg-surface-muted p-0.5 text-sm"
                   >
                     {viewOptions.map((option) => (
                       <button
@@ -512,7 +526,11 @@ export function ContractsView({ initialContracts, initialNotes, agents, carriers
                       </button>
                     ))}
                   </div>
-
+                  <p role="status" className="mt-1 text-xs text-fg-muted text-right">
+                      {selectedAgentCount === 1 ? "Agent" : "Agents"}: {selectedAgentCount} |{" "}
+                      {byCarrier.length === 1 ? "Carrier" : "Carriers"}: {byCarrier.length}
+                    </p>
+                    </div>
                 </div>
 
                 {selectedRows.length > 0 ? (
@@ -525,7 +543,7 @@ export function ContractsView({ initialContracts, initialNotes, agents, carriers
                             <span className="min-w-0">{group.title}</span>
                             {stateView === "agent" ? (
                               <span
-                                className={`shrink-0 font-mono text-xs font-normal tabular-nums ${
+                                className={`shrink-0 font-mono text-sm font-normal tabular-nums ${
                                   group.licenseNumber ? "text-fg-muted" : "text-fg-faint"
                                 }`}
                                 title={

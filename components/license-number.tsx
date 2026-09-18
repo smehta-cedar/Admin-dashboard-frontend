@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 
 /**
- * A state's licence number on a profile's licensed-state card: click to copy,
- * with a floating "Copied" / "Couldn't copy" label. No number shows a quiet
- * "No number yet". Used by the agent and agency profiles.
+ * A state's licence number: click to copy, with a floating "Copied" /
+ * "Couldn't copy" label. No number shows a quiet "No number yet". Used by
+ * agent and agency profiles and the Contracts-by-state panel.
  */
-export function LicenseNumber({ value, className }: { value: string | undefined; className: string }) {
+export function LicenseNumber({ value, className }: { value: string | undefined; className?: string }) {
   const [status, setStatus] = useState<"idle" | "copied" | "failed">("idle");
 
   useEffect(() => {
@@ -17,7 +17,9 @@ export function LicenseNumber({ value, className }: { value: string | undefined;
   }, [status]);
 
   if (!value) {
-    return <span className={`text-xs text-fg-faint ${className}`}>No number yet</span>;
+    return (
+      <span className={`font-mono text-xs text-fg-faint ${className ?? ""}`}>No number yet</span>
+    );
   }
 
   const copy = async () => {
@@ -31,12 +33,12 @@ export function LicenseNumber({ value, className }: { value: string | undefined;
   };
 
   return (
-    <span className={`relative inline-flex min-w-0 ${className}`}>
+    <span className="relative inline-flex min-w-0">
       <button
         type="button"
         onClick={copy}
         title={`Licence number ${value} (click to copy)`}
-        className="-mx-1 cursor-pointer truncate rounded-md px-1 py-0.5 font-mono text-xs text-fg hover:bg-surface-hover"
+        className={`-mx-1 cursor-pointer truncate rounded-md px-1 py-0.5 font-mono text-xs text-fg hover:bg-surface-hover ${className ?? ""}`}
       >
         <span className="sr-only">Licence number </span>
         {value}

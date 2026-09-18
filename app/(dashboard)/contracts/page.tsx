@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getAgency } from "@/lib/agency";
 import { getAgents } from "@/lib/agents";
 import { getCarrierContractNotes, getCarrierContracts } from "@/lib/carrier-contracts";
 import { getCarriers } from "@/lib/carriers";
@@ -9,11 +10,12 @@ export const metadata: Metadata = {
 };
 
 export default async function ContractsPage() {
-  const [contracts, notes, agents, carriers] = await Promise.all([
+  const [contracts, notes, agents, carriers, agency] = await Promise.all([
     getCarrierContracts(),
     getCarrierContractNotes(),
     getAgents(),
     getCarriers(),
+    getAgency(),
   ]);
 
   // Where an agent can write needs both ceilings: their own licences and the
@@ -36,6 +38,7 @@ export default async function ContractsPage() {
         status,
         availableStates,
       }))}
+      agencyLicenseNumbers={agency.licenseNumbers}
     />
   );
 }
