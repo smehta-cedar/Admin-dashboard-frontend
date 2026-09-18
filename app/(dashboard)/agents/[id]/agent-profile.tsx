@@ -112,7 +112,7 @@ type AgentProfileProps = {
   initialNotes: AgentNote[];
 };
 
-const CARRIER_COLUMNS = ["Carrier", "Writable states", "Status"];
+const CARRIER_COLUMNS = ["Carrier", "Writing number", "Writable states", "Status"];
 
 /** "Humana", "Humana and UHC", "Humana, UHC and WellCare". */
 function listText(items: string[]) {
@@ -125,15 +125,15 @@ type PendingItem = { key: string; title: string; detail: string; href?: string; 
 
 type PendingInput = {
   agent: AgentRecord;
-  agentCarriers: (CarrierOption & { writable: string[] })[];
+  agentCarriers: (CarrierOption & { writable: string[]; writingNumber: string })[];
   logins: ProfileLogin[];
 };
 
 /**
  * What still needs doing for this agent, worked out from the page's own data:
  * missing licences or licence numbers, appointments that can't write anywhere yet, licensed
- * states no carrier covers, carriers without a login, logins without a
- * contract, and logins still pending.
+ * states no carrier covers, contracts without a writing number, carriers without a login,
+ * logins without a contract, and logins still pending.
  */
 function pendingItems({ agent, agentCarriers, logins }: PendingInput): PendingItem[] {
   const items: PendingItem[] = [];
@@ -183,6 +183,17 @@ function pendingItems({ agent, agentCarriers, logins }: PendingInput): PendingIt
     });
   }
 
+  const withoutNumber = agentCarriers.filter((carrier) => !carrier.writingNumber);
+  if (withoutNumber.length > 0) {
+    items.push({
+      key: "no-writing-number",
+      title: `Add writing number${withoutNumber.length === 1 ? "" : "s"} for ${listText(withoutNumber.map((carrier) => carrier.name))}`,
+      detail: "Contracted, but no producer ID recorded yet.",
+      href: "/contracts",
+      linkLabel: "Contracts",
+    });
+  }
+
   // One line however many carriers, so a new agent's list stays short.
   const withoutLogin = agentCarriers.filter(
     (carrier) => !logins.some((login) => login.carrierId === carrier.id),
@@ -191,7 +202,7 @@ function pendingItems({ agent, agentCarriers, logins }: PendingInput): PendingIt
     items.push({
       key: "no-login",
       title: `Add ${withoutLogin.length === 1 ? "a login" : "logins"} for ${listText(withoutLogin.map((carrier) => carrier.name))}`,
-      detail: "Contracted, but no writing number or portal login recorded.",
+      detail: "Contracted, but no portal login recorded.",
       href: withoutLogin.length === 1 ? `/logins?carrier=${withoutLogin[0].id}` : "/logins",
       linkLabel: "Logins",
     });
@@ -209,10 +220,14 @@ function pendingItems({ agent, agentCarriers, logins }: PendingInput): PendingIt
 
   for (const login of logins) {
     if (login.status === "pending") {
+      const writingNumber =
+        agentCarriers.find((carrier) => carrier.id === login.carrierId)?.writingNumber ?? "";
       items.push({
         key: `pending-${login.id}`,
         title: `${login.partyName} login is pending`,
-        detail: `Writing number ${login.writingNumber || "not set"}. Mark it active once the carrier confirms.`,
+        detail: writingNumber
+          ? `Writing number ${writingNumber}. Mark it active once the carrier confirms.`
+          : "Mark it active once the carrier confirms.",
         href: `/logins?carrier=${login.carrierId}`,
         linkLabel: "Logins",
       });
@@ -255,7 +270,8 @@ export function AgentProfile({
 
   // This agent's carriers, rebuilt from state so a new appointment shows at once.
   // `writable` is what the appointment actually buys them: its states within
-  // this agent's licences and that carrier's footprint.
+  // this agent's licences and that carrier's footprint. `writingNumber` is on
+  // the contract (producer ID), empty when none recorded yet.
   const agentCarriers = contracts
     .filter((contract) => contract.agentId === agent.id)
     .flatMap((contract) => {
@@ -269,6 +285,7 @@ export function AgentProfile({
                 agent.licensedStates,
                 carrier.availableStates,
               ),
+              writingNumber: contract.writingNumber,
             },
           ]
         : [];
@@ -446,17 +463,22 @@ export function AgentProfile({
             >
               {(carrier) => (
                 <>
-                  <td className="px-3 py-2.5 align-middle sm:whitespace-nowrap">
+                  <td className="min-w-0 truncate px-3 py-2.5 align-middle sm:whitespace-nowrap">
                     <Link href={`/carriers/${carrier.id}`} className={PROFILE_LINK_CLASS}>
                       {carrier.name}
                     </Link>
+                  </td>
+                  <td className="min-w-0 truncate px-3 py-2.5 align-middle font-mono text-fg-muted">
+                    {carrier.writingNumber || (
+                      <span className="font-sans text-xs text-fg-faint">No writing number</span>
+                    )}
                   </td>
                   <StateChipCell
                     codes={carrier.writable}
                     label={`States writable with ${carrier.name}`}
                     empty="No states yet"
                   />
-                  <td className="px-3 py-2.5">
+                  <td className="px-3 py-2.5 align-middle">
                     <StatusBadge status={carrier.status} />
                   </td>
                 </>

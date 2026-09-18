@@ -17,7 +17,7 @@ changes live in React state and a refresh throws them away.
 
 1. Write a field table (field, required, type, notes) and agree it before code.
 2. Decide what is *not* a column on the entity and belongs in a related list
-   (e.g. writing numbers are not on Agent; they go with Logins).
+   (e.g. writing numbers are not on Agent; they go with carrier contracts).
 3. Then types → fake JSON → page → add/edit → notes.
 
 ## 2. Files and layers
@@ -356,10 +356,12 @@ Files: [lib/carrier-contracts.ts](../lib/carrier-contracts.ts),
 | `AgentRecord.licenseNumbers` | The licence number each state issued, `{ TX: "2104587" }`. Derived from the same rows; a row whose number is still blank (a pending licence) is left out ("No number yet", and a Pending item). The agent dialog shows a required input per checked state and `saveAgent` rejects a licensed state without a number. Not a ceiling — it never affects writable states | Agents |
 | `CarrierRecord.availableStates` | Carrier footprint: states the carrier is available in for the agency | Carriers |
 | `CarrierContractRecord.appointedStates` | States one agent may write for that carrier, always ⊆ `licensedStates ∩ availableStates` | Contracts (both views) |
+| `CarrierContractRecord.writingNumber` | Producer ID the carrier assigned. Unique within a carrier when set (ignoring case). Empty until recorded | Contracts (both views) |
 
 **An appointment is still what makes an agent contracted; the two ceilings only
 limit it.** A `CarrierContractRecord` is one agent appointed with one carrier,
-with `appointedStates` (state codes). A licence alone never lets an agent write
+with `appointedStates` (state codes) and an optional `writingNumber` (producer
+ID). A licence alone never lets an agent write
 anywhere — there must be an appointment listing the state — and an appointment
 can never reach past either ceiling. So the states an agent can actually write
 with a carrier are
@@ -386,7 +388,10 @@ states than they could otherwise write in.
   (disabled box, muted label, `disabledTitle` tooltip): Select all skips them,
   and they render unchecked with no `name`, so they never submit.
 - One appointment per agent + carrier, checked in the form.
+- Writing number is optional; when set it must be unique within that carrier
+  (ignoring case). Blank numbers are skipped for the uniqueness check.
 - A stored row missing `appointedStates` loads as `[]` with a `console.warn`.
+  A missing `writingNumber` loads as `""`.
 
 **Inactive agents: one rule, every surface.** A contract follows the agent,
 not the agent's status, exactly as it already does for carriers. So wherever
@@ -404,9 +409,9 @@ what is listed; nothing is hidden and no "include inactive" toggle is needed.
 
 **One dialog.** Every add and edit on both pages opens `AppointmentDialog`
 ([contracts/appointment-dialog.tsx](../app/(dashboard)/contracts/appointment-dialog.tsx)):
-agent, carrier and the state checkbox grid. Add starts empty (or with the
+agent, carrier, writing number and the state checkbox grid. Add starts empty (or with the
 agent or carrier it was opened from); Edit starts filled in. `saveAppointment`
-there is the pure save: duplicate check, ceiling check, note diff, next
+there is the pure save: duplicate check, writing-number uniqueness, ceiling check, note diff, next
 contracts and notes. Each view keeps its own state and passes `onSave`, which
 returns an `AppointmentError` (`{ field, message }`) shown under that field.
 
@@ -491,21 +496,23 @@ soft-brand action button ("+ Add carrier"). The agent profile, top to bottom:
   warn left edge.
 - **Panels**, each with a padded body (`p-4 sm:p-5`) so its table or list sits
   inset in its own `rounded-lg border border-line` box, on a 10-column grid
-  from `lg`: Carriers (a table: Carrier, Writable states, Status; "+ Add
-  carrier" in its title row) beside `StateLicensesPanel`, 50/50; then
+  from `lg`: Carriers (a table: Carrier, Writing number, Writable states,
+  Status; writing number from the contract, or "No writing number";
+  "+ Add carrier" in its title row) beside `StateLicensesPanel`, 50/50; then
   `LoginsPanel` beside Notes, 70/30. Below `lg` they stack in that order. No
   sticky rail, no tabs.
 - **Pending** is derived by `pendingItems`, not stored — there are no task
   records yet: no licences, licensed states with no licence number, an appointment with no writable states, licensed
-  states no appointment covers, carriers with no login (one line), a login with
+  states no appointment covers, contracts with no writing number, carriers with no login (one line), a login with
   no contract, and logins whose status is pending. Swap it for real tasks when
   they exist.
 
 The carrier profile (`carrier-profile.tsx`, a client component) follows
 the same layout: name row (initials, name, status, Edit), a header card with
 Carrier ID / aliases / lines of business beside **Available states** as
-`StateChip`s, then panels — Agents (a table: Agent, Writable states, Status)
-beside Notes, and Logins full width under them (`Panel className="xl:col-span-2"`).
+`StateChip`s, then panels — Agents (a table: Agent, Writing number, Writable
+states, Status) beside Notes, and Logins full width under them (`Panel
+className="xl:col-span-2"`).
 Edit opens the shared `CarrierDialog` (same form as the Carriers list) filled
 in from the carrier; saves stay on the page only until refresh, with the same
 unsaved banner as the agent profile. Writable states on agent rows recompute
@@ -563,13 +570,13 @@ carrier via `{ mode: "add", carrierId }`),
 [components/credential-value.tsx](../components/credential-value.tsx).
 
 Logins is the first entity that points at other entities. A login is one
-agent's access at one carrier.
+agent's portal access at one carrier. The writing number (producer ID) lives
+on the carrier contract.
 
 | Field | Required | Type | Notes |
 | --- | --- | --- | --- |
 | `agentId` | yes | string | Shown by agent name. |
 | `carrierId` | yes | string | Shown by carrier name. One login per agent + carrier. |
-| `writingNumber` | yes | string | Producer ID the carrier assigned. Unique within a carrier, ignoring case. |
 | `username` | yes | string | Portal username. |
 | `portalPassword` | yes | string | Portal password, stored exactly as typed. Dummy values only (see Security). |
 | `status` | yes | `"active" \| "pending" \| "inactive"` | Default `"active"` on add. |
@@ -590,7 +597,7 @@ Logins-only. The Agent and Carrier status types are unchanged
 
 **Table.**
 
-- Columns: **Agent, Carrier, Writing number, Portal username, Password, Status, [actions]**.
+- Columns: **Agent, Carrier, Portal username, Password, Status, [actions]**.
   No ID column; agent and carrier show names.
 - Default sort: agent name, then carrier name. Rows are rebuilt from state on
   every render, so an add or edit lands in its sorted place at once.
@@ -628,17 +635,12 @@ Logins-only. The Agent and Carrier status types are unchanged
 
 **Validation.**
 
-- Every field is `required`. Writing number and username are trimmed and use
-  `pattern=".*\S.*"`.
+- Username is trimmed and uses `pattern=".*\S.*"`.
 - The password is **not** trimmed or lowercased and has no `pattern`.
   `onSubmit` rejects it when it is blank after trimming ("Password can't be
   blank."); otherwise it is saved exactly as typed, spaces included.
 - One login per agent + carrier, error under Carrier:
   "Maria Alva already has a login at Humana."
-- Writing number unique within a carrier, ignoring case, error under Writing
-  number: "Writing number H4410087 is already used at Humana by Robt Klein."
-  The number is shown as stored. Skipped when it's the same login the first
-  error names.
 - Messages use agent and carrier names, never IDs.
 
 **Notes.**

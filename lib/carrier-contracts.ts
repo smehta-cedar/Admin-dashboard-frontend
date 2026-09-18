@@ -4,14 +4,17 @@ import "server-only";
  * Data boundary for carrier contracts. Today it reads fake records and notes
  * from data/carrier-contracts.json and data/carrier-contract-notes.json; later
  * it queries Supabase. The JSON is trusted as-is, not validated, except that a
- * record missing appointedStates loads with none (and a console warning).
+ * record missing appointedStates loads with none (and a console warning), and a
+ * missing writingNumber loads as "".
  *
  * A carrier contract (an appointment) says one agent is appointed with one
- * carrier, in the states listed. Presence means contracted, absence means not:
- * there is no contract status. An agent has at most one contract per carrier
+ * carrier, in the states listed, with the writing number (producer ID) the
+ * carrier assigned them. Presence means contracted, absence means not: there
+ * is no contract status. An agent has at most one contract per carrier
  * (enforced in the form for now). Empty appointedStates means appointed
- * nowhere yet, never "every state". Whether the agent is active comes from
- * AgentRecord.status, edited only on Agents.
+ * nowhere yet, never "every state". Empty writingNumber means none recorded
+ * yet. Whether the agent is active comes from AgentRecord.status, edited only
+ * on Agents.
  *
  * appointedStates must be within both ceilings: the agent's licensedStates
  * (lib/agents.ts) and the carrier's availableStates (lib/carriers.ts). The
@@ -21,8 +24,8 @@ import "server-only";
  *
  * An appointment is still what makes an agent contracted — a licence alone
  * never does — so Contracts by state is a view over appointments, narrowed to
- * the states the agent and carrier share. Writing numbers stay with Logins in
- * lib/logins.ts.
+ * the states the agent and carrier share. Portal username and password stay
+ * with Logins in lib/logins.ts.
  */
 
 import contractsJson from "@/data/carrier-contracts.json";
@@ -36,6 +39,11 @@ export type CarrierContractRecord = {
   agentId: AgentRecord["id"];
   /** Unique per agent: one contract for each agent with each carrier. */
   carrierId: CarrierRecord["id"];
+  /**
+   * Producer ID the carrier assigned the agent. Unique within a carrier when
+   * set (ignoring case). Empty when none recorded yet.
+   */
+  writingNumber: string;
   /**
    * US state codes from lib/us-states.ts the agent is appointed in with this
    * carrier. Empty when appointed nowhere yet (not "all states"). Always within
@@ -71,15 +79,16 @@ export type CarrierContractNote = {
   changes: CarrierContractChange[];
 };
 
-/** A contract as the JSON may hold it: older rows have no appointedStates. */
-type StoredCarrierContract = Omit<CarrierContractRecord, "appointedStates"> & {
+/** A contract as the JSON may hold it: older rows may omit writingNumber or appointedStates. */
+type StoredCarrierContract = Omit<CarrierContractRecord, "appointedStates" | "writingNumber"> & {
+  writingNumber?: string;
   appointedStates?: string[];
 };
 
 /**
  * Every carrier contract, in ID order (1, 2, 3, …). A record without
- * appointedStates gets [] (with a console warning naming the contract), so the
- * page still renders it.
+ * appointedStates gets [] (with a console warning naming the contract), and a
+ * missing writingNumber gets "", so the page still renders it.
  */
 export async function getCarrierContracts(): Promise<CarrierContractRecord[]> {
   return (contractsJson as StoredCarrierContract[])
@@ -91,6 +100,7 @@ export async function getCarrierContracts(): Promise<CarrierContractRecord[]> {
       }
       return {
         ...contract,
+        writingNumber: typeof contract.writingNumber === "string" ? contract.writingNumber : "",
         appointedStates: Array.isArray(contract.appointedStates) ? contract.appointedStates : [],
       };
     })

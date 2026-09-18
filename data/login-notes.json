@@ -7,7 +7,6 @@
     "changes": [
       { "field": "agentId", "from": "", "to": "James Carter" },
       { "field": "carrierId", "from": "", "to": "Aetna MA" },
-      { "field": "writingNumber", "from": "", "to": "1829934" },
       { "field": "username", "from": "", "to": "jcarter" },
       { "field": "status", "from": "", "to": "active" }
     ]
@@ -25,7 +24,6 @@
     "kind": "edited",
     "createdAt": "2026-09-08T16:10:00.000Z",
     "changes": [
-      { "field": "writingNumber", "from": "UHC-88310", "to": "UHC-883104" },
       { "field": "username", "from": "malva", "to": "maria.alva" }
     ]
   }

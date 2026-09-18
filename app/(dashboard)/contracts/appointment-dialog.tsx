@@ -20,9 +20,10 @@ import { byName } from "@/lib/text";
  * The one Add / Edit contract dialog, shared by Contracts by carrier and
  * Contracts by state so every entry point (Add contract, a card's add-agent
  * icon, Add carrier, Edit, a state panel line) opens the same form: agent,
- * carrier and a state checkbox grid. Add starts empty or with an agent or
- * carrier picked; Edit starts filled in from the contract. Both check one
- * contract per agent per carrier and record a note of what changed.
+ * carrier, writing number and a state checkbox grid. Add starts empty or with
+ * an agent or carrier picked; Edit starts filled in from the contract. Both
+ * check one contract per agent per carrier, a writing number unique within
+ * that carrier when set, and record a note of what changed.
  *
  * The state grid lists the chosen carrier's whole footprint (availableStates,
  * set on Carriers), but a box is only enabled when the chosen agent is also
@@ -48,18 +49,22 @@ export type AppointmentEditor =
 export type AppointmentValues = Omit<CarrierContractRecord, "id">;
 
 /** A save error, shown under the field it names. */
-export type AppointmentError = { field: "agentId" | "appointedStates"; message: string };
+export type AppointmentError = {
+  field: "agentId" | "writingNumber" | "appointedStates";
+  message: string;
+};
 
 /** Also the order changes are compared and listed in. */
 export const APPOINTMENT_FIELD_LABELS: Record<CarrierContractField, string> = {
   agentId: "Agent",
   carrierId: "Carrier",
+  writingNumber: "Writing number",
   appointedStates: "States",
 };
 
 const FIELDS = Object.keys(APPOINTMENT_FIELD_LABELS) as CarrierContractField[];
 
-const EMPTY_VALUES = { agentId: "", carrierId: "", appointedStates: [] };
+const EMPTY_VALUES = { agentId: "", carrierId: "", writingNumber: "", appointedStates: [] };
 
 /** Unique codes in code order, so a list's order never shows up as a change. */
 export const normalizeStates = (codes: string[]) => [...new Set(codes)].sort();
@@ -91,8 +96,9 @@ type SaveResult =
 /**
  * Adds or edits a contract, pure. Returns the next contracts and notes (a note
  * only when something changed), or an error when the agent already has a
- * contract with that carrier or a state is outside the ceiling — the agent's
- * licensedStates intersected with the carrier's availableStates.
+ * contract with that carrier, a writing number is already used at that carrier
+ * (ignoring case, blank numbers skipped), or a state is outside the ceiling —
+ * the agent's licensedStates intersected with the carrier's availableStates.
  */
 export function saveAppointment({
   contracts,
@@ -117,6 +123,25 @@ export function saveAppointment({
         message: `${agentName(values.agentId)} already has a contract with ${carrierName(values.carrierId)}.`,
       },
     };
+  }
+
+  // Blank means none yet; uniqueness only applies when a number is set.
+  const numberKey = values.writingNumber.toLowerCase();
+  if (numberKey !== "") {
+    const numberOwner = contracts.find(
+      (contract) =>
+        contract.id !== editing?.id &&
+        contract.carrierId === values.carrierId &&
+        contract.writingNumber.toLowerCase() === numberKey,
+    );
+    if (numberOwner) {
+      return {
+        error: {
+          field: "writingNumber",
+          message: `Writing number ${numberOwner.writingNumber} is already used at ${carrierName(values.carrierId)} by ${agentName(numberOwner.agentId)}.`,
+        },
+      };
+    }
   }
 
   // Each half of the ceiling is checked on its own, so the error names the side
@@ -149,6 +174,7 @@ export function saveAppointment({
   const shown = (from: AppointmentValues) => ({
     agentId: agentName(from.agentId),
     carrierId: carrierName(from.carrierId),
+    writingNumber: from.writingNumber,
     appointedStates: normalizeStates(from.appointedStates),
   });
   const changes = diffValues(FIELDS, editing ? shown(editing) : EMPTY_VALUES, shown(values));
@@ -262,6 +288,7 @@ function AppointmentForm({ id, editor, agents, carriers, onSave, close }: Appoin
     .join(" ");
 
   const agentError = error?.field === "agentId" ? error.message : null;
+  const writingNumberError = error?.field === "writingNumber" ? error.message : null;
   const statesError = error?.field === "appointedStates" ? error.message : null;
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -272,6 +299,7 @@ function AppointmentForm({ id, editor, agents, carriers, onSave, close }: Appoin
       {
         agentId: text("agentId"),
         carrierId: text("carrierId"),
+        writingNumber: text("writingNumber"),
         appointedStates: normalizeStates(
           data.getAll("appointedStates").map((code) => String(code).trim()).filter(Boolean),
         ),
@@ -348,6 +376,26 @@ function AppointmentForm({ id, editor, agents, carriers, onSave, close }: Appoin
               </option>
             ))}
           </select>
+        </Field>
+        <Field
+          label="Writing number"
+          htmlFor={`${id}-writing-number`}
+          optional
+          hint={writingNumberError ?? "Producer ID at this carrier."}
+          hintId={`${id}-writing-number-hint`}
+          error={Boolean(writingNumberError)}
+        >
+          <input
+            id={`${id}-writing-number`}
+            name="writingNumber"
+            type="text"
+            autoComplete="off"
+            defaultValue={editing?.writingNumber}
+            aria-invalid={writingNumberError ? true : undefined}
+            aria-describedby={`${id}-writing-number-hint`}
+            onChange={() => setError(null)}
+            className={INPUT_CLASS}
+          />
         </Field>
         <StateCheckboxes
           legend="States"

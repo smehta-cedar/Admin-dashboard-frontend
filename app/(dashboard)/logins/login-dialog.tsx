@@ -12,9 +12,10 @@ import type { LoginField, LoginNote, LoginRecord } from "@/lib/logins";
 import { byName } from "@/lib/text";
 
 /*
- * The one Add / Edit login dialog: agent, carrier, writing number, portal
- * username and password, status. The Logins page opens it from Add login (the
- * carrier pre-picked from its filter) and a row's Edit.
+ * The one Add / Edit login dialog: agent, carrier, portal username and
+ * password, status. Writing numbers live on carrier contracts. The Logins page
+ * opens it from Add login (the carrier pre-picked from its filter) and a row's
+ * Edit.
  *
  * The view owns its logins and notes state and passes `onSave`, which calls
  * `saveLogin` below and sets that state. Adds and edits are dummy: nothing
@@ -27,7 +28,7 @@ export type LoginEditor = { mode: "add"; carrierId?: string } | { mode: "edit"; 
 export type LoginValues = Omit<LoginRecord, "id">;
 
 /** A save error, shown under the field it names. Several can fail at once. */
-export type LoginError = { field: "carrierId" | "writingNumber" | "portalPassword"; message: string };
+export type LoginError = { field: "carrierId" | "portalPassword"; message: string };
 
 export type AgentOption = Pick<AgentRecord, "id" | "name" | "status">;
 export type CarrierOption = Pick<CarrierRecord, "id" | "name" | "status">;
@@ -36,7 +37,6 @@ export type CarrierOption = Pick<CarrierRecord, "id" | "name" | "status">;
 export const LOGIN_FIELD_LABELS: Record<LoginField, string> = {
   agentId: "Agent",
   carrierId: "Carrier",
-  writingNumber: "Writing number",
   username: "Portal username",
   portalPassword: "Password",
   status: "Status",
@@ -44,7 +44,7 @@ export const LOGIN_FIELD_LABELS: Record<LoginField, string> = {
 
 const FIELDS = Object.keys(LOGIN_FIELD_LABELS) as LoginField[];
 
-const EMPTY_VALUES = { agentId: "", carrierId: "", writingNumber: "", username: "", portalPassword: "" };
+const EMPTY_VALUES = { agentId: "", carrierId: "", username: "", portalPassword: "" };
 
 /** Recorded in notes only as "Password changed", never with its value. */
 const REDACTED_FIELDS: LoginField[] = ["portalPassword"];
@@ -75,17 +75,12 @@ type SaveResult =
 /**
  * Adds or edits a login, pure. Returns the next logins and notes (a note only
  * when something changed), or every error to show: a second login for the
- * same agent at the same carrier, a writing number already used at that
- * carrier (ignoring case), and a blank password.
+ * same agent at the same carrier, and a blank password.
  */
 export function saveLogin({ logins, notes, values, editing, agentName, carrierName }: SaveInput): SaveResult {
   const others = logins.filter((login) => login.id !== editing?.id);
   const pairOwner = others.find(
     (login) => login.agentId === values.agentId && login.carrierId === values.carrierId,
-  );
-  const numberKey = values.writingNumber.toLowerCase();
-  const numberOwner = others.find(
-    (login) => login.carrierId === values.carrierId && login.writingNumber.toLowerCase() === numberKey,
   );
 
   // Messages name agents and carriers, never IDs.
@@ -94,14 +89,6 @@ export function saveLogin({ logins, notes, values, editing, agentName, carrierNa
     errors.push({
       field: "carrierId",
       message: `${agentName(values.agentId)} already has a login at ${carrierName(values.carrierId)}.`,
-    });
-  }
-  // Skip when it's the same login the carrier error already names. The number
-  // is shown as stored, which may differ in case from what was typed.
-  if (numberOwner && numberOwner !== pairOwner) {
-    errors.push({
-      field: "writingNumber",
-      message: `Writing number ${numberOwner.writingNumber} is already used at ${carrierName(values.carrierId)} by ${agentName(numberOwner.agentId)}.`,
     });
   }
   // Required, and spaces alone don't count. A valid password is still saved as typed.
@@ -196,7 +183,6 @@ function LoginForm({ id, editor, agents, carriers, onSave, close }: LoginFormPro
     carriers.find((carrier) => carrier.id === carrierId)?.name ?? `Carrier ${carrierId}`;
 
   const carrierError = messageFor("carrierId");
-  const writingNumberError = messageFor("writingNumber");
   const passwordError = messageFor("portalPassword");
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -208,7 +194,6 @@ function LoginForm({ id, editor, agents, carriers, onSave, close }: LoginFormPro
       {
         agentId: text("agentId"),
         carrierId: text("carrierId"),
-        writingNumber: text("writingNumber"),
         username: text("username"),
         // Not trimmed or lowercased: spaces and case can matter in a password.
         portalPassword: String(data.get("portalPassword") ?? ""),
@@ -269,7 +254,7 @@ function LoginForm({ id, editor, agents, carriers, onSave, close }: LoginFormPro
             defaultValue={editor.mode === "edit" ? editor.login.carrierId : (editor.carrierId ?? "")}
             aria-invalid={carrierError ? true : undefined}
             aria-describedby={carrierError ? `${id}-carrier-error` : undefined}
-            onChange={() => clear("carrierId", "writingNumber")}
+            onChange={() => clear("carrierId")}
             className={INPUT_CLASS}
           >
             <option value="">Choose a carrier</option>
@@ -280,27 +265,6 @@ function LoginForm({ id, editor, agents, carriers, onSave, close }: LoginFormPro
               </option>
             ))}
           </select>
-        </Field>
-        <Field
-          label="Writing number"
-          htmlFor={`${id}-writing-number`}
-          hint={writingNumberError ?? undefined}
-          hintId={`${id}-writing-number-error`}
-          error
-        >
-          <input
-            id={`${id}-writing-number`}
-            name="writingNumber"
-            type="text"
-            required
-            pattern=".*\S.*"
-            autoComplete="off"
-            defaultValue={editing?.writingNumber}
-            aria-invalid={writingNumberError ? true : undefined}
-            aria-describedby={writingNumberError ? `${id}-writing-number-error` : undefined}
-            onChange={() => clear("writingNumber")}
-            className={INPUT_CLASS}
-          />
         </Field>
         <Field
           label="Portal username"

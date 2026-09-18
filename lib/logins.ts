@@ -5,9 +5,9 @@ import "server-only";
  * data/logins.json and data/login-notes.json; later it queries Supabase.
  * The JSON is trusted as-is, not validated.
  *
- * A login is one agent's access at one carrier: the writing number (producer
- * ID) the carrier assigned them, and the portal username and password. An
- * agent has at most one login per carrier.
+ * A login is one agent's portal access at one carrier: the portal username
+ * and password. An agent has at most one login per carrier. The writing
+ * number (producer ID) lives on the carrier contract in lib/carrier-contracts.ts.
  *
  * TODO: real passwords only once storage moves to Supabase with admin-only
  * access. data/logins.json is committed to git and must hold dummy values only.
@@ -23,13 +23,11 @@ export type LoginStatus = "active" | "pending" | "inactive";
 const LOGIN_STATUSES: readonly string[] = ["active", "pending", "inactive"] satisfies LoginStatus[];
 
 export type LoginRecord = {
-  /** Internal ID, numbered 1, 2, 3, … for now. Not the writing number. */
+  /** Internal ID, numbered 1, 2, 3, … for now. */
   id: string;
   agentId: AgentRecord["id"];
   /** Unique per agent: one login for each agent at each carrier. */
   carrierId: CarrierRecord["id"];
-  /** Producer ID the carrier assigned the agent. Unique within a carrier (ignoring case). */
-  writingNumber: string;
   /** Carrier portal username. */
   username: string;
   /** Carrier portal password, stored exactly as entered (not trimmed). Dummy values only for now. */

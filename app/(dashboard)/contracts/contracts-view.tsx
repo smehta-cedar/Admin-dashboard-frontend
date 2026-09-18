@@ -123,6 +123,19 @@ const COLUMNS: DataTableColumn<AppointmentRow>[] = [
     searchText: ({ carrier }) => carrier.name,
   },
   {
+    id: "writingNumber",
+    header: "Writing number",
+    cell: ({ contract }) =>
+      contract.writingNumber ? (
+        contract.writingNumber
+      ) : (
+        <span className="text-fg-faint">No writing number</span>
+      ),
+    className: "font-mono text-fg-muted",
+    sortValue: ({ contract }) => contract.writingNumber,
+    searchText: ({ contract }) => contract.writingNumber,
+  },
+  {
     id: "states",
     header: "States",
     cell: ({ states }) => (

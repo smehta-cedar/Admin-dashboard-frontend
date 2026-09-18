@@ -29,7 +29,7 @@ export function StateLicensesPanel({ licenses, className }: StateLicensesPanelPr
           {(license) => (
             <>
               <td
-                className="whitespace-nowrap px-3 py-2.5 align-middle font-mono font-medium text-fg"
+                className="px-3 py-2.5 align-middle font-mono font-medium text-fg"
                 title={US_STATE_NAMES[license.state]}
               >
                 {license.state}
@@ -37,16 +37,16 @@ export function StateLicensesPanel({ licenses, className }: StateLicensesPanelPr
                   <span className="sr-only"> ({US_STATE_NAMES[license.state]})</span>
                 ) : null}
               </td>
-              <td className="whitespace-nowrap px-3 py-2.5 font-mono text-fg-muted">
+              <td className="min-w-0 truncate px-3 py-2.5 align-middle font-mono text-fg-muted">
                 {license.licenseNumber || <span className="text-fg-faint">No number yet</span>}
               </td>
-              <td className="px-3 py-2.5">
+              <td className="px-3 py-2.5 align-middle">
                 <StatusBadge status={license.status} />
               </td>
-              <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">
+              <td className="px-3 py-2.5 align-middle text-fg-muted">
                 <time dateTime={license.startDate}>{formatLicenceDate(license.startDate)}</time>
               </td>
-              <td className="w-full whitespace-nowrap px-3 py-2.5 text-fg-muted">
+              <td className="px-3 py-2.5 align-middle text-fg-muted">
                 <time dateTime={license.endDate}>{formatLicenceDate(license.endDate)}</time>
               </td>
             </>

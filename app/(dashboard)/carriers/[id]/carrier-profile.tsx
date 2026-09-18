@@ -54,6 +54,7 @@ type AgentRow = {
   id: string;
   name: string;
   status: AgentStatus;
+  writingNumber: string;
   /** Raw appointment states; writable is derived against the live footprint. */
   appointedStates: string[];
   licensedStates: string[];
@@ -71,7 +72,7 @@ type CarrierProfileProps = {
   initialNotes: CarrierNote[];
 };
 
-const AGENT_COLUMNS = ["Agent", "Writable states", "Status"];
+const AGENT_COLUMNS = ["Agent", "Writing number", "Writable states", "Status"];
 
 export function CarrierProfile({
   initialCarrier,
@@ -176,17 +177,22 @@ export function CarrierProfile({
             <ProfileTable columns={AGENT_COLUMNS} rows={agentRows} rowKey={(agent) => agent.id}>
               {(agent) => (
                 <>
-                  <td className="px-3 py-2.5 align-middle sm:whitespace-nowrap">
+                  <td className="min-w-0 truncate px-3 py-2.5 align-middle sm:whitespace-nowrap">
                     <Link href={`/agents/${agent.id}`} className={PROFILE_LINK_CLASS}>
                       {agent.name}
                     </Link>
+                  </td>
+                  <td className="min-w-0 truncate px-3 py-2.5 align-middle font-mono text-fg-muted">
+                    {agent.writingNumber || (
+                      <span className="font-sans text-xs text-fg-faint">No writing number</span>
+                    )}
                   </td>
                   <StateChipCell
                     codes={agent.writable}
                     label={`States ${agent.name} can write here`}
                     empty="No states yet"
                   />
-                  <td className="px-3 py-2.5">
+                  <td className="px-3 py-2.5 align-middle">
                     <StatusBadge status={agent.status} />
                   </td>
                 </>

@@ -1,7 +1,7 @@
 [
-  { "id": "1", "agentId": "1", "carrierId": "10", "writingNumber": "H4471902", "username": "malva.agent", "portalPassword": "dummy-pass-1", "status": "active" },
-  { "id": "2", "agentId": "1", "carrierId": "11", "writingNumber": "UHC-883104", "username": "maria.alva", "portalPassword": "dummy-pass-2", "status": "active" },
-  { "id": "3", "agentId": "2", "carrierId": "5", "writingNumber": "1829934", "username": "jcarter", "portalPassword": "dummy-pass-3", "status": "active" },
-  { "id": "4", "agentId": "3", "carrierId": "22", "writingNumber": "MO-552310", "username": "pnatz", "portalPassword": "dummy-pass-4", "status": "pending" },
-  { "id": "5", "agentId": "4", "carrierId": "10", "writingNumber": "H4410087", "username": "bklein", "portalPassword": "dummy-pass-5", "status": "inactive" }
+  { "id": "1", "agentId": "1", "carrierId": "10", "username": "malva.agent", "portalPassword": "dummy-pass-1", "status": "active" },
+  { "id": "2", "agentId": "1", "carrierId": "11", "username": "maria.alva", "portalPassword": "dummy-pass-2", "status": "active" },
+  { "id": "3", "agentId": "2", "carrierId": "5", "username": "jcarter", "portalPassword": "dummy-pass-3", "status": "active" },
+  { "id": "4", "agentId": "3", "carrierId": "22", "username": "pnatz", "portalPassword": "dummy-pass-4", "status": "pending" },
+  { "id": "5", "agentId": "4", "carrierId": "10", "username": "bklein", "portalPassword": "dummy-pass-5", "status": "inactive" }
 ]

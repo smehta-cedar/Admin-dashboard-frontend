@@ -90,14 +90,6 @@ const COLUMNS: DataTableColumn<LoginRow>[] = [
     searchText: ({ carrier }) => carrier,
   },
   {
-    id: "writingNumber",
-    header: "Writing number",
-    cell: ({ login }) => login.writingNumber,
-    className: "font-mono text-fg-muted",
-    sortValue: ({ login }) => login.writingNumber,
-    searchText: ({ login }) => login.writingNumber,
-  },
-  {
     id: "username",
     header: "Portal username",
     cell: ({ login }) => <CredentialValue value={login.username} label="username" />,

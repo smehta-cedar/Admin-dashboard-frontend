@@ -296,7 +296,7 @@ type ProfileTableProps<T> = {
 /**
  * A panel's small table: headings row, then one `<tr>` per row. Paginates when
  * there are more than 5 rows — default page size 5, with 10 and 20 options.
- * The caller renders the cells.
+ * `table-fixed` keeps columns evenly spaced; the caller renders the cells.
  */
 export function ProfileTable<T>({ columns, rows, rowKey, children }: ProfileTableProps<T>) {
   const { pageItems, start, pageSize, setPageSize, currentPage, pageCount, setPage } =
@@ -305,7 +305,7 @@ export function ProfileTable<T>({ columns, rows, rowKey, children }: ProfileTabl
   return (
     <div>
       <div className="overflow-x-auto rounded-lg border border-line">
-        <table className="min-w-full text-left text-sm">
+        <table className="w-full table-fixed text-left text-sm">
           <thead className="bg-surface-muted">
             <tr>
               {columns.map((heading) => (
@@ -345,10 +345,10 @@ type StateChipCellProps = {
   empty: string;
 };
 
-/** A states column cell: chips, or a faint empty-state line. Takes the row's spare width. */
+/** A states column cell: chips, or a faint empty-state line. */
 export function StateChipCell({ codes, label, empty }: StateChipCellProps) {
   return (
-    <td className="w-full px-3 py-2.5">
+    <td className="min-w-0 px-3 py-2.5 align-middle">
       {codes.length > 0 ? (
         <ul aria-label={label} className="flex flex-wrap gap-1">
           {codes.map((code) => (
@@ -374,7 +374,7 @@ type LoginsPanelProps = {
   className?: string;
 };
 
-/** The Logins panel: the other party, writing number, portal username, password and status. */
+/** The Logins panel: the other party, portal username, password and status. */
 export function LoginsPanel({ logins, partyHeading, className }: LoginsPanelProps) {
   return (
     <Panel title="Logins" count={logins.length} className={className}>
@@ -382,7 +382,7 @@ export function LoginsPanel({ logins, partyHeading, className }: LoginsPanelProp
         <PanelEmpty>No logins recorded.</PanelEmpty>
       ) : (
         <ProfileTable
-          columns={[partyHeading, "Writing number", "Portal username", "Password", "Status"]}
+          columns={[partyHeading, "Portal username", "Password", "Status"]}
           rows={logins}
           rowKey={(login) => login.id}
         >
@@ -392,9 +392,6 @@ export function LoginsPanel({ logins, partyHeading, className }: LoginsPanelProp
                 <Link href={login.partyHref} className={PROFILE_LINK_CLASS}>
                   {login.partyName}
                 </Link>
-              </td>
-              <td className="whitespace-nowrap px-3 py-2.5 font-mono text-fg-muted">
-                {login.writingNumber}
               </td>
               <td className="px-3 py-2.5 text-fg-muted">
                 <CredentialValue value={login.username} label="username" />

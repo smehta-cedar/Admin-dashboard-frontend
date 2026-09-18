@@ -17,7 +17,13 @@ import { initials } from "@/lib/text";
 
 type ListAgent = { id: string; name: string; status: "active" | "inactive"; licensedStates: string[] };
 type ListCarrier = { id: string; name: string; availableStates: string[] };
-type ListContract = { id: string; agentId: string; carrierId: string; appointedStates: string[] };
+type ListContract = {
+  id: string;
+  agentId: string;
+  carrierId: string;
+  writingNumber: string;
+  appointedStates: string[];
+};
 
 type AgentCarrierListProps = {
   /** Every agent, sorted by name. */
