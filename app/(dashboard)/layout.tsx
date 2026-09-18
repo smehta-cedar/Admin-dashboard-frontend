@@ -6,6 +6,8 @@ import { getSessionUser } from "@/lib/session";
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Overview", icon: "overview" },
+  // The one org record for this shop; sits beside Agents, the people under it.
+  { href: "/agency", label: "Agency", icon: "agency" },
   {
     href: "/agents",
     label: "Agents",
