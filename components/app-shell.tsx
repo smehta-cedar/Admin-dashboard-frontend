@@ -12,6 +12,8 @@ import { Sidebar, type NavItem } from "./sidebar";
  * below `lg` the same nav in a drawer. The drawer is a native modal <dialog>,
  * which gives us focus trapping, Escape to close, an inert background, and
  * focus restored to the menu button on close.
+ *
+ * Footer items (e.g. Agency) pin to the bottom of the rail and the drawer.
  */
 
 /** Tailwind's `lg` breakpoint. */
@@ -22,12 +24,14 @@ const COLLAPSED_KEY = "sidebar-collapsed";
 type AppShellProps = {
   title: string;
   navItems: NavItem[];
+  /** Pinned to the bottom of the rail and drawer, e.g. Agency. */
+  footerItems?: NavItem[];
   /** The signed-in user, shown in the navbar. */
   user: SessionUser;
   children: ReactNode;
 };
 
-export function AppShell({ title, navItems, user, children }: AppShellProps) {
+export function AppShell({ title, navItems, footerItems = [], user, children }: AppShellProps) {
   const drawerRef = useRef<HTMLDialogElement>(null);
   const drawerId = useId();
   const railId = useId();
@@ -90,6 +94,8 @@ export function AppShell({ title, navItems, user, children }: AppShellProps) {
         onMenuClick={openDrawer}
         drawerId={drawerId}
         railCollapsed={collapsed}
+        onToggleRail={toggleCollapsed}
+        railId={railId}
         user={user}
       />
 
@@ -102,36 +108,18 @@ export function AppShell({ title, navItems, user, children }: AppShellProps) {
             collapsed ? "lg:w-16 lg:overflow-visible" : "lg:w-60 lg:overflow-y-auto"
           }`}
         >
-          {/* Padding matches the Sidebar's own so the hamburger lands on the
-              same x as the nav icons under it. */}
-          <div className={`shrink-0 pt-4 ${collapsed ? "px-2" : "px-3"}`}>
-            <button
-              type="button"
-              onClick={toggleCollapsed}
-              aria-expanded={!collapsed}
-              aria-controls={railId}
-              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              className={`flex w-full items-center rounded-md py-2 text-fg-subtle hover:bg-brand-soft/60 hover:text-fg ${
-                collapsed ? "justify-center px-0" : "px-3"
-              }`}
-            >
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 20 20"
-                className="size-5 shrink-0"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.5}
-                strokeLinecap="round"
-              >
-                <path d="M3 5h14M3 10h14M3 15h14" />
-              </svg>
-            </button>
-          </div>
-          <div className={collapsed ? "overflow-visible" : "flex-1 overflow-y-auto"}>
+          <div className={collapsed ? "overflow-visible" : "min-h-0 flex-1 overflow-y-auto"}>
             <Sidebar items={navItems} collapseChildren collapsed={collapsed} />
           </div>
+          {footerItems.length > 0 ? (
+            <div
+              className={`mt-auto shrink-0 border-t border-line ${
+                collapsed ? "overflow-visible" : ""
+              }`}
+            >
+              <Sidebar items={footerItems} collapseChildren collapsed={collapsed} />
+            </div>
+          ) : null}
         </aside>
         <main id="main" className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
           {children}
@@ -161,13 +149,28 @@ export function AppShell({ title, navItems, user, children }: AppShellProps) {
               aria-label="Close navigation"
               className="-mr-2 rounded-md p-2 text-fg-muted hover:bg-surface-hover hover:text-fg"
             >
-              <svg aria-hidden="true" viewBox="0 0 20 20" className="size-5" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round">
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 20 20"
+                className="size-5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.5}
+                strokeLinecap="round"
+              >
                 <path d="M5 5l10 10M15 5L5 15" />
               </svg>
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto bg-surface-muted">
-            <Sidebar items={navItems} onLinkClick={closeDrawer} />
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-surface-muted">
+            <div className="flex-1">
+              <Sidebar items={navItems} onLinkClick={closeDrawer} />
+            </div>
+            {footerItems.length > 0 ? (
+              <div className="mt-auto border-t border-line">
+                <Sidebar items={footerItems} onLinkClick={closeDrawer} />
+              </div>
+            ) : null}
           </div>
         </div>
       </dialog>

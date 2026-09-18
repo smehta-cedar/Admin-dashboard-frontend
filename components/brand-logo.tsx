@@ -1,6 +1,6 @@
 import Image from "next/image";
 import logoFull from "@/assests/logo-fullcolor.jpg";
-import logoFullOnDark from "@/assests/logo-fullclear.png";
+import logoFullOnDark from "@/assests/logo-fullColorTransparent.png";
 import logoMark from "@/assests/logo.png";
 
 /**

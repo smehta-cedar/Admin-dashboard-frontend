@@ -6,8 +6,6 @@ import { getSessionUser } from "@/lib/session";
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Overview", icon: "overview" },
-  // The one org record for this shop; sits beside Agents, the people under it.
-  { href: "/agency", label: "Agency", icon: "agency" },
   {
     href: "/agents",
     label: "Agents",
@@ -38,6 +36,9 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/users", label: "Users", icon: "users" },
 ];
 
+/** Pinned to the bottom of the rail: the one org record for this shop. */
+const FOOTER_ITEMS: NavItem[] = [{ href: "/agency", label: "Agency", icon: "agency" }];
+
 export default async function DashboardLayout({
   children,
 }: Readonly<{ children: ReactNode }>) {
@@ -48,7 +49,7 @@ export default async function DashboardLayout({
   if (!user) redirect("/login");
 
   return (
-    <AppShell title="" navItems={NAV_ITEMS} user={user}>
+    <AppShell title="" navItems={NAV_ITEMS} footerItems={FOOTER_ITEMS} user={user}>
       {children}
     </AppShell>
   );
