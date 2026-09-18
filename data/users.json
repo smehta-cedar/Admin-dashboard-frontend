@@ -1,0 +1,53 @@
+[
+  {
+    "id": "1",
+    "name": "Luke O",
+    "email": "luke@example.com",
+    "role": "agent",
+    "status": "active",
+    "password": "dummy-pass-1"
+  },
+  {
+    "id": "2",
+    "name": "Michael W",
+    "email": "michael@example.com",
+    "role": "admin",
+    "status": "active",
+    "password": "dummy-pass-2"
+  },
+  {
+    "id": "3",
+    "name": "John M",
+    "email": "john@example.com",
+    "role": "admin",
+    "status": "active",
+    "password": "dummy-pass-3"
+  },
+  {
+    "id": "4",
+    "name": "Jamiah M",
+    "email": "jamiah@example.com",
+    "role": "staff",
+    "status": "active",
+    "password": "dummy-pass-4"
+  },
+  {
+    "id": "5",   
+     "name": "Suz Meh",
+    "email": "sujana@example.com",
+    "role": "admin",
+    "status": "active",
+    "password": "dummy-pass-5",
+    "agentId": "1"
+  },
+  {
+    "id": "6",
+    "name": "James Carter",
+    "email": "jcarter@example.com",
+    "role": "staff",
+    "status": "inactive",
+    "password": "dummy-pass-6",
+    "agentId": "2"
+  }
+
+]

@@ -1,5 +1,8 @@
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { clearSessionCookie, initials, type SessionUser } from "@/lib/fake-session";
 import { BrandLogo } from "./brand-logo";
+import { GHOST_BUTTON_CLASS } from "./classes";
 import { ThemeToggle } from "./theme-toggle";
 
 type NavbarProps = {
@@ -10,9 +13,21 @@ type NavbarProps = {
   drawerId: string;
   /** Mirrors the nav rail so the brand cell stays exactly as wide as it. */
   railCollapsed?: boolean;
+  /** The signed-in user: initials, name and role on the right. */
+  user: SessionUser;
 };
 
-export function Navbar({ title, onMenuClick, drawerId, railCollapsed }: NavbarProps) {
+export function Navbar({ title, onMenuClick, drawerId, railCollapsed, user }: NavbarProps) {
+  const router = useRouter();
+
+  const signOut = () => {
+    clearSessionCookie();
+    // The login page and the dashboard gate both read the cookie on the
+    // server; refresh so no signed-in render is reused.
+    router.push("/login");
+    router.refresh();
+  };
+
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-line bg-surface px-4 sm:px-6 lg:pl-0 lg:pr-8">
       {/* Brand strip; absolute so the bar stays h-14. */}
@@ -55,14 +70,21 @@ export function Navbar({ title, onMenuClick, drawerId, railCollapsed }: NavbarPr
       </span>
       <div className="ml-auto flex items-center gap-2">
         <ThemeToggle />
-        {/* Static placeholder until there is auth. */}
         <span
           aria-hidden="true"
-          className="flex size-8 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand-ink"
+          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand-ink"
         >
-          SM
+          {initials(user.name)}
         </span>
-        <span className="text-sm font-medium text-fg">Sujana</span>
+        {/* Name and role give way to just the avatar on narrow screens. */}
+        <span className="hidden min-w-0 leading-tight sm:block">
+          <span className="block truncate text-sm font-medium text-fg">{user.name}</span>
+          <span className="block text-xs capitalize text-fg-muted">{user.role}</span>
+        </span>
+        <span className="sr-only sm:hidden">Signed in as {user.name}</span>
+        <button type="button" onClick={signOut} className={`${GHOST_BUTTON_CLASS} whitespace-nowrap`}>
+          Sign out
+        </button>
       </div>
     </header>
   );

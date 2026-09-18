@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
+import type { SessionUser } from "@/lib/fake-session";
 import { BrandLogo } from "./brand-logo";
 import { Navbar } from "./navbar";
 import { Sidebar, type NavItem } from "./sidebar";
@@ -21,10 +22,12 @@ const COLLAPSED_KEY = "sidebar-collapsed";
 type AppShellProps = {
   title: string;
   navItems: NavItem[];
+  /** The signed-in user, shown in the navbar. */
+  user: SessionUser;
   children: ReactNode;
 };
 
-export function AppShell({ title, navItems, children }: AppShellProps) {
+export function AppShell({ title, navItems, user, children }: AppShellProps) {
   const drawerRef = useRef<HTMLDialogElement>(null);
   const drawerId = useId();
   const railId = useId();
@@ -82,7 +85,13 @@ export function AppShell({ title, navItems, children }: AppShellProps) {
         Skip to content
       </a>
 
-      <Navbar title={title} onMenuClick={openDrawer} drawerId={drawerId} railCollapsed={collapsed} />
+      <Navbar
+        title={title}
+        onMenuClick={openDrawer}
+        drawerId={drawerId}
+        railCollapsed={collapsed}
+        user={user}
+      />
 
       <div className="lg:flex">
         <aside

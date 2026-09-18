@@ -1,0 +1,33 @@
+[
+  {
+    "id": "1",
+    "userId": "6",
+    "kind": "added",
+    "createdAt": "2026-08-12T14:20:00.000Z",
+    "changes": [
+      { "field": "name", "from": "", "to": "James Carter" },
+      { "field": "email", "from": "", "to": "jcarter@example.com" },
+      { "field": "role", "from": "", "to": "agent" },
+      { "field": "agentId", "from": "", "to": "James Carter" },
+      { "field": "status", "from": "", "to": "active" },
+      { "field": "password", "from": "", "to": "", "redacted": true }
+    ]
+  },
+  {
+    "id": "2",
+    "userId": "4",
+    "kind": "edited",
+    "createdAt": "2026-08-28T17:05:00.000Z",
+    "changes": [{ "field": "status", "from": "active", "to": "inactive" }]
+  },
+  {
+    "id": "3",
+    "userId": "3",
+    "kind": "edited",
+    "createdAt": "2026-09-09T15:40:00.000Z",
+    "changes": [
+      { "field": "email", "from": "lchen@example.com", "to": "lisa.chen@example.com" },
+      { "field": "password", "from": "", "to": "", "redacted": true }
+    ]
+  }
+]

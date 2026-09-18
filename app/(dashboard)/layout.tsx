@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
+import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import type { NavItem } from "@/components/sidebar";
+import { getSessionUser } from "@/lib/session";
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Overview", icon: "overview" },
@@ -31,13 +33,20 @@ const NAV_ITEMS: NavItem[] = [
     // Contracts itself is the by-state view; by-carriers is the one sub-link.
     children: [{ href: "/contracts/by-carriers", label: "By carriers" }],
   },
+  { href: "/users", label: "Users", icon: "users" },
 ];
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: Readonly<{ children: ReactNode }>) {
+  // Soft gate: no valid fake session, no dashboard. Checked on the server so a
+  // signed-out visitor never sees a flash of the app. Not real auth (see
+  // lib/fake-session.ts); Supabase Auth replaces it.
+  const user = await getSessionUser();
+  if (!user) redirect("/login");
+
   return (
-    <AppShell title="" navItems={NAV_ITEMS}>
+    <AppShell title="" navItems={NAV_ITEMS} user={user}>
       {children}
     </AppShell>
   );
