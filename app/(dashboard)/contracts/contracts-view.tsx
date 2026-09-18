@@ -50,7 +50,7 @@ import {
  */
 
 /** An active agent. Inactive agents are never passed in. */
-type AgentOption = Pick<AgentRecord, "id" | "name" | "licensedStates">;
+type AgentOption = Pick<AgentRecord, "id" | "name" | "licensedStates" | "licenseNumbers">;
 type CarrierOption = Pick<CarrierRecord, "id" | "name" | "status" | "availableStates">;
 
 type ContractsViewProps = {
@@ -320,6 +320,8 @@ export function ContractsView({ initialContracts, initialNotes, agents, carriers
       ? byAgent.map(({ item, others }) => ({
           key: item.id,
           title: <Link href={`/agents/${item.id}`} className="hover:underline">{item.name}</Link>,
+          // This state's licence number, on the right of the agent name.
+          licenseNumber: selectedCode ? item.licenseNumbers[selectedCode] : undefined,
           label: `Carriers appointing ${item.name}`,
           chips: others.map(({ contract, carrier, states }) => ({
             id: carrier.id,
@@ -343,6 +345,7 @@ export function ContractsView({ initialContracts, initialNotes, agents, carriers
               ) : null}
             </>
           ),
+          licenseNumber: undefined as string | undefined,
           label: `Agents appointed with ${item.name}`,
           chips: others.map(({ contract, agent, states }) => ({
             id: agent.id,
@@ -518,7 +521,23 @@ export function ContractsView({ initialContracts, initialNotes, agents, carriers
                     <ul className="mt-6 space-y-4 text-sm p-2  ">
                       {selectedGroups.map((group) => (
                         <li key={group.key} className="border-b border-line pb-4 ">
-                          <p className="font-semibold text-fg">{group.title}</p>
+                          <p className="flex items-baseline justify-between gap-3 font-semibold text-fg">
+                            <span className="min-w-0">{group.title}</span>
+                            {stateView === "agent" ? (
+                              <span
+                                className={`shrink-0 font-mono text-xs font-normal tabular-nums ${
+                                  group.licenseNumber ? "text-fg-muted" : "text-fg-faint"
+                                }`}
+                                title={
+                                  group.licenseNumber
+                                    ? `Licence number ${group.licenseNumber}`
+                                    : "No licence number on file for this state"
+                                }
+                              >
+                                {group.licenseNumber ?? "No number yet"}
+                              </span>
+                            ) : null}
+                          </p>
                           <ul aria-label={group.label} className=" pl-4 list-disc" >
                             {group.chips.map((chip) => (
                               // Clicking the line opens Edit; the name link goes to the

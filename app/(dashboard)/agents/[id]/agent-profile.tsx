@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useId, useState } from "react";
+import { EditIcon } from "@/components/edit-icon";
 import {
   Count,
   Detail,
@@ -99,25 +100,6 @@ const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompar
 /** Soft brand fill, so it reads as the one action of its row rather than as row text. */
 const PANEL_BUTTON_CLASS =
   "inline-flex items-center gap-1.5 rounded-md bg-brand-soft px-2.5 py-1 text-sm font-medium text-brand-ink shadow-sm hover:bg-brand-strong hover:text-white";
-
-/** Pencil tip. */
-function EditIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 20 20"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.75}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      <path d="M13.5 3.5 16.5 6.5 7 16H4v-3z" />
-      <path d="M11.5 5.5 14.5 8.5" />
-    </svg>
-  );
-}
 
 /** "Humana", "Humana and UHC", "Humana, UHC and WellCare". */
 function listText(items: string[]) {

@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { NoteList } from "@/components/note-list";
 import type { CarrierNote } from "@/lib/carriers";
-import { FIELD_LABELS } from "../carriers-view";
+import { CARRIER_FIELD_LABELS } from "../carrier-dialog";
 
 const subscribe = () => () => {};
 
@@ -20,5 +20,5 @@ export function CarrierNotes({ notes }: { notes: CarrierNote[] }) {
   );
 
   if (!hydrated) return <p className="text-sm text-fg-subtle">Loading notes…</p>;
-  return <NoteList notes={notes} labels={FIELD_LABELS} />;
+  return <NoteList notes={notes} labels={CARRIER_FIELD_LABELS} />;
 }

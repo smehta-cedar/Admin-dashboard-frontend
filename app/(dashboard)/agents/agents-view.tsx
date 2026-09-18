@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { PRIMARY_BUTTON_CLASS, ROW_BUTTON_CLASS } from "@/components/classes";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
+import { EditIcon } from "@/components/edit-icon";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge, statusRank } from "@/components/status-badge";
@@ -120,8 +121,9 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
           <button
             type="button"
             onClick={() => setEditor({ mode: "edit", agent })}
-            className={ROW_BUTTON_CLASS}
+            className={`inline-flex items-center gap-1.5 ${ROW_BUTTON_CLASS}`}
           >
+            <EditIcon className="size-3.5 shrink-0" />
             Edit<span className="sr-only"> {agent.name}</span>
           </button>
         ),

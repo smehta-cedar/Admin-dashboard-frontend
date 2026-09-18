@@ -308,8 +308,9 @@ copied per view (small, and may diverge): the name toggle button with
 chevron, the unsaved banner, and the aliases section.
 
 Carriers ([app/(dashboard)/carriers/carriers-view.tsx](../app/(dashboard)/carriers/carriers-view.tsx))
-adds two variations on the Agents form: a required checkbox group
-(`<fieldset>` + `<legend>`, "at least one" checked in `onSubmit`, error on
+uses the shared `CarrierDialog` + `saveCarrier` (same component the carrier
+profile opens). Two variations on the Agents form: a required checkbox group
+(`<fieldset>` + `<legend>`, "at least one" checked in `saveCarrier`, error on
 each checkbox via `aria-invalid`/`aria-describedby`), and a name uniqueness
 check against other carriers' names *and* aliases, ignoring case.
 
@@ -448,13 +449,15 @@ Both profiles lay themselves out from the shared pieces in
   no contract, and logins whose status is pending. Swap it for real tasks when
   they exist.
 
-The carrier profile (`carrier-profile.tsx`, still a server component) follows
-the same layout: name row (initials, name, status), a header card with
+The carrier profile (`carrier-profile.tsx`, a client component) follows
+the same layout: name row (initials, name, status, Edit), a header card with
 Carrier ID / aliases / lines of business beside **Available states** as
 `StateChip`s, then panels — Agents (a table: Agent, Writable states, Status)
 beside Notes, and Logins full width under them (`Panel className="xl:col-span-2"`).
-It stays read-only for now; the matching button there would be Add agent in
-the Agents panel's `action` slot.
+Edit opens the shared `CarrierDialog` (same form as the Carriers list) filled
+in from the carrier; saves stay on the page only until refresh, with the same
+unsaved banner as the agent profile. Writable states on agent rows recompute
+from the live `availableStates` after an edit.
 
 **Agents** and **Carriers** each show their own list as a States column
 (`stateSummary`, sorted by count, searchable by code and name) and edit it with

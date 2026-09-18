@@ -24,7 +24,12 @@ export default async function ContractsPage() {
       initialNotes={notes}
       agents={agents
         .filter((agent) => agent.status === "active")
-        .map(({ id, name, licensedStates }) => ({ id, name, licensedStates }))}
+        .map(({ id, name, licensedStates, licenseNumbers }) => ({
+          id,
+          name,
+          licensedStates,
+          licenseNumbers,
+        }))}
       carriers={carriers.map(({ id, name, status, availableStates }) => ({
         id,
         name,
