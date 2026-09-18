@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getAgentStateLicenses } from "@/lib/agent-state-licenses";
 import { getAgentNotes, getAgents } from "@/lib/agents";
 import { AgentsView } from "./agents-view";
 
@@ -7,7 +8,11 @@ export const metadata: Metadata = {
 };
 
 export default async function AgentsPage() {
-  const [agents, notes] = await Promise.all([getAgents(), getAgentNotes()]);
+  const [agents, notes, licenses] = await Promise.all([
+    getAgents(),
+    getAgentNotes(),
+    getAgentStateLicenses(),
+  ]);
 
-  return <AgentsView initialAgents={agents} initialNotes={notes} />;
+  return <AgentsView initialAgents={agents} initialNotes={notes} initialLicenses={licenses} />;
 }

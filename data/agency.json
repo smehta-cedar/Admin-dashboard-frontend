@@ -3,8 +3,6 @@
   "aliases": ["Cedar Grove", "CGSHS"],
   "status": "active",
   "npn": "20987654",
-  "licensedStates": ["AZ", "FL", "GA", "LA", "NM", "TX"],
-  "licenseNumbers": { "AZ": "3001842", "FL": "L127733", "GA": "3411208", "LA": "902114", "NM": "1800021967", "TX": "2450019" },
   "email": "office@example.com",
   "phone": "(555)010-1000"
 }

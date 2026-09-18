@@ -3,9 +3,8 @@ import "server-only";
 /*
  * Data boundary for agents. Today it reads fake agents and notes from
  * data/agents.json and data/agent-notes.json; later it queries Supabase. The
- * JSON is trusted as-is, not validated, except that an agent missing
- * licensedStates loads with none (and a console warning) and phones load in
- * the one display format (lib/phone.ts).
+ * JSON is trusted as-is, not validated, except that phones load in the one
+ * display format (lib/phone.ts).
  *
  * licensedStates is the agent's own resident/non-resident licences: where they
  * may write at all, whoever the carrier. It is one of the two ceilings on an
@@ -14,10 +13,13 @@ import "server-only";
  * and an appointment lists it. Empty means licensed nowhere, never "everywhere".
  *
  * licenseNumbers holds the licence number the state issued, per licensed state.
- * The agent dialog requires one for every licensed state, so a state can't be
- * added without its number. Older rows may still lack one: they load as they
- * are and show "No number yet" until edited. A number for a state the agent
- * isn't licensed in is dropped when the agent loads.
+ *
+ * Neither is stored on the agent. Both are derived here from the agent's
+ * state licence rows (lib/agent-state-licenses.ts, one row per state with
+ * its number, status and dates): every row lists its state, and a row whose
+ * number is still blank (a pending licence) shows "No number yet". The agent
+ * dialog edits those rows, then derives the two fields again the same way
+ * (lib/state-licenses.ts).
  *
  * Writing numbers are not stored on agents or carriers. They live with
  * Logins in lib/logins.ts (one agent's producer ID at one carrier).
@@ -28,7 +30,9 @@ import "server-only";
 
 import agentsJson from "@/data/agents.json";
 import notesJson from "@/data/agent-notes.json";
+import { getAgentStateLicenses, type AgentStateLicenseRecord } from "@/lib/agent-state-licenses";
 import { formatPhone } from "@/lib/phone";
+import { licenseNumbersOf, licensedStatesOf } from "@/lib/state-licenses";
 
 export type AgentStatus = "active" | "inactive";
 
@@ -44,11 +48,12 @@ export type AgentRecord = {
   /**
    * US state codes from lib/us-states.ts the agent holds a licence in, unique
    * and in code order. Empty when licensed nowhere yet (not "all states").
+   * Derived from the agent's state licence rows, never stored.
    */
   licensedStates: string[];
   /**
-   * Licence number by state code, for states in licensedStates only. Required
-   * per licensed state when saving; only older rows can be missing an entry.
+   * Licence number by state code, for states in licensedStates only. Derived
+   * from the rows too; a state whose licence has no number yet is left out.
    */
   licenseNumbers: Record<string, string>;
   /** National Producer Number. Unique across agents. */
@@ -82,47 +87,36 @@ export type AgentNote = {
   changes: AgentChange[];
 };
 
-/** An agent as the JSON may hold it: older rows have no licensedStates or licenseNumbers. */
-type StoredAgent = Omit<AgentRecord, "licensedStates" | "licenseNumbers"> & {
-  licensedStates?: string[];
-  /** Partial: the JSON lists different states per agent. */
-  licenseNumbers?: Partial<Record<string, string>>;
-};
+/** An agent as the JSON holds it: without the two fields derived from licence rows. */
+type StoredAgent = Omit<AgentRecord, "licensedStates" | "licenseNumbers">;
 
 /**
- * A stored agent with licensedStates unique and in code order, and the phone
- * in the display format. Missing licensedStates becomes [] (with a console
- * warning naming the agent). licenseNumbers keeps only non-blank numbers for
- * licensed states, in code order; missing becomes {}.
+ * A stored agent with the phone in the display format and licensedStates /
+ * licenseNumbers derived from their licence rows (`licenses` may hold every
+ * agent's; only this agent's are read).
  */
-function toRecord(agent: StoredAgent): AgentRecord {
-  if (!Array.isArray(agent.licensedStates)) {
-    console.warn(`Agent ${agent.id} has no licensedStates; treating them as licensed in no states.`);
-  }
-  const states = [...new Set(Array.isArray(agent.licensedStates) ? agent.licensedStates : [])].sort();
-  const numbers = agent.licenseNumbers ?? {};
+function toRecord(agent: StoredAgent, licenses: AgentStateLicenseRecord[]): AgentRecord {
+  const own = licenses.filter((license) => license.agentId === agent.id);
   return {
     ...agent,
     phone: formatPhone(agent.phone),
-    licensedStates: states,
-    licenseNumbers: Object.fromEntries(
-      states.flatMap((code) => {
-        const number = (numbers[code] ?? "").trim();
-        return number ? [[code, number]] : [];
-      }),
-    ),
+    licensedStates: licensedStatesOf(own),
+    licenseNumbers: licenseNumbersOf(own),
   };
 }
 
 /** Every agent, active and inactive, in ID order (1, 2, 3, …). */
 export async function getAgents(): Promise<AgentRecord[]> {
-  return (agentsJson as StoredAgent[]).map(toRecord).sort((a, b) => Number(a.id) - Number(b.id));
+  const licenses = await getAgentStateLicenses();
+  return (agentsJson as StoredAgent[])
+    .map((agent) => toRecord(agent, licenses))
+    .sort((a, b) => Number(a.id) - Number(b.id));
 }
 
 /** One agent by internal ID, or null when there is none. */
 export async function getAgent(id: string): Promise<AgentRecord | null> {
   const agent = (agentsJson as StoredAgent[]).find((stored) => stored.id === id);
-  return agent ? toRecord(agent) : null;
+  return agent ? toRecord(agent, await getAgentStateLicenses()) : null;
 }
 
 /** Every agent note, newest first. */

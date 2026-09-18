@@ -9,14 +9,21 @@ import {
   type ProducerLabels,
 } from "@/components/producer-form";
 import type { AgencyField, AgencyNote, AgencyRecord } from "@/lib/agency";
+import type { AgencyStateLicenseRecord } from "@/lib/agency-state-licenses";
 import { diffValues, nextId } from "@/lib/change-notes";
+import { applyLicenceEdits, licenseNumbersOf, licensedStatesOf } from "@/lib/state-licenses";
 
 /*
  * The Edit agency dialog: the shared ProducerForm (components/producer-form.tsx)
  * with org-flavoured labels — name, DBA names, status, agency NPN, email,
  * phone, licensed states and the licence number for each checked state. Edit
- * only: there is one agency, so nothing is ever added. The agency profile owns
- * the agency and notes state and passes `onSave`, which calls `saveAgency`
+ * only: there is one agency, so nothing is ever added.
+ *
+ * The states and numbers the form edits are the agency's state licence rows
+ * (lib/agency-state-licenses.ts): `saveAgency` updates those rows and derives
+ * the saved agency's licensedStates / licenseNumbers from them, the way
+ * lib/agency.ts does when it loads. The agency profile owns the agency,
+ * licence rows and notes state and passes `onSave`, which calls `saveAgency`
  * below. Edits are dummy: nothing reaches a server, and a refresh brings back
  * the JSON.
  */
@@ -51,6 +58,8 @@ const FORM_LABELS: ProducerLabels = {
 type SaveInput = {
   /** Every agency note, so the new note's ID is unique. */
   notes: AgencyNote[];
+  /** The agency's licence rows (all of them are its own). */
+  licenses: AgencyStateLicenseRecord[];
   values: AgencyValues;
   /** The agency as it was when the dialog opened. */
   editing: AgencyRecord;
@@ -65,26 +74,42 @@ type SaveResult =
       /** False when the edit changed nothing: no new note. */
       changed: boolean;
       notes: AgencyNote[];
+      /** The licence rows after the save. */
+      licenses: AgencyStateLicenseRecord[];
     };
 
 /**
- * Edits the agency, pure. Returns the saved agency and the next notes (a note
- * only when something changed), or the error to show: a licensed state with
- * no licence number. There is no uniqueness check: nothing else has an agency NPN.
+ * Edits the agency, pure. Returns the saved agency, the next licence rows and
+ * the next notes (a note only when something changed), or the error to show:
+ * a licensed state with no licence number. There is no uniqueness check:
+ * nothing else has an agency NPN.
  */
-export function saveAgency({ notes, values, editing }: SaveInput): SaveResult {
+export function saveAgency({ notes, licenses, values, editing }: SaveInput): SaveResult {
   // The inputs are required too; this holds for any caller.
   const unnumbered = unnumberedStatesError(values);
   if (unnumbered) return { error: { ...unnumbered, field: "licenseNumbers" }, agency: null };
 
-  const changes = diffValues(FIELDS, producerNoteValues(editing), producerNoteValues(values));
+  // The licence rows are the truth; the agency's two fields are read back from them.
+  const nextLicenses = applyLicenceEdits({
+    rows: licenses,
+    isOwn: () => true,
+    values,
+    own: (license) => license,
+  });
+  const saved: AgencyRecord = {
+    ...values,
+    licensedStates: licensedStatesOf(nextLicenses),
+    licenseNumbers: licenseNumbersOf(nextLicenses),
+  };
+  const changes = diffValues(FIELDS, producerNoteValues(editing), producerNoteValues(saved));
   // Saving with nothing changed just closes, without a note.
-  if (changes.length === 0) return { error: null, agency: values, changed: false, notes };
+  if (changes.length === 0) return { error: null, agency: saved, changed: false, notes, licenses };
 
   return {
     error: null,
-    agency: values,
+    agency: saved,
     changed: true,
+    licenses: nextLicenses,
     notes: [
       { id: nextId(notes), kind: "edited", createdAt: new Date().toISOString(), changes },
       ...notes,

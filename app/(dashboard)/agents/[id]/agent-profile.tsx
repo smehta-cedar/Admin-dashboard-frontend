@@ -1,24 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { EntitySwitcher } from "@/components/entity-switcher";
 import { HydratedNoteList } from "@/components/hydrated-note-list";
 import {
-  LicenseCards,
+  Count,
+  Detail,
   LoginsPanel,
   Panel,
   PanelEmpty,
-  ProducerDetails,
   PROFILE_BUTTON_CLASS,
   PROFILE_LINK_CLASS,
   ProfileBackLink,
-  ProfileHeader,
   ProfileNameRow,
   ProfileTable,
   StateChipCell,
   type ProfileLogin,
 } from "@/components/profile-shell";
+import { StateLicensesPanel } from "@/components/state-licenses-panel";
 import { StatusBadge } from "@/components/status-badge";
 import { UnsavedBanner } from "@/components/unsaved-banner";
 import type { AgentStateLicenseRecord } from "@/lib/agent-state-licenses";
@@ -28,7 +28,7 @@ import type {
   CarrierContractRecord,
 } from "@/lib/carrier-contracts";
 import type { CarrierRecord } from "@/lib/carriers";
-import { US_STATE_NAMES, writableStates } from "@/lib/us-states";
+import { writableStates } from "@/lib/us-states";
 import { byName } from "@/lib/text";
 import { AppointmentDialog } from "../../contracts/appointment-dialog";
 import { useAppointments } from "../../contracts/use-appointments";
@@ -48,26 +48,35 @@ import {
  * here: the agent's own fields (Edit opens the same AgentDialog as the Agents
  * list) and appointing this agent to a carrier.
  *
- * Layout, from the shared pieces in components/profile-shell.tsx: the name row
- * (initials, name, status, Edit) sits above one header card holding the
- * contact details and the licensed states, one small card per state: the code
- * beside its licence number (the state's name is the tooltip). Below it two
- * rows of two panels on wide screens: Carriers beside Pending, then Logins
- * beside Notes. They stack otherwise.
+ * Layout, from the shared pieces in components/profile-shell.tsx, top to
+ * bottom — no tabs and no sticky rail:
  *
- * States show in two places. "Licensed states" is the agent's own licences
- * (AgentRecord.licensedStates): where they may write at all, whoever the
- * carrier, each with the licence number that state issued
- * (AgentRecord.licenseNumbers) or "No number yet". Each carrier row then lists
- * where they can actually write with that carrier — a state counts only when
- * it is licensed, inside the carrier's footprint, and listed on the
- * appointment. There is no combined list across carriers. Carrier names link
- * to their profiles.
+ *   name row        — initials, name, status, Edit; not in a card
+ *   identity card | attention column (3/5 | 2/5 from `lg`)
+ *                   — the card lists contact fields as label / value rows
+ *                     (NPN, email, phone, aliases — filled fields only). The
+ *                     column holds the unsaved banner (only once something was
+ *                     changed) and the Pending strip (only when something is
+ *                     pending; no empty state, absence is the good news).
+ *                     While the column is empty the card takes the whole row
+ *   Carriers | State licences (50/50 from `lg`)
+ *                   — what the page is opened for, beside the licences that
+ *                     bound it
+ *   Logins | Notes (70/30 from `lg`)
+ *                   — the wide logins table beside the audit trail
  *
- * The State licences panel is the same licences as rows from
- * lib/agent-state-licenses.ts (number, status, start and end dates). It is
- * read-only for now and loaded once by page.tsx, so an Edit here that changes
- * licensedStates updates the header cards but not this table until refresh.
+ * Below `lg` everything stacks in that reading order: name, identity,
+ * unsaved banner, Pending, Carriers, State licences, Logins, Notes.
+ *
+ * States show in two places. The State licences panel is the agent's own
+ * licences as rows (lib/agent-state-licenses.ts: number, status, start and end
+ * dates): where they may write at all, whoever the carrier. The rows are the
+ * truth; AgentRecord.licensedStates and licenseNumbers are derived from them,
+ * so an Edit that checks or unchecks a state changes both at once
+ * (saveAgent). Each carrier row then lists where they can
+ * actually write with that carrier — a state counts only when it is licensed,
+ * inside the carrier's footprint, and listed on the appointment. There is no
+ * combined list across carriers. Carrier names link to their profiles.
  *
  * Pending is worked out from what is on the page, not stored: there are no
  * task records yet. See `pendingItems`.
@@ -95,8 +104,8 @@ type AgentProfileProps = {
   initialContracts: CarrierContractRecord[];
   /** Every contract note, newest first. Not shown here; new ones are still recorded. */
   initialContractNotes: CarrierContractNote[];
-  /** This agent's state licences, in ID order. Read-only here. */
-  stateLicenses: AgentStateLicenseRecord[];
+  /** Every agent's licence rows, in ID order: new row IDs need them all. Only this agent's are shown. */
+  initialLicenses: AgentStateLicenseRecord[];
   /** This agent's logins, the carrier as the party, sorted by carrier name. */
   logins: ProfileLogin[];
   /** Every agent's notes, newest first: new note IDs need them all. Only this agent's are shown. */
@@ -104,22 +113,6 @@ type AgentProfileProps = {
 };
 
 const CARRIER_COLUMNS = ["Carrier", "Writable states", "Status"];
-
-const LICENSE_COLUMNS = ["State", "Licence #", "Status", "Start", "End"];
-
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-/**
- * "2024-01-15" → "Jan 15, 2024", read straight from the string so the server
- * and the browser agree whatever their timezones. Anything else is shown as is.
- */
-function formatDate(date: string) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-  if (!match) return date;
-  const [, year, month, day] = match;
-  const monthName = MONTHS[Number(month) - 1];
-  return monthName ? `${monthName} ${Number(day)}, ${year}` : date;
-}
 
 /** "Humana", "Humana and UHC", "Humana, UHC and WellCare". */
 function listText(items: string[]) {
@@ -235,14 +228,16 @@ export function AgentProfile({
   carriers,
   initialContracts,
   initialContractNotes,
-  stateLicenses,
+  initialLicenses,
   logins,
   initialNotes,
 }: AgentProfileProps) {
   const [agent, setAgent] = useState(initialAgent);
   const [allNotes, setAllNotes] = useState(initialNotes);
+  const [allLicenses, setAllLicenses] = useState(initialLicenses);
   const [unsavedCount, setUnsavedCount] = useState(0);
   const [agentEditor, setAgentEditor] = useState<AgentEditor | null>(null);
+  const pendingHeadingId = useId();
   // The dialog locks the agent to this profile, so the live agent is the only
   // lookup it needs; an edited name or licence list is read at save time.
   const { contracts, editor, setEditor, saveContract } = useAppointments({
@@ -256,6 +251,7 @@ export function AgentProfile({
   // An edit here shows at once in the switcher too.
   const agents = allAgents.map((other) => (other.id === agent.id ? agent : other));
   const notes = allNotes.filter((note) => note.agentId === agent.id);
+  const licenses = allLicenses.filter((license) => license.agentId === agent.id);
 
   // This agent's carriers, rebuilt from state so a new appointment shows at once.
   // `writable` is what the appointment actually buys them: its states within
@@ -280,21 +276,69 @@ export function AgentProfile({
     .sort(byName);
 
   const pending = pendingItems({ agent, agentCarriers, logins });
+  const hasAside = unsavedCount > 0 || pending.length > 0;
+
+  // Contact rows: only the fields that are filled in.
+  const metaLinkClass = "hover:text-brand-ink hover:underline";
+  const meta: { key: string; label: string; value: ReactNode }[] = [];
+  if (agent.npn) {
+    meta.push({
+      key: "npn",
+      label: AGENT_FIELD_LABELS.npn,
+      value: <span className="font-mono">{agent.npn}</span>,
+    });
+  }
+  if (agent.email) {
+    meta.push({
+      key: "email",
+      label: AGENT_FIELD_LABELS.email,
+      value: (
+        <a href={`mailto:${agent.email}`} className={metaLinkClass}>
+          {agent.email}
+        </a>
+      ),
+    });
+  }
+  if (agent.phone) {
+    meta.push({
+      key: "phone",
+      label: AGENT_FIELD_LABELS.phone,
+      value: (
+        <a href={`tel:${agent.phone}`} className={metaLinkClass}>
+          {agent.phone}
+        </a>
+      ),
+    });
+  }
+  if (agent.aliases.length > 0) {
+    meta.push({
+      key: "aliases",
+      label: AGENT_FIELD_LABELS.aliases,
+      value: agent.aliases.join(", "),
+    });
+  }
 
   /** Edits this agent. Returns the dialog's error, if any. */
   const saveAgentEdit = (values: AgentValues): AgentError | null => {
-    const result = saveAgent({ agents, notes: allNotes, values, editing: agent });
+    const result = saveAgent({
+      agents,
+      notes: allNotes,
+      licenses: allLicenses,
+      values,
+      editing: agent,
+    });
     if (result.error !== null) return result.error;
     if (!result.changed) return null;
 
     setAgent(result.agent);
+    setAllLicenses(result.licenses);
     setAllNotes(result.notes);
     setUnsavedCount((count) => count + 1);
     return null;
   };
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="mx-auto max-w-7xl pb-12">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ProfileBackLink href="/agents" label="Agents" />
         <EntitySwitcher
@@ -311,66 +355,72 @@ export function AgentProfile({
         onEdit={() => setAgentEditor({ mode: "edit", agent })}
       />
 
-      <ProfileHeader
-        details={
-          <ProducerDetails
-            npn={agent.npn}
-            email={agent.email}
-            phone={agent.phone}
-            aliases={agent.aliases}
-            aliasesLabel="Aliases"
-          />
-        }
-        asideTitle="Licensed states"
-        asideCount={agent.licensedStates.length}
-        asideTooltip="Personal licences, whoever the carrier."
-      >
-        <LicenseCards
-          codes={agent.licensedStates}
-          numbers={agent.licenseNumbers}
-          empty="No licences recorded, so this agent can't write anywhere yet."
-        />
-      </ProfileHeader>
-
-      <UnsavedBanner count={unsavedCount} className="mt-4" />
-
-      <div className="mt-5 grid items-start gap-5 xl:grid-cols-2">
-        <Panel title="State licences" count={stateLicenses.length} className="xl:col-span-2">
-          {stateLicenses.length === 0 ? (
-            <PanelEmpty>No state licences recorded.</PanelEmpty>
+      {/*
+       * Identity card beside the attention column (unsaved banner, Pending).
+       * The card takes the full row while that column is empty; the column
+       * itself always renders, so the banner's status region stays mounted.
+       */}
+      <div className="mt-4 grid items-start gap-x-5 lg:grid-cols-6">
+        <section
+          aria-label="Contact details"
+          className={`min-w-0 rounded-2xl mt-3 px-5 py-4 sm:px-6 ${hasAside ? "lg:col-span-3" : "lg:col-span-3"}`}
+        >
+          {meta.length > 0 ? (
+            <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] content-start items-baseline gap-x-6 gap-y-2.5">
+              {meta.map((item) => (
+                <Detail key={item.key} label={item.label}>
+                  {item.value}
+                </Detail>
+              ))}
+            </dl>
           ) : (
-            <ProfileTable
-              columns={LICENSE_COLUMNS}
-              rows={stateLicenses}
-              rowKey={(license) => license.id}
-            >
-              {(license) => (
-                <>
-                  <td className="whitespace-nowrap px-3 py-2.5 align-middle">
-                    <span className="font-mono font-medium text-fg">{license.state}</span>
-                    {US_STATE_NAMES[license.state] ? (
-                      <span className="ml-2 text-fg-muted">{US_STATE_NAMES[license.state]}</span>
-                    ) : null}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 font-mono text-fg-muted">
-                    {license.licenseNumber || <span className="text-fg-faint">No number yet</span>}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <StatusBadge status={license.status} />
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">
-                    <time dateTime={license.startDate}>{formatDate(license.startDate)}</time>
-                  </td>
-                  <td className="w-full whitespace-nowrap px-3 py-2.5 text-fg-muted">
-                    <time dateTime={license.endDate}>{formatDate(license.endDate)}</time>
-                  </td>
-                </>
-              )}
-            </ProfileTable>
+            <p className="text-sm text-fg-subtle">No contact details recorded.</p>
           )}
-        </Panel>
+        </section>
 
+        <div className="min-w-0 lg:col-span-3">
+          <UnsavedBanner count={unsavedCount} className="mt-4 lg:mt-0" />
+
+          {/* Attention strip: only there when something needs doing. */}
+          {pending.length > 0 ? (
+            <section
+              aria-labelledby={pendingHeadingId}
+              className={unsavedCount > 0 ? "mt-4" : "mt-4 lg:mt-0"}
+            >
+              <h2
+                id={pendingHeadingId}
+                className="flex items-center gap-2 text-sm font-semibold text-fg"
+              >
+                Pending
+                <Count value={pending.length} />
+              </h2>
+              <ul className="mt-2 divide-y divide-line overflow-hidden rounded-lg border border-line border-l-2 border-l-warn-ink bg-surface">
+                {pending.map((item) => (
+                  <li key={item.key} className="flex items-start justify-between gap-3 px-3.5 py-2.5">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-fg">{item.title}</p>
+                      <p className="mt-0.5 text-xs leading-relaxed text-fg-muted">{item.detail}</p>
+                    </div>
+                    {item.href ? (
+                      <Link
+                        href={item.href}
+                        className="shrink-0 whitespace-nowrap text-xs font-medium text-brand-ink hover:underline"
+                      >
+                        {item.linkLabel}
+                      </Link>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="mt-5 grid items-start gap-5 lg:grid-cols-10">
+        {/* Row one, 50/50: the primary work beside the licences it depends on. */}
         <Panel
+          className="lg:col-span-5"
           title="Carriers"
           count={agentCarriers.length}
           action={
@@ -415,39 +465,12 @@ export function AgentProfile({
           )}
         </Panel>
 
-        <Panel title="Pending" count={pending.length}>
-          {pending.length === 0 ? (
-            <PanelEmpty>Nothing pending. Licences, contracts and logins all line up.</PanelEmpty>
-          ) : (
-            <ul className="divide-y divide-line rounded-lg border border-line text-sm">
-              {pending.map((item) => (
-                <li key={item.key} className="flex items-start gap-3 px-4 py-3">
-                  <span
-                    aria-hidden="true"
-                    className="mt-1.5 size-2 shrink-0 rounded-full bg-warn-ink"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-fg">{item.title}</p>
-                    <p className="mt-0.5 text-xs text-fg-muted">{item.detail}</p>
-                  </div>
-                  {item.href ? (
-                    <Link
-                      href={item.href}
-                      className="shrink-0 whitespace-nowrap text-xs font-medium text-brand-ink hover:underline"
-                    >
-                      {item.linkLabel}
-                      <span aria-hidden="true"> →</span>
-                    </Link>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
+        <StateLicensesPanel licenses={licenses} className="lg:col-span-5" />
 
-        <LoginsPanel logins={logins} partyHeading="Carrier" />
+        {/* Row two, 70/30: the wide logins table beside the audit trail. */}
+        <LoginsPanel logins={logins} partyHeading="Carrier" className="lg:col-span-7" />
 
-        <Panel title="Notes" count={notes.length}>
+        <Panel title="Notes" count={notes.length} className="lg:col-span-3">
           {/* Cancels NoteList's own top margin; the panel body already pads. */}
           <div className="-mt-2">
             <HydratedNoteList notes={notes} labels={AGENT_FIELD_LABELS} />

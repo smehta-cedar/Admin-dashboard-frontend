@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge, statusRank } from "@/components/status-badge";
 import { UnsavedBanner } from "@/components/unsaved-banner";
+import type { AgentStateLicenseRecord } from "@/lib/agent-state-licenses";
 import type { AgentNote, AgentRecord } from "@/lib/agents";
 import { phoneDigits } from "@/lib/phone";
 import { AgentDialog, saveAgent, type AgentEditor, type AgentError, type AgentValues } from "./agent-dialog";
@@ -20,19 +21,24 @@ import { AgentDialog, saveAgent, type AgentEditor, type AgentError, type AgentVa
  * by search.
  * A name links to the agent's profile, which shows their aliases, notes and
  * state licences; rows don't expand and the list has no states column, so
- * search doesn't cover states either. Agents and notes live in component
- * state only: nothing reaches a server, and a refresh brings back the JSON.
+ * search doesn't cover states either. The dialog's licensed states and
+ * numbers are the agent's licence rows, which saveAgent edits, so those are
+ * kept here too. Agents, licence rows and notes live in component state only:
+ * nothing reaches a server, and a refresh brings back the JSON.
  */
 
 type AgentsViewProps = {
   initialAgents: AgentRecord[];
   initialNotes: AgentNote[];
+  /** Every agent's licence rows: the dialog edits them and new row IDs need them all. */
+  initialLicenses: AgentStateLicenseRecord[];
 };
 
-export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
+export function AgentsView({ initialAgents, initialNotes, initialLicenses }: AgentsViewProps) {
   const [agents, setAgents] = useState(initialAgents);
-  // Not shown here (the profile lists notes); new ones are still recorded.
+  // Neither shown here (the profile lists both); edits still keep them current.
   const [notes, setNotes] = useState(initialNotes);
+  const [licenses, setLicenses] = useState(initialLicenses);
   const [unsavedCount, setUnsavedCount] = useState(0);
   const [editor, setEditor] = useState<AgentEditor | null>(null);
 
@@ -116,7 +122,7 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
   /** Adds or edits an agent. Returns the dialog's error, if any. */
   const handleSave = (values: AgentValues): AgentError | null => {
     const editing = editor?.mode === "edit" ? editor.agent : undefined;
-    const result = saveAgent({ agents, notes, values, editing });
+    const result = saveAgent({ agents, notes, licenses, values, editing });
     if (result.error !== null) return result.error;
     if (!result.changed) return null;
 
@@ -124,6 +130,7 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
     setAgents((current) =>
       editing ? current.map((agent) => (agent.id === saved.id ? saved : agent)) : [...current, saved],
     );
+    setLicenses(result.licenses);
     setNotes(result.notes);
     setUnsavedCount((count) => count + 1);
     return null;

@@ -9,8 +9,10 @@ import {
   type ProducerError,
   type ProducerLabels,
 } from "@/components/producer-form";
+import type { AgentStateLicenseRecord } from "@/lib/agent-state-licenses";
 import type { AgentField, AgentNote, AgentRecord } from "@/lib/agents";
 import { diffValues, nextId } from "@/lib/change-notes";
+import { applyLicenceEdits, licenseNumbersOf, licensedStatesOf } from "@/lib/state-licenses";
 
 /*
  * The one Add / Edit agent dialog: the shared ProducerForm
@@ -20,9 +22,13 @@ import { diffValues, nextId } from "@/lib/change-notes";
  * agent's profile opens it in edit mode from its own Edit button, so both
  * places edit an agent with exactly the same form and the same checks.
  *
- * Each view owns its agents and notes state and passes `onSave`, which usually
- * calls `saveAgent` below and sets that state. Adds and edits are dummy:
- * nothing reaches a server, and a refresh brings back the JSON.
+ * The states and numbers the form edits are the agent's state licence rows
+ * (lib/agent-state-licenses.ts): `saveAgent` updates those rows and derives
+ * the saved agent's licensedStates / licenseNumbers from them, the way
+ * lib/agents.ts does when an agent loads. So each view owns its agents,
+ * licence rows and notes state and passes `onSave`, which usually calls
+ * `saveAgent` below and sets all three. Adds and edits are dummy: nothing
+ * reaches a server, and a refresh brings back the JSON.
  */
 
 /** Which dialog is open. Edit holds the agent as it was when the dialog opened. */
@@ -60,6 +66,8 @@ type SaveInput = {
   agents: Pick<AgentRecord, "id" | "name" | "npn">[];
   /** Every agent note, so the new note's ID is unique. */
   notes: AgentNote[];
+  /** Every agent's licence rows, so a new row's ID is unique. Only this agent's are changed. */
+  licenses: AgentStateLicenseRecord[];
   values: AgentValues;
   /** The agent being edited; leave out when adding. */
   editing?: AgentRecord;
@@ -74,14 +82,17 @@ type SaveResult =
       /** False when an edit changed nothing: no new note. */
       changed: boolean;
       notes: AgentNote[];
+      /** Every agent's licence rows after the save. */
+      licenses: AgentStateLicenseRecord[];
     };
 
 /**
- * Adds or edits an agent, pure. Returns the saved agent and the next notes (a
- * note only when something changed), or the error to show: an NPN that already
- * belongs to another agent, or a licensed state with no licence number. The view puts the agent into its own list.
+ * Adds or edits an agent, pure. Returns the saved agent, the next licence rows
+ * and the next notes (a note only when something changed), or the error to
+ * show: an NPN that already belongs to another agent, or a licensed state with
+ * no licence number. The view puts the agent into its own list.
  */
-export function saveAgent({ agents, notes, values, editing }: SaveInput): SaveResult {
+export function saveAgent({ agents, notes, licenses, values, editing }: SaveInput): SaveResult {
   const npnOwner = agents.find((agent) => agent.id !== editing?.id && agent.npn === values.npn);
   if (npnOwner) {
     return {
@@ -95,19 +106,33 @@ export function saveAgent({ agents, notes, values, editing }: SaveInput): SaveRe
   if (unnumbered) return { error: unnumbered, agent: null };
 
   const agentId = editing?.id ?? nextId(agents);
-  const saved = { id: agentId, ...values };
+  // The licence rows are the truth; the agent's two fields are read back from them.
+  const nextLicenses = applyLicenceEdits({
+    rows: licenses,
+    isOwn: (license) => license.agentId === agentId,
+    values,
+    own: (license) => ({ ...license, agentId }),
+  });
+  const own = nextLicenses.filter((license) => license.agentId === agentId);
+  const saved: AgentRecord = {
+    id: agentId,
+    ...values,
+    licensedStates: licensedStatesOf(own),
+    licenseNumbers: licenseNumbersOf(own),
+  };
   const changes = diffValues(
     FIELDS,
     editing ? producerNoteValues(editing) : {},
-    producerNoteValues(values),
+    producerNoteValues(saved),
   );
   // Saving an edit with nothing changed just closes, without a note.
-  if (changes.length === 0) return { error: null, agent: saved, changed: false, notes };
+  if (changes.length === 0) return { error: null, agent: saved, changed: false, notes, licenses };
 
   return {
     error: null,
     agent: saved,
     changed: true,
+    licenses: nextLicenses,
     notes: [
       {
         id: nextId(notes),

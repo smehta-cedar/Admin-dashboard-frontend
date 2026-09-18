@@ -4,8 +4,9 @@ import "server-only";
  * Data boundary for the agency: the one org record for this shop. Today it
  * reads data/agency.json (a single object, not an array) and
  * data/agency-notes.json; later it queries Supabase. The JSON is trusted
- * as-is, except that states and licence numbers load the same way agents' do
- * and the phone loads in the one display format (lib/phone.ts).
+ * as-is, except that the phone loads in the one display format (lib/phone.ts)
+ * and licensedStates / licenseNumbers are derived from the agency's state
+ * licence rows (lib/agency-state-licenses.ts), the same way an agent's are.
  *
  * The agency has the same producer shape as an agent (NPN, licensed states
  * with licence numbers, contact details) because it is licensed like one. It
@@ -16,7 +17,9 @@ import "server-only";
 
 import agencyJson from "@/data/agency.json";
 import notesJson from "@/data/agency-notes.json";
+import { getAgencyStateLicenses } from "@/lib/agency-state-licenses";
 import { formatPhone } from "@/lib/phone";
+import { licenseNumbersOf, licensedStatesOf } from "@/lib/state-licenses";
 
 export type AgencyStatus = "active" | "inactive";
 
@@ -31,9 +34,10 @@ export type AgencyRecord = {
   /**
    * US state codes from lib/us-states.ts the agency holds a licence in, unique
    * and in code order. Empty when licensed nowhere yet (not "all states").
+   * Derived from the agency's state licence rows, never stored.
    */
   licensedStates: string[];
-  /** Licence number by state code, for states in licensedStates only. Required per licensed state when saving. */
+  /** Licence number by state code, for states in licensedStates only. Derived from the rows too. */
   licenseNumbers: Record<string, string>;
   email: string;
   /** "(555)010-4410" (formatPhone); other lengths stay as entered. */
@@ -63,33 +67,21 @@ export type AgencyNote = {
   changes: AgencyChange[];
 };
 
-/** The agency as the JSON may hold it: states or numbers may be missing. */
-type StoredAgency = Omit<AgencyRecord, "licensedStates" | "licenseNumbers"> & {
-  licensedStates?: string[];
-  licenseNumbers?: Partial<Record<string, string>>;
-};
+/** The agency as the JSON holds it: without the two fields derived from licence rows. */
+type StoredAgency = Omit<AgencyRecord, "licensedStates" | "licenseNumbers">;
 
 /**
- * The agency, with licensedStates unique and in code order, only non-blank
- * licence numbers for licensed states, and the phone in the display format.
+ * The agency, with the phone in the display format and licensedStates /
+ * licenseNumbers derived from its licence rows.
  */
 export async function getAgency(): Promise<AgencyRecord> {
   const agency = agencyJson as StoredAgency;
-  if (!Array.isArray(agency.licensedStates)) {
-    console.warn("The agency has no licensedStates; treating it as licensed in no states.");
-  }
-  const states = [...new Set(Array.isArray(agency.licensedStates) ? agency.licensedStates : [])].sort();
-  const numbers = agency.licenseNumbers ?? {};
+  const licenses = await getAgencyStateLicenses();
   return {
     ...agency,
     phone: formatPhone(agency.phone),
-    licensedStates: states,
-    licenseNumbers: Object.fromEntries(
-      states.flatMap((code) => {
-        const number = (numbers[code] ?? "").trim();
-        return number ? [[code, number]] : [];
-      }),
-    ),
+    licensedStates: licensedStatesOf(licenses),
+    licenseNumbers: licenseNumbersOf(licenses),
   };
 }
 

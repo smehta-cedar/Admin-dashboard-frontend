@@ -15,12 +15,14 @@ import {
 } from "@tanstack/react-table";
 import { Fragment, useId, useMemo, useState, type ReactNode } from "react";
 import { TOOLBAR_INPUT_CLASS } from "@/components/classes";
+import { TablePagination, useTablePagination } from "@/components/table-pagination";
 
 /*
  * Shared list table: click a header to sort (asc → desc → original order), type
  * in the search box to narrow rows. TanStack Table (v9) only sorts and filters;
  * this component owns the markup (docs/entity-page-pattern.md §6–7), so cells
- * stay free to render links, badges, credential buttons and Edit.
+ * stay free to render links, badges, credential buttons and Edit. Client-side
+ * pagination (5 / 10 / 20) sits under the table via `table-pagination`.
  *
  * Display only: rows come from the view's state, and adds and edits in the view
  * show up here on the next render, in their sorted place.
@@ -139,6 +141,15 @@ export function DataTable<T extends RowData>({
   const visibleRows = table.getRowModel().rows;
   const colSpan = columns.length;
   const [singular, plural] = unit;
+  const {
+    pageItems,
+    start,
+    pageSize,
+    setPageSize,
+    currentPage,
+    pageCount,
+    setPage,
+  } = useTablePagination(visibleRows, query);
 
   const toggleExpanded = (rowId: string) =>
     setExpandedIds((current) => {
@@ -250,7 +261,7 @@ export function DataTable<T extends RowData>({
                 </td>
               </tr>
             ) : null}
-            {visibleRows.map((row) => {
+            {pageItems.map((row) => {
               const expanded = renderDetails !== undefined && expandedIds.has(row.id);
               const context: DataTableRowContext = {
                 expanded,
@@ -280,6 +291,17 @@ export function DataTable<T extends RowData>({
           </tbody>
         </table>
       </div>
+
+      <TablePagination
+        start={start}
+        pageLength={pageItems.length}
+        total={visibleRows.length}
+        pageSize={pageSize}
+        onPageSizeChange={setPageSize}
+        currentPage={currentPage}
+        pageCount={pageCount}
+        onPageChange={setPage}
+      />
     </div>
   );
 }

@@ -48,7 +48,8 @@ export default async function AgentProfilePage(props: PageProps<"/agents/[id]">)
         .sort(byName)}
       initialContracts={carrierContracts}
       initialContractNotes={contractNotes}
-      stateLicenses={stateLicenses.filter((license) => license.agentId === id)}
+      // Every agent's rows: a new licence's ID must be unique across them all.
+      initialLicenses={stateLicenses}
       logins={logins
         .filter((login) => login.agentId === id)
         .map((login) => ({

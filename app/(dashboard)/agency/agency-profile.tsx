@@ -14,9 +14,11 @@ import {
   ProfileTable,
   StateChipCell,
 } from "@/components/profile-shell";
+import { StateLicensesPanel } from "@/components/state-licenses-panel";
 import { StatusBadge } from "@/components/status-badge";
 import { UnsavedBanner } from "@/components/unsaved-banner";
 import type { AgencyNote, AgencyRecord } from "@/lib/agency";
+import type { AgencyStateLicenseRecord } from "@/lib/agency-state-licenses";
 import type { AgentRecord } from "@/lib/agents";
 import {
   AGENCY_FIELD_LABELS,
@@ -31,13 +33,18 @@ import {
  * agent's profile from the shared pieces in components/profile-shell.tsx. The
  * name row (initials, name, status, Edit) sits above one header card with the
  * contact details and the agency's licensed states, one small card per state
- * with its licence number. Below, two panels: Agents — everyone under the
- * shop, linking to their profiles (agents are still edited on Agents) — beside
- * Notes, the agency's change log.
+ * with its licence number. Below, a full-width State licences panel — the same
+ * licences as rows from lib/agency-state-licenses.ts (number, status, start
+ * and end dates); the rows are the truth and the header's licensedStates /
+ * licenseNumbers are derived from them, so an Edit changes both at once
+ * (saveAgency) — then two panels: Agents — everyone under the shop, linking
+ * to their profiles (agents are still edited on Agents) — beside Notes, the
+ * agency's change log.
  *
  * Edit opens AgencyDialog, the producer form with org labels. It is all dummy:
- * the agency and notes live in component state, and a refresh brings back the
- * JSON. No back link or switcher: there is one agency and no list of them.
+ * the agency, licence rows and notes live in component state, and a refresh
+ * brings back the JSON. No back link or switcher: there is one agency and no
+ * list of them.
  */
 
 type AgentRow = Pick<AgentRecord, "id" | "name" | "status" | "licensedStates">;
@@ -45,25 +52,34 @@ type AgentRow = Pick<AgentRecord, "id" | "name" | "status" | "licensedStates">;
 type AgencyProfileProps = {
   initialAgency: AgencyRecord;
   initialNotes: AgencyNote[];
+  /** The agency's state licence rows, in ID order. */
+  initialLicenses: AgencyStateLicenseRecord[];
   /** Every agent, sorted by name. */
   agents: AgentRow[];
 };
 
 const AGENT_COLUMNS = ["Agent", "Licensed states", "Status"];
 
-export function AgencyProfile({ initialAgency, initialNotes, agents }: AgencyProfileProps) {
+export function AgencyProfile({
+  initialAgency,
+  initialNotes,
+  initialLicenses,
+  agents,
+}: AgencyProfileProps) {
   const [agency, setAgency] = useState(initialAgency);
   const [notes, setNotes] = useState(initialNotes);
+  const [licenses, setLicenses] = useState(initialLicenses);
   const [unsavedCount, setUnsavedCount] = useState(0);
   const [editing, setEditing] = useState<AgencyRecord | null>(null);
 
   /** Edits the agency. Returns the dialog's error, if any. */
   const saveEdit = (values: AgencyValues): AgencyError | null => {
-    const result = saveAgency({ notes, values, editing: agency });
+    const result = saveAgency({ notes, licenses, values, editing: agency });
     if (result.error !== null) return result.error;
     if (!result.changed) return null;
 
     setAgency(result.agency);
+    setLicenses(result.licenses);
     setNotes(result.notes);
     setUnsavedCount((count) => count + 1);
     return null;
@@ -103,6 +119,8 @@ export function AgencyProfile({ initialAgency, initialNotes, agents }: AgencyPro
       <UnsavedBanner count={unsavedCount} className="mt-4" />
 
       <div className="mt-5 grid items-start gap-5 xl:grid-cols-2">
+        <StateLicensesPanel licenses={licenses} className="xl:col-span-2" />
+
         <Panel
           title="Agents"
           count={agents.length}

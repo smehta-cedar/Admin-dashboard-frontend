@@ -1,9 +1,12 @@
+"use client";
+
 import Link from "next/link";
 import { useId, type ReactNode } from "react";
 import { CredentialValue } from "@/components/credential-value";
 import { EditIcon } from "@/components/edit-icon";
 import { LicenseNumber } from "@/components/license-number";
 import { StatusBadge } from "@/components/status-badge";
+import { TablePagination, useTablePagination } from "@/components/table-pagination";
 import type { LoginRecord } from "@/lib/logins";
 import { US_STATE_NAMES } from "@/lib/us-states";
 import { initials } from "@/lib/text";
@@ -15,8 +18,8 @@ import { initials } from "@/lib/text";
  * licensed states as licence cards), and the titled panels holding related
  * lists — a small table (`ProfileTable`, with `StateChipCell` for a states
  * column) and the Logins panel both agent and carrier profiles show. Each
- * profile lays these out itself. No state here, so both server and client
- * profiles can use them.
+ * profile lays these out itself. Profile pages that use these are client
+ * components; `ProfileTable` paginates through `table-pagination`.
  */
 
 export const PROFILE_LINK_CLASS = "font-medium text-fg hover:text-brand-ink hover:underline";
@@ -290,26 +293,46 @@ type ProfileTableProps<T> = {
   children: (row: T) => ReactNode;
 };
 
-/** A panel's small table: headings row, then one `<tr>` per row. The caller renders the cells. */
+/**
+ * A panel's small table: headings row, then one `<tr>` per row. Paginates when
+ * there are more than 5 rows — default page size 5, with 10 and 20 options.
+ * The caller renders the cells.
+ */
 export function ProfileTable<T>({ columns, rows, rowKey, children }: ProfileTableProps<T>) {
+  const { pageItems, start, pageSize, setPageSize, currentPage, pageCount, setPage } =
+    useTablePagination(rows);
+
   return (
-    <div className="overflow-x-auto rounded-lg border border-line">
-      <table className="min-w-full text-left text-sm">
-        <thead className="bg-surface-muted">
-          <tr>
-            {columns.map((heading) => (
-              <th key={heading} scope="col" className={PROFILE_TH_CLASS}>
-                {heading}
-              </th>
+    <div>
+      <div className="overflow-x-auto rounded-lg border border-line">
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-surface-muted">
+            <tr>
+              {columns.map((heading) => (
+                <th key={heading} scope="col" className={PROFILE_TH_CLASS}>
+                  {heading}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-line border-t border-line">
+            {pageItems.map((row) => (
+              <tr key={rowKey(row)}>{children(row)}</tr>
             ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-line border-t border-line">
-          {rows.map((row) => (
-            <tr key={rowKey(row)}>{children(row)}</tr>
-          ))}
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      </div>
+
+      <TablePagination
+        start={start}
+        pageLength={pageItems.length}
+        total={rows.length}
+        pageSize={pageSize}
+        onPageSizeChange={setPageSize}
+        currentPage={currentPage}
+        pageCount={pageCount}
+        onPageChange={setPage}
+      />
     </div>
   );
 }

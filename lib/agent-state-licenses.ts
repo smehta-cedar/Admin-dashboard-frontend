@@ -6,43 +6,25 @@ import "server-only";
  * trusted as-is, not validated, except that a missing or unknown status
  * reads as "active" (with a console warning naming the row).
  *
- * One row is one agent's licence in one state: the number the state issued,
- * where it stands, and the dates it runs between. This is the same fact
- * AgentRecord.licensedStates / licenseNumbers hold today; those stay in place
- * for now because Contracts still reads them as the licence ceiling. Only the
- * agent profile reads this file so far. The agency's own licences are not here.
+ * One row is one agent's licence in one state (lib/state-licenses.ts has the
+ * shape and the rules). These rows are where an agent's licensedStates and
+ * licenseNumbers come from: lib/agents.ts derives both from them when an
+ * agent loads, and the agent dialog's save edits these rows. The agency's
+ * own licences live in lib/agency-state-licenses.ts.
  */
 
 import licensesJson from "@/data/agent-state-licenses.json";
 import type { AgentRecord } from "@/lib/agents";
+import {
+  STATE_LICENSE_STATUSES,
+  type StateLicense,
+  type StateLicenseStatus,
+} from "@/lib/state-licenses";
 
-/**
- * active: licence in force. review: renewal or paperwork under review.
- * pending: applied for, not issued yet. jit: "just in time" — obtained only
- * when a sale there needs it.
- */
-export type AgentStateLicenseStatus = "active" | "review" | "pending" | "jit";
+export type AgentStateLicenseStatus = StateLicenseStatus;
 
-const LICENSE_STATUSES: readonly string[] = [
-  "active",
-  "review",
-  "pending",
-  "jit",
-] satisfies AgentStateLicenseStatus[];
-
-export type AgentStateLicenseRecord = {
-  /** Internal ID, numbered 1, 2, 3, … for now. Not the licence number. */
-  id: string;
+export type AgentStateLicenseRecord = StateLicense & {
   agentId: AgentRecord["id"];
-  /** US state code from lib/us-states.ts. One row per agent + state. */
-  state: string;
-  /** The number the state issued. Empty while the licence is still pending. */
-  licenseNumber: string;
-  status: AgentStateLicenseStatus;
-  /** YYYY-MM-DD. When the licence was added. */
-  startDate: string;
-  /** YYYY-MM-DD. When it expires. */
-  endDate: string;
 };
 
 /** A licence as the JSON may hold it: a status we don't know, or none. */
@@ -56,7 +38,8 @@ type StoredLicense = Omit<AgentStateLicenseRecord, "status"> & { status?: string
 export async function getAgentStateLicenses(): Promise<AgentStateLicenseRecord[]> {
   return (licensesJson as StoredLicense[])
     .map((license) => {
-      const knownStatus = license.status !== undefined && LICENSE_STATUSES.includes(license.status);
+      const knownStatus =
+        license.status !== undefined && STATE_LICENSE_STATUSES.includes(license.status);
       if (!knownStatus) {
         console.warn(
           `State licence ${license.id} has status ${JSON.stringify(license.status)}; treating it as "active".`,
@@ -64,7 +47,7 @@ export async function getAgentStateLicenses(): Promise<AgentStateLicenseRecord[]
       }
       return {
         ...license,
-        status: knownStatus ? (license.status as AgentStateLicenseStatus) : "active",
+        status: knownStatus ? (license.status as StateLicenseStatus) : "active",
       };
     })
     .sort((a, b) => Number(a.id) - Number(b.id));

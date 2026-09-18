@@ -37,7 +37,8 @@ Shared pieces (extracted when Carriers landed — use these, don't copy):
 | `components/empty-state.tsx` | `EmptyState` (title, description, `action`) |
 | `components/field.tsx` | `Field` (label + input + hint/error) |
 | `components/note-list.tsx` | `NoteList` (generic; pass `labels={FIELD_LABELS}`) |
-| `components/data-table.tsx` | `DataTable`, `DataTableColumn<T>`, `DataTableRowContext` (sort + search + expandable rows, §6) |
+| `components/data-table.tsx` | `DataTable`, `DataTableColumn<T>`, `DataTableRowContext` (sort + search + pagination + expandable rows, §6) |
+| `components/table-pagination.tsx` | `TablePagination`, `useTablePagination` (5 / 10 / 20 page sizes; used by `DataTable` and `ProfileTable`) |
 | `components/status-badge.tsx` | `StatusBadge`, `statusRank` (sort order: active, review, pending, jit, inactive; review and jit are state-licence only, and JIT renders uppercase) |
 | `components/modal-dialog.tsx` | `useModalDialog(open)` → `{ dialogRef, close }`, `ModalDialog` |
 | `components/classes.ts` | `INPUT_CLASS`, `PRIMARY_BUTTON_CLASS`, `GHOST_BUTTON_CLASS`, `ROW_BUTTON_CLASS`, `TOOLBAR_INPUT_CLASS` |
@@ -49,7 +50,7 @@ Shared pieces (extracted when Carriers landed — use these, don't copy):
 | `components/credential-value.tsx` | `CredentialValue` (copy-on-click, masked when `secret`), `PasswordInput` (eye toggle) — Logins, Users, sign-in, profiles |
 | `components/license-number.tsx` | `LicenseNumber` (a licensed-state card's number, click to copy, or "No number yet"; agent and agency profiles) |
 | `components/producer-form.tsx` | `ProducerForm` + `producerNoteValues`, `unnumberedStatesError` — the one agent/agency form (see Agency) |
-| `components/profile-shell.tsx` | Profile layout pieces: `ProfileBackLink`, `ProfileNameRow`, `ProfileHeader`, `ProducerDetails`, `Detail`, `LicenseCards`, `StateChip`, `Count`, `Panel`, `PanelEmpty`, `ProfileTable`, `StateChipCell`, `LoginsPanel`, `PROFILE_BUTTON_CLASS` (see Contracts → Profiles) |
+| `components/profile-shell.tsx` | Profile layout pieces: `ProfileBackLink`, `ProfileNameRow`, `ProfileHeader`, `ProducerDetails`, `Detail`, `LicenseCards`, `StateChip`, `Count`, `Panel`, `PanelEmpty`, `ProfileTable` (paginated), `StateChipCell`, `LoginsPanel`, `PROFILE_BUTTON_CLASS` (see Contracts → Profiles) |
 | `app/(dashboard)/contracts/use-appointments.ts` | `useAppointments` — contracts + notes state, the open `AppointmentDialog` editor, and its `saveContract` (see Contracts → One dialog) |
 
 Constants a client view needs from an entity (like `LINES_OF_BUSINESS`) go in
@@ -149,6 +150,10 @@ A column: `{ id, header, cell(row, ctx), className?, sortValue?, searchText?, sr
   password column `searchText` or `sortValue`.
 - **Count:** beside the search, `aria-live="polite"`: "12 agents", or
   "3 of 12 agents" while searching.
+- **Pagination:** client-side, under the table (`table-pagination.tsx`). Default
+  5 rows; Show select for 5 / 10 / 20; range text and ‹ ›. Hidden while the
+  filtered list fits in 5 or fewer. Resets to page 1 when the search changes.
+  `ProfileTable` on profiles uses the same control.
 - **No match:** one row, "No agents match “foo”." with a Clear search button.
   `EmptyState` is still used by the view when the list itself is empty.
 - **Filters that live in the URL** (Logins' carrier) stay in the view and
@@ -176,7 +181,8 @@ Styling (inside `DataTable`):
   (`Edit<span className="sr-only"> {name}</span>`), right-aligned.
 - Secondary/list data (aliases, notes) does **not** go in the main row — see §7.
 
-Profile pages' small related tables stay plain `<table>`s for now.
+Profile pages' related tables use `ProfileTable`, which shares the same
+pagination control.
 
 ## 7. Expandable row (name dropdown)
 
@@ -346,8 +352,8 @@ Files: [lib/carrier-contracts.ts](../lib/carrier-contracts.ts),
 
 | Field | Meaning | Edited on |
 | --- | --- | --- |
-| `AgentRecord.licensedStates` | Personal licences: where the agent may write at all, whoever the carrier | Agents |
-| `AgentRecord.licenseNumbers` | The licence number each state issued, `{ TX: "2104587" }`. Only for licensed states, and **required** for each one: the agent dialog shows a required input per checked state and `saveAgent` rejects a licensed state without a number. Only older stored rows can lack one ("No number yet", and a Pending item). Not a ceiling — it never affects writable states | Agents |
+| `AgentRecord.licensedStates` | Personal licences: where the agent may write at all, whoever the carrier. **Derived** from the agent's state licence rows (see Agent state licences), never stored | Agents |
+| `AgentRecord.licenseNumbers` | The licence number each state issued, `{ TX: "2104587" }`. Derived from the same rows; a row whose number is still blank (a pending licence) is left out ("No number yet", and a Pending item). The agent dialog shows a required input per checked state and `saveAgent` rejects a licensed state without a number. Not a ceiling — it never affects writable states | Agents |
 | `CarrierRecord.availableStates` | Carrier footprint: states the carrier is available in for the agency | Carriers |
 | `CarrierContractRecord.appointedStates` | States one agent may write for that carrier, always ⊆ `licensedStates ∩ availableStates` | Contracts (both views) |
 
@@ -475,15 +481,20 @@ soft-brand action button ("+ Add carrier"). The agent profile, top to bottom:
   `AGENT_FIELD_LABELS` lives there). The profile keeps the agent in state, so
   `page.tsx` keys it by agent ID, passes `npn` in `allAgents` for the uniqueness
   check, and passes **every** agent note (new note IDs need them all).
-- **Header card**: NPN / email / phone / aliases as stacked "label  value" rows,
-  beside the licensed states, one small card per state: the code over that
-  state's licence number (`licenseNumbers[code]`), or a faint "No number yet".
-  The state's full name is the card's tooltip and sr-only text.
-- The `role="status"` unsaved banner (agent edits and new appointments both count).
-- **Panels**, two per row from `xl` up, each with a padded body (`p-4 sm:p-5`)
-  so its table or list sits inset in its own `rounded-lg border border-line` box: Carriers (a table: Carrier, Writable
-  states, Status; "+ Add carrier" in its title row) beside Logins, then Pending
-  beside Notes.
+- **Identity card** (no `ProfileHeader` here): one muted meta line — NPN
+  (mono) · email · phone · aliases, filled fields only, mailto/tel links kept.
+  From `lg` it shares its row 3/5 | 2/5 with the **attention column**; while
+  that column is empty the card takes the whole row.
+- **Attention column**: the `role="status"` unsaved banner (agent edits and new
+  appointments both count; always mounted), then the **Pending strip**, only
+  when there is something pending (no empty state): one bordered list with the
+  warn left edge.
+- **Panels**, each with a padded body (`p-4 sm:p-5`) so its table or list sits
+  inset in its own `rounded-lg border border-line` box, on a 10-column grid
+  from `lg`: Carriers (a table: Carrier, Writable states, Status; "+ Add
+  carrier" in its title row) beside `StateLicensesPanel`, 50/50; then
+  `LoginsPanel` beside Notes, 70/30. Below `lg` they stack in that order. No
+  sticky rail, no tabs.
 - **Pending** is derived by `pendingItems`, not stored — there are no task
   records yet: no licences, licensed states with no licence number, an appointment with no writable states, licensed
   states no appointment covers, carriers with no login (one line), a login with
@@ -508,18 +519,37 @@ allowed on both.
 
 ### Agent state licences
 
-Files: [lib/agent-state-licenses.ts](../lib/agent-state-licenses.ts),
-[data/agent-state-licenses.json](../data/agent-state-licenses.json).
+Files: [lib/state-licenses.ts](../lib/state-licenses.ts) (client-safe: the
+shared row type, the derivations and `applyLicenceEdits`),
+[lib/agent-state-licenses.ts](../lib/agent-state-licenses.ts),
+[data/agent-state-licenses.json](../data/agent-state-licenses.json),
+[components/state-licenses-panel.tsx](../components/state-licenses-panel.tsx).
 
 One row per agent + state: `id`, `agentId`, `state`, `licenseNumber`,
 `status` (`active | review | pending | jit`), `startDate`, `endDate`
 (`YYYY-MM-DD`). `getAgentStateLicenses()` returns ID order; a missing or
-unknown status loads as `"active"` with a `console.warn`. Seeded from every
-`licensedStates` / `licenseNumbers` entry, which **stay on `AgentRecord`** for
-now — Contracts still reads them as the licence ceiling. Only the agent profile
-reads this file: a read-only **State licences** panel (State, Licence #, Status,
-Start, End; dates formatted from the string, not `Date`, so server and client
-agree). No add/edit, no list page, and nothing for the agency yet.
+unknown status loads as `"active"` with a `console.warn`.
+
+**The rows are the truth.** `agents.json` no longer holds `licensedStates` or
+`licenseNumbers`: `getAgents()` / `getAgent()` derive both from the agent's
+rows (`licensedStatesOf`, `licenseNumbersOf` — every row lists its state
+whatever its status; a blank number is left out). The two fields stay on
+`AgentRecord` because Contracts and the profiles read them.
+
+**Edit goes through the rows too.** The producer form still edits checked
+states and their numbers, but `saveAgent` takes `licenses` (every agent's
+rows — new IDs need them all) and returns the next rows via
+`applyLicenceEdits`: a checked state keeps its row with the number as typed,
+an unchecked state's row is dropped, a newly checked state gets a new
+`active` row starting today and ending two years later (`LICENCE_TERM_YEARS`;
+the form doesn't ask for dates or a status yet). The saved agent's two fields
+are then derived from those rows, so the note diff, the header cards and the
+panel all agree. Both the Agents list and the agent profile keep the rows in
+state and set them from the save result.
+
+The profile shows the rows in `StateLicensesPanel` (State, Licence #, Status,
+Start, End; dates formatted from the string with `formatLicenceDate`, not
+`Date`, so server and client agree). No licences list page.
 
 ### Logins
 
@@ -738,8 +768,10 @@ add. `getAgency()` returns the object; `getAgencyNotes()` the notes, newest
 first.
 
 - Same producer shape as `AgentRecord` (name, aliases, status, npn,
-  licensedStates, licenseNumbers, email, phone), loaded the same way (states
-  sorted and unique, numbers only for licensed states, `formatPhone`).
+  licensedStates, licenseNumbers, email, phone), loaded the same way:
+  `formatPhone`, and the two licence fields derived from the agency's licence
+  rows (`lib/agency-state-licenses.ts`), not stored in `agency.json`.
+  `saveAgency` takes and returns those rows exactly as `saveAgent` does.
 - `AgencyDialog` + pure `saveAgency` render the shared `ProducerForm`
   ([components/producer-form.tsx](../components/producer-form.tsx)) with org
   `labels` (`AGENCY_FIELD_LABELS` for notes: "Agency name", "Other names",
@@ -751,9 +783,14 @@ first.
   agency NPN.
 - Profile layout mirrors the agent profile: name row (avatar, "Agency"
   eyebrow, name, status, Edit), header card (NPN / email / phone / other names
-  beside licensed-state cards with `LicenseNumber`), unsaved banner, then
-  **Agents** (read-only table of every agent: name → `/agents/[id]`,
-  licensed-state chips, status; "Manage on Agents →") beside **Notes**.
+  beside licensed-state cards with `LicenseNumber`), unsaved banner, a
+  full-width **State licences** panel (`StateLicensesPanel` over rows from
+  [lib/agency-state-licenses.ts](../lib/agency-state-licenses.ts) /
+  `data/agency-state-licenses.json` — same shape as the agent's minus
+  `agentId`, since the agency is a singleton; same status fallback; edited
+  through the profile's Edit like the agent's), then **Agents** (read-only table of every agent: name →
+  `/agents/[id]`, licensed-state chips, status; "Manage on Agents →") beside
+  **Notes**.
 - Not a participant in contracts or logins: appointments stay on individual
   agents. Multi-agency is out of scope.
 - Nav: a footer item pinned to the bottom of the rail and drawer
