@@ -11,7 +11,6 @@ import { StatusBadge, statusRank } from "@/components/status-badge";
 import { UnsavedBanner } from "@/components/unsaved-banner";
 import type { AgentNote, AgentRecord } from "@/lib/agents";
 import { phoneDigits } from "@/lib/phone";
-import { US_STATE_NAMES, stateSummary } from "@/lib/us-states";
 import { AgentDialog, saveAgent, type AgentEditor, type AgentError, type AgentValues } from "./agent-dialog";
 
 /*
@@ -19,13 +18,10 @@ import { AgentDialog, saveAgent, type AgentEditor, type AgentError, type AgentVa
  * (./agent-dialog.tsx), which an agent's profile opens too. Every add or edit
  * records a note listing what changed. The table sorts by header and filters
  * by search.
- * A name links to the agent's profile, which shows their aliases and notes;
- * rows don't expand. States are the agent's own licensedStates —
- * where they may write at all; which of those they can actually write with a
- * carrier is that state also being in the carrier's footprint and in an
- * appointment (Contracts). Agents and notes
- * live in component state only: nothing reaches a server, and a refresh brings
- * back the JSON.
+ * A name links to the agent's profile, which shows their aliases, notes and
+ * state licences; rows don't expand and the list has no states column, so
+ * search doesn't cover states either. Agents and notes live in component
+ * state only: nothing reaches a server, and a refresh brings back the JSON.
  */
 
 type AgentsViewProps = {
@@ -98,23 +94,6 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
         searchText: (agent) => [agent.phone, phoneDigits(agent.phone)],
       },
       {
-        id: "licensedStates",
-        header: "Licensed States",
-        cell: (agent) => (
-          <span className={agent.licensedStates.length === 0 ? "text-fg-faint" : undefined}>
-            {stateSummary(agent.licensedStates)}
-          </span>
-        ),
-        className: "tabular-nums text-fg-muted",
-        sortValue: (agent) => agent.licensedStates.length,
-        searchText: (agent) =>
-          agent.licensedStates.flatMap((code) => [
-            code,
-            US_STATE_NAMES[code] ?? "",
-            agent.licenseNumbers[code] ?? "",
-          ]),
-      },
-      {
         id: "actions",
         header: "Actions",
         srOnlyHeader: true,
@@ -174,7 +153,7 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
           columns={columns}
           getRowId={(agent) => agent.id}
           unit={["agent", "agents"]}
-          searchPlaceholder="Search name, NPN, email, state…"
+          searchPlaceholder="Search name, NPN, email…"
         />
       )}
 

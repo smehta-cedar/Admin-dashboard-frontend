@@ -21,13 +21,14 @@ import {
 } from "@/components/profile-shell";
 import { StatusBadge } from "@/components/status-badge";
 import { UnsavedBanner } from "@/components/unsaved-banner";
+import type { AgentStateLicenseRecord } from "@/lib/agent-state-licenses";
 import type { AgentNote, AgentRecord } from "@/lib/agents";
 import type {
   CarrierContractNote,
   CarrierContractRecord,
 } from "@/lib/carrier-contracts";
 import type { CarrierRecord } from "@/lib/carriers";
-import { writableStates } from "@/lib/us-states";
+import { US_STATE_NAMES, writableStates } from "@/lib/us-states";
 import { byName } from "@/lib/text";
 import { AppointmentDialog } from "../../contracts/appointment-dialog";
 import { useAppointments } from "../../contracts/use-appointments";
@@ -63,6 +64,11 @@ import {
  * appointment. There is no combined list across carriers. Carrier names link
  * to their profiles.
  *
+ * The State licences panel is the same licences as rows from
+ * lib/agent-state-licenses.ts (number, status, start and end dates). It is
+ * read-only for now and loaded once by page.tsx, so an Edit here that changes
+ * licensedStates updates the header cards but not this table until refresh.
+ *
  * Pending is worked out from what is on the page, not stored: there are no
  * task records yet. See `pendingItems`.
  *
@@ -89,6 +95,8 @@ type AgentProfileProps = {
   initialContracts: CarrierContractRecord[];
   /** Every contract note, newest first. Not shown here; new ones are still recorded. */
   initialContractNotes: CarrierContractNote[];
+  /** This agent's state licences, in ID order. Read-only here. */
+  stateLicenses: AgentStateLicenseRecord[];
   /** This agent's logins, the carrier as the party, sorted by carrier name. */
   logins: ProfileLogin[];
   /** Every agent's notes, newest first: new note IDs need them all. Only this agent's are shown. */
@@ -96,6 +104,22 @@ type AgentProfileProps = {
 };
 
 const CARRIER_COLUMNS = ["Carrier", "Writable states", "Status"];
+
+const LICENSE_COLUMNS = ["State", "Licence #", "Status", "Start", "End"];
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * "2024-01-15" → "Jan 15, 2024", read straight from the string so the server
+ * and the browser agree whatever their timezones. Anything else is shown as is.
+ */
+function formatDate(date: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!match) return date;
+  const [, year, month, day] = match;
+  const monthName = MONTHS[Number(month) - 1];
+  return monthName ? `${monthName} ${Number(day)}, ${year}` : date;
+}
 
 /** "Humana", "Humana and UHC", "Humana, UHC and WellCare". */
 function listText(items: string[]) {
@@ -211,6 +235,7 @@ export function AgentProfile({
   carriers,
   initialContracts,
   initialContractNotes,
+  stateLicenses,
   logins,
   initialNotes,
 }: AgentProfileProps) {
@@ -310,6 +335,41 @@ export function AgentProfile({
       <UnsavedBanner count={unsavedCount} className="mt-4" />
 
       <div className="mt-5 grid items-start gap-5 xl:grid-cols-2">
+        <Panel title="State licences" count={stateLicenses.length} className="xl:col-span-2">
+          {stateLicenses.length === 0 ? (
+            <PanelEmpty>No state licences recorded.</PanelEmpty>
+          ) : (
+            <ProfileTable
+              columns={LICENSE_COLUMNS}
+              rows={stateLicenses}
+              rowKey={(license) => license.id}
+            >
+              {(license) => (
+                <>
+                  <td className="whitespace-nowrap px-3 py-2.5 align-middle">
+                    <span className="font-mono font-medium text-fg">{license.state}</span>
+                    {US_STATE_NAMES[license.state] ? (
+                      <span className="ml-2 text-fg-muted">{US_STATE_NAMES[license.state]}</span>
+                    ) : null}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 font-mono text-fg-muted">
+                    {license.licenseNumber || <span className="text-fg-faint">No number yet</span>}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <StatusBadge status={license.status} />
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">
+                    <time dateTime={license.startDate}>{formatDate(license.startDate)}</time>
+                  </td>
+                  <td className="w-full whitespace-nowrap px-3 py-2.5 text-fg-muted">
+                    <time dateTime={license.endDate}>{formatDate(license.endDate)}</time>
+                  </td>
+                </>
+              )}
+            </ProfileTable>
+          )}
+        </Panel>
+
         <Panel
           title="Carriers"
           count={agentCarriers.length}

@@ -70,6 +70,9 @@
   /* Unsaved / pending notices. */
   --color-warn-ink: #92400e;
   --color-warn-soft: #fffbeb;
+  /* "Under review" status: something is being looked at, nothing is wrong. */
+  --color-info-ink: #1e40af;
+  --color-info-soft: #eff6ff;
 
   /* ---- Chips ---------------------------------------------------------- */
   /* Carrier chips in the by-agent list: a warm neutral, deliberately unlike
@@ -146,6 +149,8 @@ html.dark {
   --color-danger-strong: #dc2626;
   --color-warn-ink: #fcd34d;
   --color-warn-soft: #2a2312;
+  --color-info-ink: #93c5fd;
+  --color-info-soft: #172035;
 
   --color-carrier-chip: #2b2522;
   --color-carrier-chip-ink: #e3dbd4;

@@ -38,7 +38,7 @@ Shared pieces (extracted when Carriers landed — use these, don't copy):
 | `components/field.tsx` | `Field` (label + input + hint/error) |
 | `components/note-list.tsx` | `NoteList` (generic; pass `labels={FIELD_LABELS}`) |
 | `components/data-table.tsx` | `DataTable`, `DataTableColumn<T>`, `DataTableRowContext` (sort + search + expandable rows, §6) |
-| `components/status-badge.tsx` | `StatusBadge`, `statusRank` (sort order: active, pending, inactive) |
+| `components/status-badge.tsx` | `StatusBadge`, `statusRank` (sort order: active, review, pending, jit, inactive; review and jit are state-licence only, and JIT renders uppercase) |
 | `components/modal-dialog.tsx` | `useModalDialog(open)` → `{ dialogRef, close }`, `ModalDialog` |
 | `components/classes.ts` | `INPUT_CLASS`, `PRIMARY_BUTTON_CLASS`, `GHOST_BUTTON_CLASS`, `ROW_BUTTON_CLASS`, `TOOLBAR_INPUT_CLASS` |
 | `lib/change-notes.ts` | `nextId`, `fieldText`, `diffValues(FIELDS, before, after, redact?)`, `FieldChange<F>` |
@@ -164,12 +164,14 @@ Styling (inside `DataTable`):
   table `min-w-full text-left text-sm`.
 - Head: `bg-surface-muted`; `th scope="col"`, `whitespace-nowrap px-4 py-2.5 font-medium text-fg-muted`.
 - Body: `divide-y divide-line border-t border-line`; cells `px-4 py-2.5` + column `className`.
-- Column order used on Agents: **ID, NPN, Name, Status, Email, Phone, States, [actions]**.
+- Column order used on Agents: **ID, NPN, Name, Status, Email, Phone, [actions]**
+  (no states column; licences are read on the profile).
 - IDs and codes: `font-mono text-fg-muted`. Secondary text: `text-fg-muted`.
   Primary name: `text-fg`, `whitespace-nowrap`.
 - Status badge: `rounded-md px-2 py-0.5 text-xs font-medium capitalize` +
   `active: bg-brand-soft text-brand-ink`, `inactive: bg-surface-hover text-fg-muted`
-  (and `pending: bg-warn-soft text-warn-ink`, used only by Logins).
+  (and `pending: bg-warn-soft text-warn-ink` for Logins; `review: bg-info-soft text-info-ink`
+  and an outlined neutral `jit` for state licences).
 - Row action: text button `Edit` with sr-only entity name
   (`Edit<span className="sr-only"> {name}</span>`), right-aligned.
 - Secondary/list data (aliases, notes) does **not** go in the main row — see §7.
@@ -276,6 +278,7 @@ that use the tokens are already correct in both modes.
 | Tooltips and transient chips | `tooltip` / `tooltip-fg` |
 | Errors | `danger` (text) / `danger-strong` (fills, borders) |
 | Warnings, unsaved notices | `warn-soft` / `warn-ink` |
+| "Under review" status | `info-soft` / `info-ink` |
 | Map choropleth ramp | `map-0`…`map-4` + `map-N-ink` |
 | Carrier chips (by-agent list) | `carrier-chip` + `-ink` / `-muted` / `-faint` / `-line`, and `carrier-soft` for tints |
 | Agent tiles (carrier cards) | `agent-chip` / `agent-chip-ink` / `agent-chip-line` |
@@ -497,10 +500,26 @@ in from the carrier; saves stay on the page only until refresh, with the same
 unsaved banner as the agent profile. Writable states on agent rows recompute
 from the live `availableStates` after an edit.
 
-**Agents** and **Carriers** each show their own list as a States column
-(`stateSummary`, sorted by count, searchable by code and name) and edit it with
-`StateCheckboxes` in the add/edit dialog — `licensedStates` on Agents,
-`availableStates` on Carriers. Empty is allowed on both.
+**Carriers** shows its list as a States column (`stateSummary`, sorted by
+count, searchable by code and name); **Agents** no longer has one (the profile
+shows licences). Both edit their list with `StateCheckboxes` in the add/edit
+dialog — `licensedStates` on Agents, `availableStates` on Carriers. Empty is
+allowed on both.
+
+### Agent state licences
+
+Files: [lib/agent-state-licenses.ts](../lib/agent-state-licenses.ts),
+[data/agent-state-licenses.json](../data/agent-state-licenses.json).
+
+One row per agent + state: `id`, `agentId`, `state`, `licenseNumber`,
+`status` (`active | review | pending | jit`), `startDate`, `endDate`
+(`YYYY-MM-DD`). `getAgentStateLicenses()` returns ID order; a missing or
+unknown status loads as `"active"` with a `console.warn`. Seeded from every
+`licensedStates` / `licenseNumbers` entry, which **stay on `AgentRecord`** for
+now — Contracts still reads them as the licence ceiling. Only the agent profile
+reads this file: a read-only **State licences** panel (State, Licence #, Status,
+Start, End; dates formatted from the string, not `Date`, so server and client
+agree). No add/edit, no list page, and nothing for the agency yet.
 
 ### Logins
 

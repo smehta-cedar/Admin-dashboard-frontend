@@ -1,0 +1,226 @@
+Pages: 6
+
+===== PAGE 1 =====
+
+Frontend Audit — Sep 2026
+2026-09-18  ·  @Someone
+The monthly-commission frontend ( main  at d75592f) builds and typechecks clean. The
+reference-data pages are solid and well specified; the commission workflow itself does
+not exist yet, and the pages that feed it disagree with each other in a few places.
+Everything below is design and logic, not compile errors.
+Top view
+What is here: a well-built reference-data app (Agents, Carriers, Contracts, Logins, Users,
+Agency) with consistent server-only data boundaries, automatic change notes, and a
+thorough spec in docs/entity-page-pattern.md .
+What is not here: the commission workflow the repo is named for. Overview  renders a
+fake matrix from lib/commissions.ts , which has its own carrier list keyed by codes
+( HUMANA , UHC ) that never touches data/carriers.json  IDs. Rulebook  is an empty
+state. Nothing imports a statement or matches rows to agents. The matching keys were
+clearly designed for that step (agent aliases  “seen on statements”, login
+writingNumber ) but nothing consumes them. Two carrier models exist today, Carrier
+{code, name}  and CarrierRecord {id, …} , and they will have to be reconciled before
+statements land.
+The operational flow (add agent → licence states → carrier footprint → appointment →
+login) exists, but the user has to discover the order:
+Step What breaks
+Carrier footprint The appointment dialog blocks with “Add its states
+on Carriers before…” and no link; in-progress work
+is lost on navigation.
+Appointment entry points Agent profile has Add carrier; carrier profile has
+no Add agent. By-state’s Add contract ignores the
+selected state.
+Untitled
+Page 1 of 6
+===== PAGE 2 =====
+
+Logic disruptions (verified)
+1. Dialog closes on inside clicks. components/modal-dialog.tsx:41  now has p-6 , but
+every form still carries its own p-6  ( agent-dialog.tsx:199 , agency-
+dialog.tsx:171 , appointment-dialog.tsx:290 , user-dialog.tsx:218 , carrier-
+dialog.tsx:200 ). The backdrop handler ( event.target === event.currentTarget )
+fires on the 24px ring inside the dialog. Regression from commit 6212bf4 . Doc §8 still
+documents p-0  and max-w-lg .
+2. Inactive agents follow three different rules. Both Contracts pages drop them server-
+side ( contracts/page.tsx:28 , by-carriers/page.tsx:25 ). The carrier profile shows
+them ( carriers/[id]/page.tsx:42 ). The agent profile lets you appoint one ( agent-
+profile.tsx:406 ), creating a contract no Contracts page can show or edit. Humana
+reads “5 agents” on its profile and “4/4” on by-carriers.
+3. “Appointed” means different things on the two Contracts pages. By-state counts
+agents with at least one writable state ( contracts-view.tsx:217 ); by-carriers counts
+any contract row ( carrier-contracts-view.tsx:150 ). Contract 13
+( appointedStates: [] ) earns HealthSpring a 1/4 card while adding nothing to the
+map.
+4. data/users.json  breaks its own rules. User 1 has role: "agent"  and no agentId ;
+the loader does not warn, and Edit cannot save him without linking an agent that does
+not exist. Users 5 and 6 carry agentId  on non-agent roles and are dropped silently
+( lib/users.ts:97 ). data/user-notes.json  describes a different users list (wrong
+emails, wrong statuses).
+Step What breaks
+Appointment → login Neither Contracts page shows whether a login
+exists. “Appointed but no login” is computed only
+inside one agent’s profile ( pendingItems ). No
+agency-wide to-do view.
+By-state map Shows who can write, never who is missing
+(carriers available in TX with no agent, agents
+licensed in TX with no appointment).
+Inactive agents Deactivating an agent silently removes their
+contracts from both Contracts pages, with no
+“include inactive” toggle.
+Untitled
+Page 2 of 6
+===== PAGE 3 =====
+
+5. Users edits never reach the session. UsersView  keeps users in React state;
+getSessionUser  and the login page re-read JSON. Marking a user inactive or changing
+a password has no effect on sign-in. Expected at dummy stage, but nothing in the UI
+says so beyond the generic banner.
+6. Appointment edit lets agent and carrier change ( appointment-dialog.tsx:310-
+350 ), reassigning a contract’s identity while keeping its ID and note history. The by-
+carriers hidden-row notice checks only the new carrier.
+7. Entity dialogs disagree on validation. saveAgent  returns one error at a time (NPN,
+then licence numbers); saveCarrier  returns all at once. Carrier alias uniqueness is
+never checked, only the name, though lib/carriers.ts:35  says both. Save-result
+shapes differ across saveAgent  / saveCarrier  / saveAgency  although the doc says
+they match.
+8. Smaller. Agent switcher goes stale on rename ( agent-profile.tsx:232  keeps server
+order; the carrier one re-sorts). Carrier profile keeps two copies of the record in state
+( carrier-profile.tsx:87-88 ). Licence-number note diff is order-dependent and
+records the whole list for one changed number. agencyLicenseNumbers  is shown on
+the by-state panel as a bare unlabelled number, contradicting the doc’s “not a
+participant in contracts”. Orphan contracts (unknown carrier ID) are fabricated on by-
+state and dropped on by-carriers.
+Duplication
+Roughly 600–800 lines could go. The pattern, not one-offs:
+What Where Size
+agency-dialog.tsx  is a copy of
+agent-dialog.tsx  with org labels
+agency/agency-dialog.tsx  vs
+agents/agent-dialog.tsx
+~230 lines
+Profile page markup: name row, header
+card, 3-column entity table, logins
+table, notes wrapper,
+PANEL_BUTTON_CLASS
+agent-profile.tsx , carrier-
+profile.tsx , agency-profile.tsx
+~150 lines
+× 3
+Hydration-gated notes list agent-notes.tsx , carrier-
+notes.tsx , inline AgencyNotes
+15 lines × 3
+Entity switcher agent-switcher.tsx , carrier-
+switcher.tsx
+50 lines ×
+2
+Untitled
+Page 3 of 6
+===== PAGE 4 =====
+
+Extractions that pay off: a ProducerForm  (agent + agency), profile-shell header/table
+pieces, HydratedNoteList , EntitySwitcher , a useAppointments  hook, LoginDialog ,
+and byName  / initials  in one lib/text.ts .
+Loose ends
+Repo hygiene
+.claude/worktrees/licensed-states-pagination  is committed to main  as a gitlink
+(mode 160000, no .gitmodules , since commit 7f5b2fb ). The branch it points at is 40
+files and ~2,900 deletions behind main. It pollutes every grep. Fix: git rm --cached
+and git worktree remove .
+No ESLint config, no lint  script, noUnusedLocals  off. That is why the unused imports
+below survive.
+What Where Size
+Logins dialog and save kept inline while
+Users/Agents/Carriers extracted
+theirs
+logins-view.tsx:254-334, 414-
+561
+~240 lines
+Contracts: saveContract  wrapper,
+lookup closures, contract → {agent,
+carrier, writable}  derivation
+contracts-view.tsx , carrier-
+contracts-view.tsx , agent-
+carrier-list.tsx , both profiles
+~150–200
+lines
+Unsaved banner 9 files 8 lines × 9
+byName  comparator 9 files —
+initials() profile-shell.tsx , fake-
+session.ts , agent-carrier-
+list.tsx , carrier-contracts-
+view.tsx
+× 4
+AgentOption  type in 3 different
+shapes
+5 files —
+Expand chevron SVG and 20×20 icon
+boilerplate
+8 files; credential-value.tsx
+already has a private Icon  wrapper
+—
+Icon-button class string not in
+classes.ts
+navbar.tsx , theme-toggle.tsx ,
+app-shell.tsx , credential-
+value.tsx
+× 4
+Untitled
+Page 4 of 6
+===== PAGE 5 =====
+
+@supabase/supabase-js  in package.json  and .env.example  are not imported or
+read anywhere.
+Dead code
+normalizeStates  import in carrier-contracts-view.tsx:15 .
+components/inline-script.tsx  is never imported; the root layout inlines the theme
+script by hand.
+AddCarrierResult  export and a stale header comment in carrier-dialog.tsx
+describe a “New carrier” flow from the contract dialog that does not exist; its
+description  prop is never passed.
+hiddenNotice.loginId  in logins-view.tsx:157  is written, never read.
+accent  colour token has zero uses; charcoal  has one, on an always-empty span.
+SessionUser.role  is threaded through session → layout → shell → navbar and read
+nowhere.
+title=""  is passed through AppShell → Navbar  and rendered in three empty spans.
+Placeholders and half-wired
+Notifications bell is a focusable no-op. Rulebook is an empty state.
+await connection()  in Overview and Logins is redundant: the layout’s cookies()
+read already makes every route dynamic (the build shows all routes as ƒ).
+Contract notes are visible in exactly one place (by-state expanded row); both profiles’
+comments claim otherwise.
+The agent profile’s Pending item “Finish the X contract” links to /contracts  although
+the same AppointmentDialog  is mounted on the page in edit mode.
+credential-value.tsx  lives under app/(dashboard)/logins/  but is imported by
+app/login/  and users/ . It is a shared component in a route folder.
+role  is stored and shown but gates nothing: nav, routes, Add/Edit buttons, and the
+Logins and Users password columns are open to every signed-in user.
+Doc drift and polish
+Doc §8 dialog classes, §9 banner wording, §13 “still copied per view” (now 9 copies),
+the Contracts section (by-carriers extras undocumented), the token table ( charcoal ,
+accent  missing), the shared table ( credential-value.tsx  missing).
+Fixtures cover no out-of-ceiling contract and no missing appointedStates , so the
+“Saving removes…” path and the loader warnings are untested by data.
+Untitled
+Page 5 of 6
+===== PAGE 6 =====
+
+Typos: test-start  class ( agent-switcher.tsx:22 ); chart headed “Policy Type”
+( agents-per-carrier-chart.tsx:36 ); trailing spaces in classNames; “license” in
+identifiers vs “licence” in UI; three names for one record (Contract / Appointment /
+CarrierContractRecord); “Licensed States” title case vs sentence case elsewhere.
+Suggested order
+1. Fix the dialog padding: one owner of the inset, form or dialog, not both. Five minutes,
+user-visible.
+2. Decide the inactive-agent rule once and apply it on all four surfaces; fix users.json
+and its notes fixtures; add a loader warning for an agent-role user with no agentId .
+3. Remove the worktree gitlink, dead imports and exports, the unused dependency. Add
+ESLint or turn on noUnusedLocals .
+4. Extract the shared pieces listed under Duplication, roughly in that table’s order
+(largest wins first).
+5. Flow work: a login column or chip on the Appointments table, Add agent on the carrier
+profile, links from the appointment dialog’s blocking hints, pre-select the map’s state in
+Add contract.
+6. Before statements land: decide how lib/commissions.ts  carriers map to
+CarrierRecord  (one carrier model, or a stored code on CarrierRecord ), and where
+alias / writing-number matching lives.
+Untitled
+Page 6 of 6
