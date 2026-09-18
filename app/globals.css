@@ -28,10 +28,6 @@
   --color-brand-ink: #17664f;
   /* Tinted surface for active / selected states. */
   --color-brand-soft: #e9f6f1;
-  /* Gradient end lime. */
-  --color-accent: #73bd66;
-  /* Logo tagline grey, for secondary text in brand chrome. */
-  --color-charcoal: #5f5f5f;
 
   /* ---- Surfaces ------------------------------------------------------- */
   /* The page behind everything. */
@@ -127,8 +123,6 @@ html.dark {
   /* Now a *light* teal, because it is read against brand-soft and the canvas. */
   --color-brand-ink: #6fd6b2;
   --color-brand-soft: #14332a;
-  --color-accent: #8ccd80;
-  --color-charcoal: #a9b7b1;
 
   --color-canvas: #0e1312;
   --color-surface: #171d1b;

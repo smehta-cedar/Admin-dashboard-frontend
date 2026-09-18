@@ -34,9 +34,7 @@ export default async function LoginPage() {
             <BrandLogo height={40} />
           </div>
           <h1 className="mt-6 text-center text-lg font-semibold text-fg">Sign in</h1>
-          <p className="mt-1 text-center text-sm text-fg-muted">
-            Placeholder sign-in: any user on the Users page, with their dummy password.
-          </p>
+
           <LoginForm
             // Only what the match needs; the password is dummy data already in git.
             users={users.map(({ id, email, password, status }) => ({ id, email, password, status }))}

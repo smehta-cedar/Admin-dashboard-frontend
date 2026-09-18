@@ -7,7 +7,7 @@ type Note<F extends string> = {
   changes: FieldChange<F>[];
 };
 
-type NoteListProps<F extends string> = {
+export type NoteListProps<F extends string> = {
   notes: Note<F>[];
   /** Label for each field a change can name. */
   labels: Record<F, string>;

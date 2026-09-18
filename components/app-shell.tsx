@@ -22,7 +22,6 @@ const DESKTOP_QUERY = "(min-width: 64rem)";
 const COLLAPSED_KEY = "sidebar-collapsed";
 
 type AppShellProps = {
-  title: string;
   navItems: NavItem[];
   /** Pinned to the bottom of the rail and drawer, e.g. Agency. */
   footerItems?: NavItem[];
@@ -31,7 +30,7 @@ type AppShellProps = {
   children: ReactNode;
 };
 
-export function AppShell({ title, navItems, footerItems = [], user, children }: AppShellProps) {
+export function AppShell({ navItems, footerItems = [], user, children }: AppShellProps) {
   const drawerRef = useRef<HTMLDialogElement>(null);
   const drawerId = useId();
   const railId = useId();
@@ -90,7 +89,6 @@ export function AppShell({ title, navItems, footerItems = [], user, children }: 
       </a>
 
       <Navbar
-        title={title}
         onMenuClick={openDrawer}
         drawerId={drawerId}
         railCollapsed={collapsed}
@@ -141,7 +139,6 @@ export function AppShell({ title, navItems, footerItems = [], user, children }: 
             <div aria-hidden="true" className="bg-brand-gradient absolute inset-x-0 top-0 h-0.5" />
             <div className="flex items-center gap-3">
               <BrandLogo height={30} />
-              <span className="sr-only">{title}</span>
             </div>
             <button
               type="button"

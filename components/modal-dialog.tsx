@@ -34,11 +34,12 @@ export function ModalDialog({ dialogRef, labelledBy, onClose, children }: ModalD
       ref={dialogRef}
       aria-labelledby={labelledBy}
       onClose={onClose}
-      // The content fills the dialog, so only backdrop clicks land here.
+      // The content fills the dialog (p-0; the form owns the inset), so only
+      // backdrop clicks land here.
       onClick={(event) => {
         if (event.target === event.currentTarget) event.currentTarget.close();
       }}
-      className="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-3xl overflow-y-auto rounded-lg bg-surface p-6 shadow-xl backdrop:bg-scrim"
+      className="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-3xl overflow-y-auto rounded-lg bg-surface p-0 shadow-xl backdrop:bg-scrim"
     >
       {children}
     </dialog>

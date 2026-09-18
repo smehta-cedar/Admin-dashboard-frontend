@@ -49,7 +49,7 @@ export default async function DashboardLayout({
   if (!user) redirect("/login");
 
   return (
-    <AppShell title="" navItems={NAV_ITEMS} footerItems={FOOTER_ITEMS} user={user}>
+    <AppShell navItems={NAV_ITEMS} footerItems={FOOTER_ITEMS} user={user}>
       {children}
     </AppShell>
   );

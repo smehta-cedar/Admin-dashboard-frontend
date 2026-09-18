@@ -5,39 +5,37 @@ import { useEffect, useId, useState } from "react";
 import { PRIMARY_BUTTON_CLASS } from "@/components/classes";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import { UnsavedBanner } from "@/components/unsaved-banner";
 import type { AgentRecord } from "@/lib/agents";
 import type { CarrierContractNote, CarrierContractRecord } from "@/lib/carrier-contracts";
 import type { CarrierRecord } from "@/lib/carriers";
 import { LINES_OF_BUSINESS } from "@/lib/lines-of-business";
 import { stateSummary, writableStates } from "@/lib/us-states";
-import {
-  AppointmentDialog,
-  normalizeStates,
-  saveAppointment,
-  type AppointmentEditor,
-  type AppointmentError,
-  type AppointmentValues,
-} from "../appointment-dialog";
+import { byName, initials } from "@/lib/text";
+import { AppointmentDialog } from "../appointment-dialog";
+import { useAppointments } from "../use-appointments";
 import { AgentCarrierList } from "./agent-carrier-list";
 import { AgentsPerCarrierChart } from "./agents-per-carrier-chart";
 
 /*
  * A bar chart of active agents per carrier, grouped by line of business, sits
  * above one grid of square cards, one per carrier. Cards are only carriers
- * with at least one active agent contracted, tagged with every line they
- * write, with an n/total count above a red-to-green coverage bar along the
- * bottom edge. Coverage is shown by color and the agent count only, never named or
+ * with at least one agent contracted, tagged with every line they write, with
+ * an n/total count above a red-to-green coverage bar along the bottom edge.
+ * Coverage is shown by color and the agent count only, never named or
  * filtered on. "Show all carriers" adds one muted "Not yet contracted" list
- * below the grid for carriers with no active agent, as compact chips with Add
- * agent, never as cards. The chart, cards and list follow the same toggle.
+ * below the grid for carriers with no contract at all, as compact chips with
+ * Add agent, never as cards. The chart, cards and list follow the same toggle.
  * Add contract works either way, for any carrier.
  *
- * A contract has no status: a row means the agent is contracted. Only active
- * agents appear: `agents` holds active agents only (status is edited on the
- * Agents page), and a contract for any other agent stays in state but is never
- * shown or counted, ready for when that agent is active again. A card shows
- * its contracted agents as initials (appointed states on hover) and does not
- * expand. The add-agent icon top-right opens Add contract for that carrier.
+ * A contract has no status: a row means the agent is contracted. Inactive
+ * agents follow the same rule as inactive carriers: their contracts are shown
+ * (muted tile, "(inactive)" in the Agents list) and editable, but coverage —
+ * the chart, the n/total and the bar — counts active agents only, since an
+ * inactive agent can't write. Status is edited on the Agents page. A card
+ * shows its contracted agents as initials (appointed states on hover) and
+ * does not expand. The add-agent icon top-right opens Add contract for that
+ * carrier.
  *
  * The states shown against a contract are the writable ones: the appointment
  * narrowed to the agent's licensedStates (Agents) and the carrier's
@@ -50,8 +48,7 @@ import { AgentsPerCarrierChart } from "./agents-per-carrier-chart";
  * brings back the JSON.
  */
 
-/** An active agent. Inactive agents are never passed in. */
-type AgentOption = Pick<AgentRecord, "id" | "name" | "licensedStates">;
+type AgentOption = Pick<AgentRecord, "id" | "name" | "status" | "licensedStates">;
 type CarrierOption = Pick<
   CarrierRecord,
   "id" | "name" | "linesOfBusiness" | "status" | "availableStates"
@@ -87,6 +84,9 @@ const AGENT_TILE_CLASS =
 /** Contracted agents: a soft sage that echoes the coverage bar. */
 const AGENT_COLOR_CLASS = "bg-agent-chip text-agent-chip-ink ring-1 ring-inset ring-agent-chip-line";
 
+/** Inactive agents: contracted, but not coverage, so the tile is muted. */
+const INACTIVE_AGENT_COLOR_CLASS = "bg-surface-muted text-fg-subtle ring-1 ring-inset ring-line";
+
 /** Person with a plus. */
 function AddAgentIcon({ className }: { className?: string }) {
   return (
@@ -107,50 +107,49 @@ function AddAgentIcon({ className }: { className?: string }) {
   );
 }
 
-/** First letters of the first and last word, e.g. "Jane Q. Doe" → "JD". */
-const initials = (name: string) => {
-  const words = name.trim().split(/\s+/);
-  const first = words[0]?.[0] ?? "";
-  const last = words.length > 1 ? words[words.length - 1][0] : "";
-  return (first + last).toUpperCase();
-};
-
-const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
-
 export function CarrierContractsView({
   initialContracts,
   initialNotes,
   agents,
   carriers,
 }: CarrierContractsViewProps) {
-  const [contracts, setContracts] = useState(initialContracts);
-  // Notes are still written on add and edit; the carrier profile will show them.
-  const [notes, setNotes] = useState(initialNotes);
   const [unsavedCount, setUnsavedCount] = useState(0);
-  const [editor, setEditor] = useState<AppointmentEditor | null>(null);
-  // Off: only carriers with an active agent contracted. On: every carrier.
+  // Notes are still written on add and edit; the by-state page shows them.
+  const { contracts, editor, setEditor, saveContract, agentName, carrierName } = useAppointments({
+    initialContracts,
+    initialNotes,
+    agents,
+    carriers,
+    onSaved: (values, nextContracts) => {
+      setUnsavedCount((count) => count + 1);
+      noticeIfHidden(
+        values.carrierId,
+        nextContracts,
+        `${agentName(values.agentId)} saved at ${carrierName(values.carrierId)}.`,
+      );
+    },
+  });
+  // Off: only carriers with an agent contracted. On: every carrier.
   const [showAll, setShowAll] = useState(false);
   // Shown when a change lands on a carrier the toggle hides. Keyed by a
   // counter, so a second hidden change restarts the timer even with the same message.
   const [hiddenNotice, setHiddenNotice] = useState<{ key: number; message: string } | null>(null);
   const id = useId();
 
-  const activeAgents = [...agents].sort(byName);
+  const allAgents = [...agents].sort(byName);
+  // Coverage is measured against these; inactive agents are listed but never counted.
+  const activeAgents = allAgents.filter((agent) => agent.status === "active");
 
-  const agentName = (agentId: string) =>
-    agents.find((agent) => agent.id === agentId)?.name ?? `Agent ${agentId}`;
-  const carrierName = (carrierId: string) =>
-    carriers.find((carrier) => carrier.id === carrierId)?.name ?? `Carrier ${carrierId}`;
-  const availableStates = (carrierId: string) =>
-    carriers.find((carrier) => carrier.id === carrierId)?.availableStates ?? [];
-  const licensedStates = (agentId: string) =>
-    agents.find((agent) => agent.id === agentId)?.licensedStates ?? [];
-
-  /** Coverage of one carrier among active agents, given a set of contracts. */
+  /**
+   * One carrier's contracted agents, given a set of contracts: how many known
+   * agents (`contracted`, decides whether it gets a card) and how many of them
+   * are active (`contractedActive`, the coverage).
+   */
   const coverageOf = (carrierId: string, from: CarrierContractRecord[]) => {
     const contractedIds = new Set(
       from.filter((contract) => contract.carrierId === carrierId).map((contract) => contract.agentId),
     );
+    const contracted = allAgents.filter((agent) => contractedIds.has(agent.id)).length;
     const contractedActive = activeAgents.filter((agent) => contractedIds.has(agent.id)).length;
     const coverage: Coverage =
       contractedActive === 0
@@ -158,7 +157,7 @@ export function CarrierContractsView({
         : contractedActive === activeAgents.length
           ? "full"
           : "partial";
-    return { coverage, contractedIds, contractedActive };
+    return { coverage, contracted, contractedActive };
   };
 
   // The hidden-carrier notice clears itself after a few seconds.
@@ -168,35 +167,43 @@ export function CarrierContractsView({
     return () => clearTimeout(timeout);
   }, [hiddenNotice]);
 
-  // One card per carrier, sorted by name, with its active agents' contracts
+  // One card per carrier, sorted by name, with its known agents' contracts
   // sorted by agent name. Rebuilt from state on every render, so a change shows at once.
-  const activeAgentIds = new Set(agents.map((agent) => agent.id));
+  const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
   const allRows = [...carriers].sort(byName).map((carrier) => {
-    const { coverage, contractedActive } = coverageOf(carrier.id, contracts);
+    const { coverage, contracted, contractedActive } = coverageOf(carrier.id, contracts);
     const carrierContracts = contracts
-      .filter((contract) => contract.carrierId === carrier.id && activeAgentIds.has(contract.agentId))
-      .map((contract) => ({
-        contract,
-        agent: agentName(contract.agentId),
-        states: writableStates(
-          contract.appointedStates,
-          licensedStates(contract.agentId),
-          carrier.availableStates,
-        ),
-      }))
+      .filter((contract) => contract.carrierId === carrier.id)
+      .flatMap((contract) => {
+        const agent = agentsById.get(contract.agentId);
+        return agent
+          ? [
+              {
+                contract,
+                agent: agent.name,
+                inactive: agent.status === "inactive",
+                states: writableStates(
+                  contract.appointedStates,
+                  agent.licensedStates,
+                  carrier.availableStates,
+                ),
+              },
+            ]
+          : [];
+      })
       .sort((a, b) => a.agent.localeCompare(b.agent));
-    return { carrier, coverage, contractedActive, carrierContracts };
+    return { carrier, coverage, contracted, contractedActive, carrierContracts };
   });
   // The toggle decides which carriers are in scope.
-  const rows = showAll ? allRows : allRows.filter((row) => row.contractedActive > 0);
+  const rows = showAll ? allRows : allRows.filter((row) => row.contracted > 0);
   // The chart groups by line, in LINES_OF_BUSINESS order, skipping empty lines.
   const groups = LINES_OF_BUSINESS.map((line) => ({
     line,
     rows: rows.filter((row) => row.carrier.linesOfBusiness.includes(line)),
   })).filter((group) => group.rows.length > 0);
   // Cards are one per contracted carrier; zeros (Show all) go in a single muted list.
-  const cards = rows.filter((row) => row.contractedActive > 0);
-  const zeros = rows.filter((row) => row.contractedActive === 0);
+  const cards = rows.filter((row) => row.contracted > 0);
+  const zeros = rows.filter((row) => row.contracted === 0);
 
   const changeShowAll = (next: boolean) => {
     setShowAll(next);
@@ -205,42 +212,9 @@ export function CarrierContractsView({
 
   /** Tells the user when a change moved a carrier out of view. */
   const noticeIfHidden = (carrierId: string, nextContracts: CarrierContractRecord[], message: string) => {
-    if (showAll || coverageOf(carrierId, nextContracts).contractedActive > 0) return;
-    const hint = "That carrier has no active agents contracted now; turn on Show all carriers to see it.";
+    if (showAll || coverageOf(carrierId, nextContracts).contracted > 0) return;
+    const hint = "That carrier has no agents contracted now; turn on Show all carriers to see it.";
     setHiddenNotice((current) => ({ key: (current?.key ?? 0) + 1, message: `${message} ${hint}` }));
-  };
-
-  /**
-   * Adds or edits a contract through saveAppointment, then flags a carrier the
-   * toggle now hides. Returns the dialog's error message, if any.
-   */
-  const saveContract = (
-    values: AppointmentValues,
-    editing?: CarrierContractRecord,
-  ): AppointmentError | null => {
-    const result = saveAppointment({
-      contracts,
-      notes,
-      values,
-      editing,
-      agentName,
-      carrierName,
-      availableStates,
-      licensedStates,
-    });
-    if (result.error !== null) return result.error;
-    // Saving an edit with nothing changed just closes, without a note.
-    if (!result.changed) return null;
-
-    setContracts(result.contracts);
-    setNotes(result.notes);
-    setUnsavedCount((count) => count + 1);
-    noticeIfHidden(
-      values.carrierId,
-      result.contracts,
-      `${agentName(values.agentId)} saved at ${carrierName(values.carrierId)}.`,
-    );
-    return null;
   };
 
   return (
@@ -271,13 +245,8 @@ export function CarrierContractsView({
         }
       />
 
+      <UnsavedBanner count={unsavedCount} />
       <div role="status">
-        {unsavedCount > 0 ? (
-          <p className="mb-4 rounded-md bg-warn-soft px-3 py-2 text-sm text-warn-ink">
-            {unsavedCount === 1 ? "1 change" : `${unsavedCount} changes`} made on this page only.
-            Nothing is saved yet, so refreshing undoes {unsavedCount === 1 ? "it" : "them"}.
-          </p>
-        ) : null}
         {hiddenNotice ? (
           <p key={hiddenNotice.key} className="mb-4 rounded-md bg-surface-muted px-3 py-2 text-sm text-fg-muted">
             {hiddenNotice.message}
@@ -294,7 +263,7 @@ export function CarrierContractsView({
         <>
           {rows.length === 0 ? (
             <p className="rounded-lg border border-line px-4 py-6 text-center text-sm text-fg-muted">
-              No carriers have an active agent contracted yet. Turn on Show all carriers, or add a contract.
+              No carriers have an agent contracted yet. Turn on Show all carriers, or add a contract.
             </p>
           ) : (
             <>
@@ -382,15 +351,20 @@ export function CarrierContractsView({
                               aria-label={`Agents contracted with ${carrier.name}`}
                               className="flex flex-1 flex-wrap content-start gap-1.5"
                             >
-                              {shown.map(({ contract, agent, states }) => (
+                              {shown.map(({ contract, agent, inactive, states }) => (
                                 <li
                                   key={contract.id}
-                                  title={`${agent} · ${states.length > 0 ? states.join(", ") : "No states"}`}
-                                  className={`${AGENT_TILE_CLASS} ${AGENT_COLOR_CLASS}`}
+                                  title={`${agent}${inactive ? " (inactive)" : ""} · ${
+                                    states.length > 0 ? states.join(", ") : "No states"
+                                  }`}
+                                  className={`${AGENT_TILE_CLASS} ${
+                                    inactive ? INACTIVE_AGENT_COLOR_CLASS : AGENT_COLOR_CLASS
+                                  }`}
                                 >
                                   <span aria-hidden="true">{initials(agent)}</span>
                                   <span className="sr-only">
-                                    {agent}, {stateSummary(states)}
+                                    {agent}
+                                    {inactive ? " (inactive)" : ""}, {stateSummary(states)}
                                   </span>
                                 </li>
                               ))}
@@ -473,7 +447,7 @@ export function CarrierContractsView({
               ) : null}
 
               <AgentCarrierList
-                agents={activeAgents}
+                agents={allAgents}
                 carriers={rows.map((row) => row.carrier)}
                 contracts={contracts}
                 headingId={`${id}-agents-title`}
@@ -487,7 +461,7 @@ export function CarrierContractsView({
 
       <AppointmentDialog
         editor={editor}
-        agents={activeAgents}
+        agents={allAgents}
         carriers={carriers}
         onSave={saveContract}
         onClose={() => setEditor(null)}

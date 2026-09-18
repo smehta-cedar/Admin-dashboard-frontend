@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
-import { clearSessionCookie, initials, type SessionUser } from "@/lib/fake-session";
+import { clearSessionCookie, type SessionUser } from "@/lib/fake-session";
+import { initials } from "@/lib/text";
 import { BrandLogo } from "./brand-logo";
 import { ThemeToggle } from "./theme-toggle";
 
 type NavbarProps = {
-  title: string;
   /** Opens the mobile drawer. The button is hidden at `lg` and up. */
   onMenuClick: () => void;
   /** Id of the drawer element, for aria-controls. */
@@ -24,7 +24,6 @@ type NavbarProps = {
 };
 
 export function Navbar({
-  title,
   onMenuClick,
   drawerId,
   railCollapsed,
@@ -71,7 +70,6 @@ export function Navbar({
           <span className="hidden lg:block">
             <BrandLogo height={34} />
           </span>
-          <span className="sr-only">{title}</span>
         </Link>
         {onToggleRail ? (
           <button
@@ -87,12 +85,6 @@ export function Navbar({
           </button>
         ) : null}
       </div>
-      <span
-        aria-hidden="true"
-        className="hidden text-sm font-semibold tracking-tight text-charcoal sm:block lg:pl-5"
-      >
-        {title}
-      </span>
       <div className="ml-auto flex items-center gap-1">
         <ThemeToggle />
         <NotificationsButton />

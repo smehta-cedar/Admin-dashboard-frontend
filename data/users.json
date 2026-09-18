@@ -3,7 +3,7 @@
     "id": "1",
     "name": "Luke O",
     "email": "luke@example.com",
-    "role": "agent",
+    "role": "staff",
     "status": "active",
     "password": "dummy-pass-1"
   },
@@ -32,22 +32,12 @@
     "password": "dummy-pass-4"
   },
   {
-    "id": "5",   
-     "name": "Suz Meh",
+    "id": "5",
+    "name": "Suz Meh",
     "email": "sujana@example.com",
     "role": "admin",
     "status": "active",
-    "password": "dummy-pass-5",
-    "agentId": "1"
-  },
-  {
-    "id": "6",
-    "name": "James Carter",
-    "email": "jcarter@example.com",
-    "role": "staff",
-    "status": "inactive",
-    "password": "dummy-pass-6",
-    "agentId": "2"
+    "password": "dummy-pass-5"
   }
 
 ]

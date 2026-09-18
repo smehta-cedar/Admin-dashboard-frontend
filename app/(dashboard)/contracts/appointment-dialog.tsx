@@ -14,6 +14,7 @@ import type {
 import type { CarrierRecord } from "@/lib/carriers";
 import { diffValues, nextId } from "@/lib/change-notes";
 import { intersectStates, stateSummary } from "@/lib/us-states";
+import { byName } from "@/lib/text";
 
 /*
  * The one Add / Edit contract dialog, shared by Contracts by carrier and
@@ -36,7 +37,7 @@ import { intersectStates, stateSummary } from "@/lib/us-states";
  * usually calls `saveAppointment` below and sets that state.
  */
 
-type AgentOption = Pick<AgentRecord, "id" | "name" | "licensedStates">;
+type AgentOption = Pick<AgentRecord, "id" | "name" | "status" | "licensedStates">;
 type CarrierOption = Pick<CarrierRecord, "id" | "name" | "status" | "availableStates">;
 
 /** Which dialog is open. Add may start on an agent or carrier; edit holds the contract as it was. */
@@ -62,8 +63,6 @@ const EMPTY_VALUES = { agentId: "", carrierId: "", appointedStates: [] };
 
 /** Unique codes in code order, so a list's order never shows up as a change. */
 export const normalizeStates = (codes: string[]) => [...new Set(codes)].sort();
-
-const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
 
 type SaveInput = {
   contracts: CarrierContractRecord[];
@@ -179,7 +178,7 @@ export function saveAppointment({
 type AppointmentDialogProps = {
   /** Null keeps the dialog closed. */
   editor: AppointmentEditor | null;
-  /** Active agents. */
+  /** Every agent; inactive ones are marked, like inactive carriers. */
   agents: AgentOption[];
   carriers: CarrierOption[];
   /** Saves the values; returns an error to show instead of closing. */
@@ -324,6 +323,7 @@ function AppointmentForm({ id, editor, agents, carriers, onSave, close }: Appoin
             {[...agents].sort(byName).map((agent) => (
               <option key={agent.id} value={agent.id}>
                 {agent.name}
+                {agent.status === "inactive" ? " (inactive)" : ""}
               </option>
             ))}
           </select>

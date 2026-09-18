@@ -1,12 +1,22 @@
 import Link from "next/link";
 import { useId, type ReactNode } from "react";
+import { CredentialValue } from "@/components/credential-value";
+import { EditIcon } from "@/components/edit-icon";
+import { LicenseNumber } from "@/components/license-number";
+import { StatusBadge } from "@/components/status-badge";
+import type { LoginRecord } from "@/lib/logins";
 import { US_STATE_NAMES } from "@/lib/us-states";
+import { initials } from "@/lib/text";
 
 /*
- * Shared pieces of an entity's profile page (agent, carrier): the back link,
- * the initials avatar beside the name, the "label  value" rows of the header
- * card, and the titled panels holding related lists. Each profile lays these
- * out itself. No state here, so both server and client profiles can use them.
+ * Shared pieces of an entity's profile page (agent, carrier, agency), top to
+ * bottom: the back link, the name row (initials avatar, name, status, Edit),
+ * the header card (the "label  value" rows beside one titled aside, e.g.
+ * licensed states as licence cards), and the titled panels holding related
+ * lists — a small table (`ProfileTable`, with `StateChipCell` for a states
+ * column) and the Logins panel both agent and carrier profiles show. Each
+ * profile lays these out itself. No state here, so both server and client
+ * profiles can use them.
  */
 
 export const PROFILE_LINK_CLASS = "font-medium text-fg hover:text-brand-ink hover:underline";
@@ -15,6 +25,10 @@ export const PROFILE_LABEL_CLASS = "text-xs font-medium text-fg-subtle";
 
 /** Header cell of a panel's small table. */
 export const PROFILE_TH_CLASS = `whitespace-nowrap px-3 py-2 ${PROFILE_LABEL_CLASS}`;
+
+/** Soft brand fill, so a profile action (Edit, "+ Add carrier") reads as the one action of its row rather than as row text. */
+export const PROFILE_BUTTON_CLASS =
+  "inline-flex items-center gap-1.5 rounded-md bg-brand-soft px-2.5 py-1 text-sm font-medium text-brand-ink shadow-sm hover:bg-brand-strong hover:text-white";
 
 /** The "‹ Agents" link at the top of a profile, back to the entity's list. */
 export function ProfileBackLink({ href, label }: { href: string; label: string }) {
@@ -40,13 +54,6 @@ export function ProfileBackLink({ href, label }: { href: string; label: string }
   );
 }
 
-/** "Maria Alva" → "MA"; a single word gives one letter. */
-export function initials(name: string) {
-  const words = name.split(/\s+/).filter(Boolean);
-  const letters = words.length > 1 ? [words[0], words[words.length - 1]] : words;
-  return letters.map((word) => word[0].toUpperCase()).join("");
-}
-
 /** The round initials badge that sits beside a profile's name. */
 export function ProfileAvatar({ name }: { name: string }) {
   return (
@@ -56,6 +63,151 @@ export function ProfileAvatar({ name }: { name: string }) {
     >
       {initials(name)}
     </span>
+  );
+}
+
+type ProfileNameRowProps = {
+  name: string;
+  status: "active" | "inactive";
+  /** Small caps line over the name, e.g. "Agency". */
+  eyebrow?: string;
+  /** Opens the entity's edit dialog. */
+  onEdit: () => void;
+  /** Margin above: `mt-4` under a back-link row, none when the row is first. */
+  className?: string;
+};
+
+/** The name row: avatar, name with its status badge, and Edit on the right. */
+export function ProfileNameRow({ name, status, eyebrow, onEdit, className = "mt-4" }: ProfileNameRowProps) {
+  return (
+    <div className={`flex flex-wrap items-center justify-between gap-3 ${className}`}>
+      <div className="flex min-w-0 items-center gap-3.5">
+        <ProfileAvatar name={name} />
+        <div className="min-w-0">
+          {eyebrow ? (
+            <p className="text-xs font-medium uppercase tracking-wide text-fg-subtle">{eyebrow}</p>
+          ) : null}
+          <h1 className="text-xl font-semibold tracking-tight text-fg">{name}</h1>
+          <div className="mt-0.5 flex">
+            <StatusBadge status={status} />
+          </div>
+        </div>
+      </div>
+      <button type="button" onClick={onEdit} className={PROFILE_BUTTON_CLASS}>
+        <EditIcon className="size-3.5 shrink-0" />
+        Edit<span className="sr-only"> {name}</span>
+      </button>
+    </div>
+  );
+}
+
+type ProfileHeaderProps = {
+  /** `Detail` rows for the left column. */
+  details: ReactNode;
+  /** The aside's heading, count pill and tooltip, e.g. "Licensed states". */
+  asideTitle: string;
+  asideCount: number;
+  asideTooltip: string;
+  /** The aside's body: a chip list, `LicenseCards`, or an empty-state line. */
+  children: ReactNode;
+};
+
+/** The header card: contact details beside one titled aside. Stacks below `lg`. */
+export function ProfileHeader({
+  details,
+  asideTitle,
+  asideCount,
+  asideTooltip,
+  children,
+}: ProfileHeaderProps) {
+  const headingId = useId();
+
+  return (
+    <header className="mt-4 grid overflow-hidden rounded-xl border border-line bg-surface p-2 shadow-sm lg:grid-cols-[auto_minmax(0,1fr)]">
+      <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] content-start items-baseline gap-x-6 gap-y-3 px-5 py-4 lg:max-w-md">
+        {details}
+      </dl>
+
+      <section
+        aria-labelledby={headingId}
+        className="min-w-0 border-t border-line px-5 py-4 lg:border-l lg:border-t-0"
+      >
+        <h2
+          id={headingId}
+          title={asideTooltip}
+          className="flex items-center gap-2 text-sm font-semibold text-fg"
+        >
+          {asideTitle}
+          <Count value={asideCount} />
+        </h2>
+        {children}
+      </section>
+    </header>
+  );
+}
+
+type ProducerDetailsProps = {
+  npn: string;
+  email: string;
+  phone: string;
+  aliases: string[];
+  /** "Aliases" for an agent, "Other names" for the agency. */
+  aliasesLabel: string;
+};
+
+/** The NPN / email / phone / aliases rows an agent and the agency both show. */
+export function ProducerDetails({ npn, email, phone, aliases, aliasesLabel }: ProducerDetailsProps) {
+  return (
+    <>
+      <Detail label="NPN">{npn ? <span className="font-mono">{npn}</span> : null}</Detail>
+      <Detail label="Email">
+        {email ? (
+          <a href={`mailto:${email}`} className="hover:text-brand-ink hover:underline">
+            {email}
+          </a>
+        ) : null}
+      </Detail>
+      <Detail label="Phone">
+        {phone ? (
+          <a href={`tel:${phone}`} className="hover:text-brand-ink hover:underline">
+            {phone}
+          </a>
+        ) : null}
+      </Detail>
+      <Detail label={aliasesLabel}>{aliases.join(", ")}</Detail>
+    </>
+  );
+}
+
+type LicenseCardsProps = {
+  /** Licensed state codes, in code order. */
+  codes: string[];
+  /** Licence number by state code; a missing one shows "No number yet". */
+  numbers: Record<string, string>;
+  /** Shown instead of the cards when `codes` is empty. */
+  empty: string;
+};
+
+/** One small card per licensed state: the code beside that state's licence number. */
+export function LicenseCards({ codes, numbers, empty }: LicenseCardsProps) {
+  if (codes.length === 0) return <p className="mt-2 text-sm text-fg-subtle">{empty}</p>;
+
+  return (
+    <ul className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-2">
+      {codes.map((code) => (
+        <li
+          key={code}
+          title={US_STATE_NAMES[code]}
+          className="flex items-baseline justify-between rounded-lg bg-surface-muted px-3 py-2 ring-1 ring-inset ring-line"
+        >
+          <span className="font-mono text-sm font-bold text-fg">
+            {code}
+            {US_STATE_NAMES[code] ? <span className="sr-only"> ({US_STATE_NAMES[code]})</span> : null}
+          </span>
+          <LicenseNumber value={numbers[code]} className="min-w-0" />
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -127,4 +279,113 @@ export function Panel({ title, count, action, className = "", children }: PanelP
 /** What a panel shows instead of its list when there is nothing in it. */
 export function PanelEmpty({ children }: { children: ReactNode }) {
   return <p className="text-sm text-fg-subtle">{children}</p>;
+}
+
+type ProfileTableProps<T> = {
+  /** Column headings, in order. */
+  columns: string[];
+  rows: T[];
+  rowKey: (row: T) => string;
+  /** The `<td>`s of one row, in column order. */
+  children: (row: T) => ReactNode;
+};
+
+/** A panel's small table: headings row, then one `<tr>` per row. The caller renders the cells. */
+export function ProfileTable<T>({ columns, rows, rowKey, children }: ProfileTableProps<T>) {
+  return (
+    <div className="overflow-x-auto rounded-lg border border-line">
+      <table className="min-w-full text-left text-sm">
+        <thead className="bg-surface-muted">
+          <tr>
+            {columns.map((heading) => (
+              <th key={heading} scope="col" className={PROFILE_TH_CLASS}>
+                {heading}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-line border-t border-line">
+          {rows.map((row) => (
+            <tr key={rowKey(row)}>{children(row)}</tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+type StateChipCellProps = {
+  codes: string[];
+  /** The list's accessible name, e.g. "States writable with Humana". */
+  label: string;
+  /** Shown when `codes` is empty. */
+  empty: string;
+};
+
+/** A states column cell: chips, or a faint empty-state line. Takes the row's spare width. */
+export function StateChipCell({ codes, label, empty }: StateChipCellProps) {
+  return (
+    <td className="w-full px-3 py-2.5">
+      {codes.length > 0 ? (
+        <ul aria-label={label} className="flex flex-wrap gap-1">
+          {codes.map((code) => (
+            <StateChip key={code} code={code} />
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs text-fg-faint">{empty}</p>
+      )}
+    </td>
+  );
+}
+
+/** A login row on a profile, with the other party (carrier or agent) resolved to a link. */
+export type ProfileLogin = LoginRecord & { partyName: string; partyHref: string };
+
+type LoginsPanelProps = {
+  /** Sorted by party name. */
+  logins: ProfileLogin[];
+  /** Heading of the first column: "Carrier" on an agent, "Agent" on a carrier. */
+  partyHeading: string;
+  /** Extra classes on the panel, e.g. a column span. */
+  className?: string;
+};
+
+/** The Logins panel: the other party, writing number, portal username, password and status. */
+export function LoginsPanel({ logins, partyHeading, className }: LoginsPanelProps) {
+  return (
+    <Panel title="Logins" count={logins.length} className={className}>
+      {logins.length === 0 ? (
+        <PanelEmpty>No logins recorded.</PanelEmpty>
+      ) : (
+        <ProfileTable
+          columns={[partyHeading, "Writing number", "Portal username", "Password", "Status"]}
+          rows={logins}
+          rowKey={(login) => login.id}
+        >
+          {(login) => (
+            <>
+              <td className="min-w-24 whitespace-nowrap px-3 py-2.5">
+                <Link href={login.partyHref} className={PROFILE_LINK_CLASS}>
+                  {login.partyName}
+                </Link>
+              </td>
+              <td className="whitespace-nowrap px-3 py-2.5 font-mono text-fg-muted">
+                {login.writingNumber}
+              </td>
+              <td className="px-3 py-2.5 text-fg-muted">
+                <CredentialValue value={login.username} label="username" />
+              </td>
+              <td className="px-3 py-2.5 text-fg-muted">
+                <CredentialValue value={login.portalPassword} label="password" secret />
+              </td>
+              <td className="px-3 py-2.5">
+                <StatusBadge status={login.status} />
+              </td>
+            </>
+          )}
+        </ProfileTable>
+      )}
+    </Panel>
+  );
 }

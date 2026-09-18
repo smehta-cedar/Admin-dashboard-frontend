@@ -4,6 +4,7 @@ import { getAgents } from "@/lib/agents";
 import { getCarrierContracts } from "@/lib/carrier-contracts";
 import { getCarrier, getCarrierNotes, getCarriers } from "@/lib/carriers";
 import { getLogins } from "@/lib/logins";
+import { byName } from "@/lib/text";
 import { CarrierProfile } from "./carrier-profile";
 
 export async function generateMetadata(props: PageProps<"/carriers/[id]">): Promise<Metadata> {
@@ -27,7 +28,6 @@ export default async function CarrierProfilePage(props: PageProps<"/carriers/[id
 
   const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
   const agentName = (agentId: string) => agentsById.get(agentId)?.name ?? `Agent ${agentId}`;
-  const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
 
   return (
     <CarrierProfile
@@ -58,8 +58,12 @@ export default async function CarrierProfilePage(props: PageProps<"/carriers/[id
         .sort(byName)}
       logins={logins
         .filter((login) => login.carrierId === id)
-        .map((login) => ({ ...login, agentName: agentName(login.agentId) }))
-        .sort((a, b) => a.agentName.localeCompare(b.agentName))}
+        .map((login) => ({
+          ...login,
+          partyName: agentName(login.agentId),
+          partyHref: `/agents/${login.agentId}`,
+        }))
+        .sort((a, b) => a.partyName.localeCompare(b.partyName))}
       initialNotes={notes}
     />
   );

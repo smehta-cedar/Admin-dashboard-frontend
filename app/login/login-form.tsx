@@ -6,7 +6,7 @@ import { INPUT_CLASS, PRIMARY_BUTTON_CLASS } from "@/components/classes";
 import { Field } from "@/components/field";
 import { setSessionCookie } from "@/lib/fake-session";
 import type { UserRecord } from "@/lib/users";
-import { PasswordInput } from "../(dashboard)/logins/credential-value";
+import { PasswordInput } from "@/components/credential-value";
 
 /** The slice of each user the match needs. */
 type LoginUser = Pick<UserRecord, "id" | "email" | "password" | "status">;

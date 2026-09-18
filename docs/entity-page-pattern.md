@@ -42,7 +42,15 @@ Shared pieces (extracted when Carriers landed — use these, don't copy):
 | `components/modal-dialog.tsx` | `useModalDialog(open)` → `{ dialogRef, close }`, `ModalDialog` |
 | `components/classes.ts` | `INPUT_CLASS`, `PRIMARY_BUTTON_CLASS`, `GHOST_BUTTON_CLASS`, `ROW_BUTTON_CLASS`, `TOOLBAR_INPUT_CLASS` |
 | `lib/change-notes.ts` | `nextId`, `fieldText`, `diffValues(FIELDS, before, after, redact?)`, `FieldChange<F>` |
+| `lib/text.ts` | `byName` (sort comparator), `initials("Maria Alva") → "MA"` — the only copies |
+| `components/unsaved-banner.tsx` | `UnsavedBanner({ count, className? })` (§9) |
+| `components/hydrated-note-list.tsx` | `HydratedNoteList` — `NoteList` gated on hydration, for a profile's Notes panel |
+| `components/entity-switcher.tsx` | `EntitySwitcher({ label, currentId, options, hrefFor })` — the profile's "Switch agent/carrier" select, sorted by name, inactive grouped last |
+| `components/credential-value.tsx` | `CredentialValue` (copy-on-click, masked when `secret`), `PasswordInput` (eye toggle) — Logins, Users, sign-in, profiles |
 | `components/license-number.tsx` | `LicenseNumber` (a licensed-state card's number, click to copy, or "No number yet"; agent and agency profiles) |
+| `components/producer-form.tsx` | `ProducerForm` + `producerNoteValues`, `unnumberedStatesError` — the one agent/agency form (see Agency) |
+| `components/profile-shell.tsx` | Profile layout pieces: `ProfileBackLink`, `ProfileNameRow`, `ProfileHeader`, `ProducerDetails`, `Detail`, `LicenseCards`, `StateChip`, `Count`, `Panel`, `PanelEmpty`, `ProfileTable`, `StateChipCell`, `LoginsPanel`, `PROFILE_BUTTON_CLASS` (see Contracts → Profiles) |
+| `app/(dashboard)/contracts/use-appointments.ts` | `useAppointments` — contracts + notes state, the open `AppointmentDialog` editor, and its `saveContract` (see Contracts → One dialog) |
 
 Constants a client view needs from an entity (like `LINES_OF_BUSINESS`) go in
 a separate client-safe module such as `lib/lines-of-business.ts`, not in the
@@ -198,8 +206,11 @@ applies to the lists that pass `renderDetails`.
   form renders only while the editor is set, so closing (Cancel, Escape,
   backdrop click, save) clears the editor in `onClose` and unmounts/resets the form.
 - Backdrop click closes (`event.target === event.currentTarget`; the form fills the dialog).
-- Classes: `m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-lg bg-surface p-0 shadow-xl backdrop:bg-scrim`
+- Classes: `m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-3xl overflow-y-auto rounded-lg bg-surface p-0 shadow-xl backdrop:bg-scrim`
   (`m-auto` is needed because Tailwind preflight zeroes dialog margins).
+- The dialog stays `p-0`; the `<form>` owns the inset (`p-6`). Padding on the
+  dialog itself would create a ring inside it where clicks hit the backdrop
+  handler and close the form.
 - Content: `h2` title (`Add <entity>` / `Edit <name>`), one-line description
   saying it is not saved anywhere, fields grid `mt-5 grid gap-4 sm:grid-cols-2`
   (wide fields `sm:col-span-2`), footer `mt-6 flex justify-end gap-2` with
@@ -220,10 +231,14 @@ applies to the lists that pass `renderDetails`.
 
 ## 9. Unsaved banner
 
-`<div role="status">` always rendered; inside, when count > 0:
-`mb-4 rounded-md bg-warn-soft px-3 py-2 text-sm text-warn-ink` —
-"N changes made on this page only. Nothing is saved yet, so refreshing undoes them."
-Count increments on every add and every edit that changed something.
+`<UnsavedBanner count={unsavedCount} />` from
+[components/unsaved-banner.tsx](../components/unsaved-banner.tsx): a
+`<div role="status">` always rendered; inside, when count > 0,
+`rounded-md bg-warn-soft px-3 py-2 text-sm text-warn-ink` —
+"N changes made on this page only. Nothing is saved yet, so refreshing (or
+leaving the page) undoes them." `className` sets the margin: `mb-4` (default)
+on list pages, `mt-4` on profiles. Count increments on every add and every
+edit that changed something.
 
 ## 10. Style tokens
 
@@ -301,12 +316,15 @@ To change how the app looks in either mode, edit the token block in
    diff → note, unsaved banner.
 6. `npm run typecheck` and `next build`, then click through add, edit (no-op
    and real change), duplicate check, expand/collapse, Escape/backdrop close.
+   The typecheck has `noUnusedLocals` and `noUnusedParameters` on, so an unused
+   import, local or parameter fails it; there is no ESLint (typescript-eslint
+   can't run on the TypeScript 7 toolchain this project uses).
 
 ## 13. Shared helpers
 
-Extracted when Carriers became the second page; see the table in §2. Still
-copied per view (small, and may diverge): the name toggle button with
-chevron, the unsaved banner, and the aliases section.
+Extracted when Carriers became the second page and again after the Sep 2026
+audit; see the table in §2. Still copied per view (small, and may diverge):
+the name toggle button with chevron and the aliases section.
 
 Carriers ([app/(dashboard)/carriers/carriers-view.tsx](../app/(dashboard)/carriers/carriers-view.tsx))
 uses the shared `CarrierDialog` + `saveCarrier` (same component the carrier
@@ -360,6 +378,18 @@ states than they could otherwise write in.
   and they render unchecked with no `name`, so they never submit.
 - One appointment per agent + carrier, checked in the form.
 - A stored row missing `appointedStates` loads as `[]` with a `console.warn`.
+
+**Inactive agents: one rule, every surface.** A contract follows the agent,
+not the agent's status, exactly as it already does for carriers. So wherever
+contracts are listed — both Contracts pages, both profiles, the dialog's agent
+select — an inactive agent's contracts appear and can be edited, marked
+"(inactive)" (a muted tile on the by-carrier cards). What changes is
+**counting**: anything that says how much coverage the agency has counts active
+agents only — the by-state map and its legend ("Active agents appointed"), the
+"Agents appointed" stat, the by-carrier chart and each card's n/total and bar.
+Both `page.tsx` files therefore pass **every** agent with `status`, never a
+pre-filtered list. Deactivating an agent on Agents changes the numbers, not
+what is listed; nothing is hidden and no "include inactive" toggle is needed.
 - Notes label the field "States"; values are codes in code order joined with
   ", ", so reordering alone never records a change.
 
@@ -423,10 +453,17 @@ dialog's options) and **every** contract and contract note (the duplicate check
 and `nextId` need the full lists), and the profile picks out the agent's own
 rows.
 
-Both profiles lay themselves out from the shared pieces in
-`components/profile-shell.tsx`: `ProfileBackLink`, `ProfileAvatar`, `Detail`,
-`Count`, `StateChip`, `Panel`, `PanelEmpty`, and `PROFILE_LINK_CLASS` /
-`PROFILE_TH_CLASS`. The agent profile, top to bottom:
+All three profiles (agent, carrier, agency) lay themselves out from the
+shared pieces in `components/profile-shell.tsx`, top to bottom:
+`ProfileBackLink` beside `EntitySwitcher` (`components/entity-switcher.tsx`),
+`ProfileNameRow` (avatar, name, status, Edit; `eyebrow` for "Agency"),
+`ProfileHeader` (`details` = `Detail` rows or `ProducerDetails`, beside one
+titled aside, e.g. `LicenseCards` or `StateChip`s), `UnsavedBanner`, then
+`Panel`s: a `ProfileTable` (headings + `<tr>` per row; the caller renders the
+`<td>`s, with `StateChipCell` for a states column), `LoginsPanel` (agent and
+carrier profiles; `page.tsx` resolves the other party into `partyName` /
+`partyHref`), and Notes as `HydratedNoteList`. `PROFILE_BUTTON_CLASS` is the
+soft-brand action button ("+ Add carrier"). The agent profile, top to bottom:
 
 - **Name row**: initials, name, status badge under it, and **Edit**, which opens
   the same `AgentDialog` as the Agents list
@@ -470,7 +507,11 @@ from the live `availableStates` after an edit.
 Files: [lib/logins.ts](../lib/logins.ts),
 [app/(dashboard)/logins/page.tsx](../app/(dashboard)/logins/page.tsx),
 [app/(dashboard)/logins/logins-view.tsx](../app/(dashboard)/logins/logins-view.tsx),
-[app/(dashboard)/logins/credential-value.tsx](../app/(dashboard)/logins/credential-value.tsx).
+[app/(dashboard)/logins/login-dialog.tsx](../app/(dashboard)/logins/login-dialog.tsx)
+(`LoginDialog` + pure `saveLogin`, which returns every error at once like
+`saveCarrier`; `LOGIN_FIELD_LABELS` lives there; Add starts on the filtered
+carrier via `{ mode: "add", carrierId }`),
+[components/credential-value.tsx](../components/credential-value.tsx).
 
 Logins is the first entity that points at other entities. A login is one
 agent's access at one carrier.
@@ -606,30 +647,33 @@ Files: [lib/users.ts](../lib/users.ts), [data/users.json](../data/users.json),
 [app/(dashboard)/users/](../app/(dashboard)/users/) (`users-view.tsx`,
 `user-dialog.tsx`).
 
-The people who sign in. A list only (no profile page); `UserDialog` +
-pure `saveUser` follow the agent-dialog shape.
+The people who sign in: the agency's admin and staff accounts. A list only
+(no profile page); `UserDialog` + pure `saveUser` follow the agent-dialog
+shape.
+
+**Phase 1: login roles are `admin | staff` only.** Agents and the agency do
+not sign in yet, so there is no agent role, no link from a user to an
+`AgentRecord`, and nothing on this page reads `lib/agents.ts`. Agent / agency
+login is a later phase and will be designed then (its own role, or its own
+sign-in path) rather than half-wired here.
 
 | Field | Required | Type | Notes |
 | --- | --- | --- | --- |
 | `name` | yes | string | Display name. |
 | `email` | yes | string | What they sign in with. Unique, ignoring case. |
-| `role` | yes | `"admin" \| "staff" \| "agent"` | Default `"staff"` on add. **Stored and shown only** — nothing is gated by it yet; every signed-in user sees the whole app. |
+| `role` | yes | `"admin" \| "staff"` | Default `"staff"` on add. **Stored and shown only** — nothing is gated by it yet; every signed-in user sees the whole app. |
 | `status` | yes | `"active" \| "inactive"` | Inactive users can't sign in (and are signed out on their next request). |
 | `password` | yes | string | Dummy only, like Logins; never trimmed; redacted in notes. |
-| `agentId` | no | string | Only when `role === "agent"`: the `AgentRecord` this user is. Required then, and must exist. |
 
 - Columns: **Name (expands to Notes), Email, Password (masked `CredentialValue`,
-  never sortable or searchable), Role, Status, Linked agent (link to the
-  profile, or —), [actions]**. ID order.
+  never sortable or searchable), Role, Status, [actions]**. ID order.
 - Loading: an unknown `role` reads as `"staff"`, an unknown `status` as
-  `"active"` (each with a `console.warn`); an `agentId` on a non-agent role is
-  dropped.
-- Dialog: the Linked agent select renders only while the role is `agent`, so
-  changing the role away from agent clears the link on save. Errors under the
-  field: "Email x already belongs to Y.", "Choose the agent this user signs in
-  as.", "Password can't be blank.".
-- Notes record the linked agent **by name** and the password as
-  `diffValues(FIELDS, before, after, ["password"])` (§Logins).
+  `"active"`, each with a `console.warn` naming the user. `data/users.json`
+  is kept clean of both, so a warning in dev means a real data problem.
+- Dialog errors under the field: "Email x already belongs to Y.", "Password
+  can't be blank.".
+- Notes record the password as `diffValues(FIELDS, before, after, ["password"])`
+  (§Logins).
 
 ### Fake session (until Supabase Auth)
 
@@ -677,10 +721,15 @@ first.
 - Same producer shape as `AgentRecord` (name, aliases, status, npn,
   licensedStates, licenseNumbers, email, phone), loaded the same way (states
   sorted and unique, numbers only for licensed states, `formatPhone`).
-- `AgencyDialog` + pure `saveAgency` are the agent dialog with org labels
-  (`AGENCY_FIELD_LABELS`: "Agency name", "Other names", "Agency NPN", …), edit
-  only. Same "every checked state needs its licence number" check; no NPN
-  uniqueness, since nothing else has an agency NPN.
+- `AgencyDialog` + pure `saveAgency` render the shared `ProducerForm`
+  ([components/producer-form.tsx](../components/producer-form.tsx)) with org
+  `labels` (`AGENCY_FIELD_LABELS` for notes: "Agency name", "Other names",
+  "Agency NPN", …), edit only. `AgentDialog` renders the same form with agent
+  labels; the form owns the fields, the licence-number inputs per checked
+  state and the submit parsing, while each dialog keeps its own pure save.
+  Same "every checked state needs its licence number" check
+  (`unnumberedStatesError`); no NPN uniqueness, since nothing else has an
+  agency NPN.
 - Profile layout mirrors the agent profile: name row (avatar, "Agency"
   eyebrow, name, status, Edit), header card (NPN / email / phone / other names
   beside licensed-state cards with `LicenseNumber`), unsaved banner, then

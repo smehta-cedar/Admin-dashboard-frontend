@@ -3,7 +3,8 @@
 import { useEffect, useState, type ComponentProps, type ReactNode } from "react";
 
 /*
- * Username and password controls for the Logins page. In the table, a value
+ * Username and password controls, shared by Logins, Users, the sign-in form and
+ * the profiles' Logins panels. In a table, a value
  * copies when you click it or its copy button; a password shows a fixed mask
  * until its eye button reveals it. The form's password input is
  * type="password" until its eye button shows it. Reveal state lives in each

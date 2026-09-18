@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type FormEvent, type ReactNode } from "react";
+import { useId, useState, type FormEvent } from "react";
 import { GHOST_BUTTON_CLASS, INPUT_CLASS, PRIMARY_BUTTON_CLASS } from "@/components/classes";
 import { Field } from "@/components/field";
 import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
@@ -13,8 +13,7 @@ import { LINES_OF_BUSINESS } from "@/lib/lines-of-business";
  * The one Add / Edit carrier dialog: name, aliases, status, lines of business
  * and the states the carrier is available in (the ceiling for every
  * appointment with it). The Carriers page opens it from Add carrier and a row's
- * Edit; the contract dialog opens it in add mode from "New carrier", so a
- * contract can name a carrier that isn't on the list yet.
+ * Edit; the carrier profile opens it from its Edit.
  *
  * Each view owns its carriers and notes state and passes `onSave`, which
  * usually calls `saveCarrier` below and sets that state. Adds and edits are
@@ -28,12 +27,6 @@ export type CarrierValues = Omit<CarrierRecord, "id">;
 
 /** A save error, shown under the field it names. Name and lines can both fail at once. */
 export type CarrierError = { field: "name" | "linesOfBusiness"; message: string };
-
-/**
- * What a view returns after the contract dialog asks it to add a carrier:
- * errors to show, or the new carrier's ID so the contract can select it.
- */
-export type AddCarrierResult = { errors: CarrierError[]; carrierId: string | null };
 
 /** Also the order changes are compared and listed in. */
 export const CARRIER_FIELD_LABELS: Record<CarrierField, string> = {
@@ -125,15 +118,13 @@ export function saveCarrier({ carriers, notes, values, editing }: SaveInput): Sa
 type CarrierDialogProps = {
   /** Null keeps the dialog closed. */
   editor: CarrierEditor | null;
-  /** Line under the title, e.g. what happens to the carrier once it is added. */
-  description?: ReactNode;
   /** Saves the values; returns the errors to show instead of closing. */
   onSave: (values: CarrierValues) => CarrierError[];
   /** Runs for every close: Cancel, Escape, backdrop click, or a save. */
   onClose: () => void;
 };
 
-export function CarrierDialog({ editor, description, onSave, onClose }: CarrierDialogProps) {
+export function CarrierDialog({ editor, onSave, onClose }: CarrierDialogProps) {
   const { dialogRef, close } = useModalDialog(editor !== null);
   const id = useId();
 
@@ -144,7 +135,6 @@ export function CarrierDialog({ editor, description, onSave, onClose }: CarrierD
         <CarrierForm
           id={id}
           editor={editor}
-          description={description}
           onSave={onSave}
           close={close}
         />
@@ -160,7 +150,7 @@ type CarrierFormProps = Omit<CarrierDialogProps, "editor" | "onClose"> & {
 };
 
 /** The dialog's form. Mounted per open, so its errors start clear each time. */
-function CarrierForm({ id, editor, description, onSave, close }: CarrierFormProps) {
+function CarrierForm({ id, editor, onSave, close }: CarrierFormProps) {
   const editing = editor.mode === "edit" ? editor.carrier : undefined;
   const [errors, setErrors] = useState<CarrierError[]>([]);
 
@@ -201,7 +191,11 @@ function CarrierForm({ id, editor, description, onSave, close }: CarrierFormProp
       <h2 id={`${id}-title`} className="text-base font-semibold text-fg">
         {editing ? `Edit ${editing.name}` : "Add carrier"}
       </h2>
-      {description ? <p className="mt-1 text-sm text-fg-muted">{description}</p> : null}
+      <p className="mt-1 text-sm text-fg-muted">
+        {editing
+          ? "Saving records a note of what changed. Nothing is saved anywhere yet; refreshing undoes it."
+          : "Not saved anywhere yet. The carrier stays in the list until you refresh."}
+      </p>
 
       {/* Name and aliases full width; status (left) and lines of business (right) share a row; states below. */}
       <div className="mt-5 grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)]">

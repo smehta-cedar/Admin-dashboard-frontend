@@ -4,6 +4,7 @@ import { getAgent, getAgentNotes, getAgents } from "@/lib/agents";
 import { getCarrierContractNotes, getCarrierContracts } from "@/lib/carrier-contracts";
 import { getCarriers } from "@/lib/carriers";
 import { getLogins } from "@/lib/logins";
+import { byName } from "@/lib/text";
 import { AgentProfile } from "./agent-profile";
 
 export async function generateMetadata(props: PageProps<"/agents/[id]">): Promise<Metadata> {
@@ -28,7 +29,6 @@ export default async function AgentProfilePage(props: PageProps<"/agents/[id]">)
 
   const carriersById = new Map(carriers.map((carrier) => [carrier.id, carrier]));
   const carrierName = (carrierId: string) => carriersById.get(carrierId)?.name ?? `Carrier ${carrierId}`;
-  const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
 
   return (
     <AgentProfile
@@ -36,7 +36,7 @@ export default async function AgentProfilePage(props: PageProps<"/agents/[id]">)
       // switch to another agent has to start that state again.
       key={agent.id}
       initialAgent={agent}
-      allAgents={agents.map(({ id, name, status, npn }) => ({ id, name, status, npn })).sort(byName)}
+      allAgents={agents.map(({ id, name, status, npn }) => ({ id, name, status, npn }))}
       // Every carrier, so Add carrier can appoint this agent to any of them. The
       // profile picks out this agent's contracts; states come only from those
       // appointments, as there are no carrier-less licenses.
@@ -47,8 +47,12 @@ export default async function AgentProfilePage(props: PageProps<"/agents/[id]">)
       initialContractNotes={contractNotes}
       logins={logins
         .filter((login) => login.agentId === id)
-        .map((login) => ({ ...login, carrierName: carrierName(login.carrierId) }))
-        .sort((a, b) => a.carrierName.localeCompare(b.carrierName))}
+        .map((login) => ({
+          ...login,
+          partyName: carrierName(login.carrierId),
+          partyHref: `/carriers/${login.carrierId}`,
+        }))
+        .sort((a, b) => a.partyName.localeCompare(b.partyName))}
       initialNotes={notes}
     />
   );

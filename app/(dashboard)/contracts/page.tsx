@@ -19,19 +19,19 @@ export default async function ContractsPage() {
   ]);
 
   // Where an agent can write needs both ceilings: their own licences and the
-  // carrier's footprint. Active agents only; status is edited on the Agents page.
+  // carrier's footprint. Every agent: inactive ones are shown marked and left
+  // out of the counts (status is edited on the Agents page).
   return (
     <ContractsView
       initialContracts={contracts}
       initialNotes={notes}
-      agents={agents
-        .filter((agent) => agent.status === "active")
-        .map(({ id, name, licensedStates, licenseNumbers }) => ({
-          id,
-          name,
-          licensedStates,
-          licenseNumbers,
-        }))}
+      agents={agents.map(({ id, name, status, licensedStates, licenseNumbers }) => ({
+        id,
+        name,
+        status,
+        licensedStates,
+        licenseNumbers,
+      }))}
       carriers={carriers.map(({ id, name, status, availableStates }) => ({
         id,
         name,

@@ -20,10 +20,14 @@ export default async function ContractsByCarrierPage() {
     <CarrierContractsView
       initialContracts={contracts}
       initialNotes={notes}
-      // Contracts show active agents only; status is edited on the Agents page.
-      agents={agents
-        .filter((agent) => agent.status === "active")
-        .map(({ id, name, licensedStates }) => ({ id, name, licensedStates }))}
+      // Every agent: inactive ones are shown marked and left out of the
+      // coverage counts (status is edited on the Agents page).
+      agents={agents.map(({ id, name, status, licensedStates }) => ({
+        id,
+        name,
+        status,
+        licensedStates,
+      }))}
       carriers={carriers.map(({ id, name, linesOfBusiness, status, availableStates }) => ({
         id,
         name,

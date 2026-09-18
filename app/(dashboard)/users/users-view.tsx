@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { PRIMARY_BUTTON_CLASS, ROW_BUTTON_CLASS } from "@/components/classes";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
@@ -9,32 +8,32 @@ import { NoteList } from "@/components/note-list";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge, statusRank } from "@/components/status-badge";
 import type { UserNote, UserRecord } from "@/lib/users";
-import { CredentialValue } from "../logins/credential-value";
+import { CredentialValue } from "@/components/credential-value";
+import { UnsavedBanner } from "@/components/unsaved-banner";
 import {
   ROLE_LABELS,
   saveUser,
   USER_FIELD_LABELS,
   UserDialog,
-  type AgentOption,
   type UserEditor,
 } from "./user-dialog";
 
 /*
- * Users table with dummy add and edit dialogs. Every add or edit records a
- * note listing what changed (the linked agent by name, the password only as
- * "changed"); clicking a name expands the row to show that user's notes. Users
- * and notes live in component state only: nothing reaches a server, and a
- * refresh brings back the JSON.
+ * Users table with dummy add and edit dialogs: the admin and staff accounts
+ * that sign in (agent and agency sign-in is a later phase). Every add or edit
+ * records a note listing what changed (the password only as "changed");
+ * clicking a name expands the row to show that user's notes. Users and notes
+ * live in component state only: nothing reaches a server, and a refresh
+ * brings back the JSON.
  */
 
 type UsersViewProps = {
   initialUsers: UserRecord[];
   initialNotes: UserNote[];
-  agents: AgentOption[];
 };
 
-/** A table row: the user with the linked agent looked up (null when not an agent). */
-type UserRow = { user: UserRecord; agent: AgentOption | null };
+/** A table row. Wrapped so a column can be added later without renaming fields. */
+type UserRow = { user: UserRecord };
 
 /*
  * Sort and search run in DataTable. The password is neither sortable nor
@@ -100,26 +99,9 @@ const COLUMNS: DataTableColumn<UserRow>[] = [
     sortValue: ({ user }) => statusRank(user.status),
     searchText: ({ user }) => user.status,
   },
-  {
-    id: "agent",
-    header: "Linked agent",
-    cell: ({ agent }) =>
-      agent ? (
-        <Link
-          href={`/agents/${agent.id}`}
-          className="-ml-1 whitespace-nowrap rounded-md px-1 py-0.5 text-fg hover:bg-surface-hover hover:underline"
-        >
-          {agent.name}
-        </Link>
-      ) : (
-        <span className="text-fg-subtle">—</span>
-      ),
-    sortValue: ({ agent }) => agent?.name ?? "",
-    searchText: ({ agent }) => agent?.name ?? "",
-  },
 ];
 
-export function UsersView({ initialUsers, initialNotes, agents }: UsersViewProps) {
+export function UsersView({ initialUsers, initialNotes }: UsersViewProps) {
   const [users, setUsers] = useState(initialUsers);
   const [notes, setNotes] = useState(initialNotes);
   const [unsavedCount, setUnsavedCount] = useState(0);
@@ -127,15 +109,7 @@ export function UsersView({ initialUsers, initialNotes, agents }: UsersViewProps
 
   // ID order (the order a cleared header sort returns to). Rebuilt when users
   // change, so an add or edit shows at once.
-  const rows = useMemo<UserRow[]>(() => {
-    const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
-    return users.map((user) => ({
-      user,
-      agent: user.agentId
-        ? (agentsById.get(user.agentId) ?? { id: user.agentId, name: `Agent ${user.agentId}`, status: "active" })
-        : null,
-    }));
-  }, [users, agents]);
+  const rows = useMemo<UserRow[]>(() => users.map((user) => ({ user })), [users]);
 
   const columns = useMemo<DataTableColumn<UserRow>[]>(
     () => [
@@ -169,14 +143,7 @@ export function UsersView({ initialUsers, initialNotes, agents }: UsersViewProps
     <>
       <PageHeader title="Users" actions={addButton} />
 
-      <div role="status">
-        {unsavedCount > 0 ? (
-          <p className="mb-4 rounded-md bg-warn-soft px-3 py-2 text-sm text-warn-ink">
-            {unsavedCount === 1 ? "1 change" : `${unsavedCount} changes`} made on this page only.
-            Nothing is saved yet, so refreshing undoes {unsavedCount === 1 ? "it" : "them"}.
-          </p>
-        ) : null}
-      </div>
+      <UnsavedBanner count={unsavedCount} />
 
       {users.length === 0 ? (
         <EmptyState
@@ -207,11 +174,10 @@ export function UsersView({ initialUsers, initialNotes, agents }: UsersViewProps
 
       <UserDialog
         editor={editor}
-        agents={agents}
         onSave={(values) => {
           if (!editor) return null;
           const editing = editor.mode === "edit" ? editor.user : undefined;
-          const result = saveUser({ users, notes, agents, values, editing });
+          const result = saveUser({ users, notes, values, editing });
           if (result.error) return result.error;
           if (result.changed) {
             const saved = result.user;

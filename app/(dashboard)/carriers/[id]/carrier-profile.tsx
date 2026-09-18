@@ -1,34 +1,36 @@
 "use client";
 
 import Link from "next/link";
-import { useId, useState } from "react";
-import { EditIcon } from "@/components/edit-icon";
+import { useState } from "react";
+import { EntitySwitcher } from "@/components/entity-switcher";
+import { HydratedNoteList } from "@/components/hydrated-note-list";
 import {
-  Count,
   Detail,
+  LoginsPanel,
   Panel,
   PanelEmpty,
-  PROFILE_LINK_CLASS as LINK_CLASS,
-  PROFILE_TH_CLASS as TH_CLASS,
-  ProfileAvatar,
+  PROFILE_LINK_CLASS,
   ProfileBackLink,
+  ProfileHeader,
+  ProfileNameRow,
+  ProfileTable,
   StateChip,
+  StateChipCell,
+  type ProfileLogin,
 } from "@/components/profile-shell";
 import { StatusBadge } from "@/components/status-badge";
+import { UnsavedBanner } from "@/components/unsaved-banner";
 import type { AgentStatus } from "@/lib/agents";
 import type { CarrierNote, CarrierRecord } from "@/lib/carriers";
-import type { LoginRecord } from "@/lib/logins";
 import { writableStates } from "@/lib/us-states";
-import { CredentialValue } from "../../logins/credential-value";
 import {
+  CARRIER_FIELD_LABELS,
   CarrierDialog,
   saveCarrier,
   type CarrierEditor,
   type CarrierError,
   type CarrierValues,
 } from "../carrier-dialog";
-import { CarrierNotes } from "./carrier-notes";
-import { CarrierSwitcher } from "./carrier-switcher";
 
 /*
  * Profile for one carrier: identity (including the states it is available in,
@@ -63,39 +65,28 @@ type CarrierProfileProps = {
   allCarriers: CarrierRecord[];
   /** Contracted agents, sorted by name. */
   agents: AgentRow[];
-  /** Sorted by agent name. */
-  logins: (LoginRecord & { agentName: string })[];
+  /** This carrier's logins, the agent as the party, sorted by agent name. */
+  logins: ProfileLogin[];
   /** Every carrier's notes, newest first: new note IDs need them all. Only this carrier's are shown. */
   initialNotes: CarrierNote[];
 };
 
 const AGENT_COLUMNS = ["Agent", "Writable states", "Status"];
 
-const LOGIN_COLUMNS = ["Agent", "Writing number", "Portal username", "Password", "Status"];
-
-/** Soft brand fill, so it reads as the one action of its row rather than as row text. */
-const PANEL_BUTTON_CLASS =
-  "inline-flex items-center gap-1.5 rounded-md bg-brand-soft px-2.5 py-1 text-sm font-medium text-brand-ink shadow-sm hover:bg-brand-strong hover:text-white";
-
 export function CarrierProfile({
   initialCarrier,
-  allCarriers: initialAllCarriers,
+  allCarriers,
   agents,
   logins,
   initialNotes,
 }: CarrierProfileProps) {
   const [carrier, setCarrier] = useState(initialCarrier);
-  const [carriers, setCarriers] = useState(initialAllCarriers);
   const [allNotes, setAllNotes] = useState(initialNotes);
   const [unsavedCount, setUnsavedCount] = useState(0);
   const [editor, setEditor] = useState<CarrierEditor | null>(null);
-  const availableHeadingId = useId();
 
-  // An edit here shows at once in the switcher too.
-  const switcherCarriers = carriers
-    .map((other) => (other.id === carrier.id ? carrier : other))
-    .map(({ id, name, status }) => ({ id, name, status }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  // An edit here shows at once in the switcher and the uniqueness check too.
+  const carriers = allCarriers.map((other) => (other.id === carrier.id ? carrier : other));
   const notes = allNotes.filter((note) => note.carrierId === carrier.id);
 
   // Writable is what the appointment actually buys them: its states within
@@ -107,17 +98,11 @@ export function CarrierProfile({
 
   /** Edits this carrier. Returns the dialog's errors, if any. */
   const saveCarrierEdit = (values: CarrierValues): CarrierError[] => {
-    const result = saveCarrier({
-      carriers: carriers.map((other) => (other.id === carrier.id ? carrier : other)),
-      notes: allNotes,
-      values,
-      editing: carrier,
-    });
+    const result = saveCarrier({ carriers, notes: allNotes, values, editing: carrier });
     if (result.carrier === null) return result.errors;
     if (!result.changed) return [];
 
     setCarrier(result.carrier);
-    setCarriers(result.carriers);
     setAllNotes(result.notes);
     setUnsavedCount((count) => count + 1);
     return [];
@@ -127,185 +112,97 @@ export function CarrierProfile({
     <div className="mx-auto max-w-7xl">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ProfileBackLink href="/carriers" label="Carriers" />
-        <CarrierSwitcher currentId={carrier.id} carriers={switcherCarriers} />
+        <EntitySwitcher
+          label="Switch carrier"
+          currentId={carrier.id}
+          options={carriers}
+          hrefFor={(id) => `/carriers/${id}`}
+        />
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3.5">
-          <ProfileAvatar name={carrier.name} />
-          <div className="min-w-0">
-            <h1 className="text-xl font-semibold tracking-tight text-fg">{carrier.name}</h1>
-            <div className="mt-0.5 flex">
-              <StatusBadge status={carrier.status} />
-            </div>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={() => setEditor({ mode: "edit", carrier })}
-          className={PANEL_BUTTON_CLASS}
-        >
-          <EditIcon className="size-3.5 shrink-0" />
-          Edit<span className="sr-only"> {carrier.name}</span>
-        </button>
-      </div>
+      <ProfileNameRow
+        name={carrier.name}
+        status={carrier.status}
+        onEdit={() => setEditor({ mode: "edit", carrier })}
+      />
 
-      <header className="mt-4 grid overflow-hidden rounded-xl border border-line bg-surface p-2 shadow-sm lg:grid-cols-[auto_minmax(0,1fr)]">
-        <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] content-start items-baseline gap-x-6 gap-y-3 px-5 py-4 lg:max-w-md">
-          <Detail label="Carrier ID">
-            <span className="font-mono">#{carrier.id}</span>
-          </Detail>
-          <Detail label="Aliases">{carrier.aliases.join(", ")}</Detail>
-          <Detail label="Lines of business">
-            {carrier.linesOfBusiness.length > 0 ? (
-              <ul className="flex flex-wrap gap-1.5">
-                {carrier.linesOfBusiness.map((line) => (
-                  <li
-                    key={line}
-                    className="rounded-md bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand-ink"
-                  >
-                    {line}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </Detail>
-        </dl>
-
-        <section
-          aria-labelledby={availableHeadingId}
-          className="min-w-0 border-t border-line px-5 py-4 lg:border-l lg:border-t-0"
-        >
-          <h2
-            id={availableHeadingId}
-            title="Where this carrier is available for the agency."
-            className="flex items-center gap-2 text-sm font-semibold text-fg"
-          >
-            Available states
-            <Count value={carrier.availableStates.length} />
-          </h2>
-
-          {carrier.availableStates.length === 0 ? (
-            <p className="mt-2 text-sm text-fg-subtle">
-              No states recorded, so no agent can write with this carrier yet.
-            </p>
-          ) : (
-            <ul className="mt-3 flex flex-wrap gap-1.5">
-              {carrier.availableStates.map((code) => (
-                <StateChip key={code} code={code} />
-              ))}
-            </ul>
-          )}
-        </section>
-      </header>
-
-      <div role="status">
-        {unsavedCount > 0 ? (
-          <p className="mt-4 rounded-md bg-warn-soft px-3 py-2 text-sm text-warn-ink">
-            {unsavedCount === 1 ? "1 change" : `${unsavedCount} changes`} made on this page only.
-            Nothing is saved yet, so refreshing undoes {unsavedCount === 1 ? "it" : "them"}.
+      <ProfileHeader
+        details={
+          <>
+            <Detail label="Carrier ID">
+              <span className="font-mono">#{carrier.id}</span>
+            </Detail>
+            <Detail label="Aliases">{carrier.aliases.join(", ")}</Detail>
+            <Detail label="Lines of business">
+              {carrier.linesOfBusiness.length > 0 ? (
+                <ul className="flex flex-wrap gap-1.5">
+                  {carrier.linesOfBusiness.map((line) => (
+                    <li
+                      key={line}
+                      className="rounded-md bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand-ink"
+                    >
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </Detail>
+          </>
+        }
+        asideTitle="Available states"
+        asideCount={carrier.availableStates.length}
+        asideTooltip="Where this carrier is available for the agency."
+      >
+        {carrier.availableStates.length === 0 ? (
+          <p className="mt-2 text-sm text-fg-subtle">
+            No states recorded, so no agent can write with this carrier yet.
           </p>
-        ) : null}
-      </div>
+        ) : (
+          <ul className="mt-3 flex flex-wrap gap-1.5">
+            {carrier.availableStates.map((code) => (
+              <StateChip key={code} code={code} />
+            ))}
+          </ul>
+        )}
+      </ProfileHeader>
+
+      <UnsavedBanner count={unsavedCount} className="mt-4" />
 
       <div className="mt-5 grid items-start gap-5 xl:grid-cols-2">
         <Panel title="Agents" count={agentRows.length}>
           {agentRows.length === 0 ? (
             <PanelEmpty>No contracted agents.</PanelEmpty>
           ) : (
-            <div className="overflow-x-auto rounded-lg border border-line">
-              <table className="min-w-full text-left text-sm">
-                <thead className="bg-surface-muted">
-                  <tr>
-                    {AGENT_COLUMNS.map((heading) => (
-                      <th key={heading} scope="col" className={TH_CLASS}>
-                        {heading}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-line border-t border-line">
-                  {agentRows.map((agent) => (
-                    <tr key={agent.id}>
-                      <td className="px-3 py-2.5 align-middle sm:whitespace-nowrap">
-                        <Link href={`/agents/${agent.id}`} className={LINK_CLASS}>
-                          {agent.name}
-                        </Link>
-                      </td>
-                      <td className="w-full px-3 py-2.5">
-                        {agent.writable.length > 0 ? (
-                          <ul
-                            aria-label={`States ${agent.name} can write here`}
-                            className="flex flex-wrap gap-1"
-                          >
-                            {agent.writable.map((code) => (
-                              <StateChip key={code} code={code} />
-                            ))}
-                          </ul>
-                        ) : (
-                          <p className="text-xs text-fg-faint">No states yet</p>
-                        )}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <StatusBadge status={agent.status} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ProfileTable columns={AGENT_COLUMNS} rows={agentRows} rowKey={(agent) => agent.id}>
+              {(agent) => (
+                <>
+                  <td className="px-3 py-2.5 align-middle sm:whitespace-nowrap">
+                    <Link href={`/agents/${agent.id}`} className={PROFILE_LINK_CLASS}>
+                      {agent.name}
+                    </Link>
+                  </td>
+                  <StateChipCell
+                    codes={agent.writable}
+                    label={`States ${agent.name} can write here`}
+                    empty="No states yet"
+                  />
+                  <td className="px-3 py-2.5">
+                    <StatusBadge status={agent.status} />
+                  </td>
+                </>
+              )}
+            </ProfileTable>
           )}
         </Panel>
 
         <Panel title="Notes" count={notes.length}>
           {/* Cancels NoteList's own top margin; the panel body already pads. */}
           <div className="-mt-2">
-            <CarrierNotes notes={notes} />
+            <HydratedNoteList notes={notes} labels={CARRIER_FIELD_LABELS} />
           </div>
         </Panel>
 
-        <Panel title="Logins" count={logins.length} className="xl:col-span-2">
-          {logins.length === 0 ? (
-            <PanelEmpty>No logins recorded.</PanelEmpty>
-          ) : (
-            <div className="overflow-x-auto rounded-lg border border-line">
-              <table className="min-w-full text-left text-sm">
-                <thead className="bg-surface-muted">
-                  <tr>
-                    {LOGIN_COLUMNS.map((heading) => (
-                      <th key={heading} scope="col" className={TH_CLASS}>
-                        {heading}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-line border-t border-line">
-                  {logins.map((login) => (
-                    <tr key={login.id}>
-                      <td className="whitespace-nowrap px-3 py-2.5">
-                        <Link href={`/agents/${login.agentId}`} className={LINK_CLASS}>
-                          {login.agentName}
-                        </Link>
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 font-mono text-fg-muted">
-                        {login.writingNumber}
-                      </td>
-                      <td className="px-3 py-2.5 text-fg-muted">
-                        <CredentialValue value={login.username} label="username" />
-                      </td>
-                      <td className="px-3 py-2.5 text-fg-muted">
-                        <CredentialValue value={login.portalPassword} label="password" secret />
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <StatusBadge status={login.status} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Panel>
+        <LoginsPanel logins={logins} partyHeading="Agent" className="xl:col-span-2" />
       </div>
 
       <CarrierDialog editor={editor} onSave={saveCarrierEdit} onClose={() => setEditor(null)} />

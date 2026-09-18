@@ -8,6 +8,7 @@ import { EditIcon } from "@/components/edit-icon";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge, statusRank } from "@/components/status-badge";
+import { UnsavedBanner } from "@/components/unsaved-banner";
 import type { AgentNote, AgentRecord } from "@/lib/agents";
 import { phoneDigits } from "@/lib/phone";
 import { US_STATE_NAMES, stateSummary } from "@/lib/us-states";
@@ -159,14 +160,7 @@ export function AgentsView({ initialAgents, initialNotes }: AgentsViewProps) {
     <>
       <PageHeader title="Agents" actions={addButton} />
 
-      <div role="status">
-        {unsavedCount > 0 ? (
-          <p className="mb-4 rounded-md bg-warn-soft px-3 py-2 text-sm text-warn-ink">
-            {unsavedCount === 1 ? "1 change" : `${unsavedCount} changes`} made on this page only.
-            Nothing is saved yet, so refreshing undoes {unsavedCount === 1 ? "it" : "them"}.
-          </p>
-        ) : null}
-      </div>
+      <UnsavedBanner count={unsavedCount} />
 
       {agents.length === 0 ? (
         <EmptyState

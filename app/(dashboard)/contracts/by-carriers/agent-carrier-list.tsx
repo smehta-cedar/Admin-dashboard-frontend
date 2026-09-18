@@ -1,24 +1,26 @@
 import Link from "next/link";
 import { stateSummary, writableStates } from "@/lib/us-states";
+import { initials } from "@/lib/text";
 
 /*
- * Contracts grouped by agent, as one plain row per active agent: initials and
- * name, how many carriers they are contracted with (count as text plus a thin
- * bar out of the carriers shown above), and those carriers as name chips, each
+ * Contracts grouped by agent, as one plain row per agent: initials and name,
+ * how many carriers they are contracted with (count as text plus a thin bar
+ * out of the carriers shown above), and those carriers as name chips, each
  * with the states the agent can write there: the appointment narrowed to their
  * licences and the carrier's footprint. Clicking the states opens Edit for that
  * contract.
  * Carriers in scope are the same ones the cards above show, so "Show all
  * carriers" applies here too. Agents with no contract stay listed, muted, so
- * gaps are visible. Add carrier opens Add contract for that agent.
+ * gaps are visible; inactive agents are listed too, marked "(inactive)". Add
+ * carrier opens Add contract for that agent.
  */
 
-type ListAgent = { id: string; name: string; licensedStates: string[] };
+type ListAgent = { id: string; name: string; status: "active" | "inactive"; licensedStates: string[] };
 type ListCarrier = { id: string; name: string; availableStates: string[] };
 type ListContract = { id: string; agentId: string; carrierId: string; appointedStates: string[] };
 
 type AgentCarrierListProps = {
-  /** Active agents, sorted by name. */
+  /** Every agent, sorted by name. */
   agents: ListAgent[];
   /** Carriers in scope, in display order. */
   carriers: ListCarrier[];
@@ -26,14 +28,6 @@ type AgentCarrierListProps = {
   onAdd: (agentId: string) => void;
   onEdit: (contract: ListContract) => void;
   headingId: string;
-};
-
-/** First letters of the first and last word, e.g. "Jane Q. Doe" → "JD". */
-const initials = (name: string) => {
-  const words = name.trim().split(/\s+/);
-  const first = words[0]?.[0] ?? "";
-  const last = words.length > 1 ? words[words.length - 1][0] : "";
-  return (first + last).toUpperCase();
 };
 
 export function AgentCarrierList({ agents, carriers, contracts, onAdd, onEdit, headingId }: AgentCarrierListProps) {
@@ -50,7 +44,7 @@ export function AgentCarrierList({ agents, carriers, contracts, onAdd, onEdit, h
 
       {agents.length === 0 ? (
         <p className="rounded-lg border border-line px-4 py-6 text-center text-sm text-fg-muted">
-          No active agents. Agent status is edited on the Agents page.
+          No agents yet. Add them on the Agents page.
         </p>
       ) : (
         <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface shadow-xs">
@@ -86,6 +80,9 @@ export function AgentCarrierList({ agents, carriers, contracts, onAdd, onEdit, h
                       <Link href={`/agents/${agent.id}`} className="hover:underline">
                         {agent.name}
                       </Link>
+                      {agent.status === "inactive" ? (
+                        <span className="font-normal text-fg-faint"> (inactive)</span>
+                      ) : null}
                     </p>
                     <div className="mt-1 flex items-center gap-2">
                       <div aria-hidden="true" className="h-1.5 w-20 overflow-hidden rounded-full bg-carrier-soft">

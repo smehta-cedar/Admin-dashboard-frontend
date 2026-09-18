@@ -39,3 +39,6 @@ Thumbs.db
 # editor (machine-specific settings, e.g. local Node PATH)
 .vscode/
 .idea/
+
+# agent worktrees (local checkouts, never part of the tree)
+.claude/worktrees/

@@ -28,12 +28,3 @@ export function setSessionCookie(userId: string) {
 export function clearSessionCookie() {
   document.cookie = `${SESSION_COOKIE}=; path=/; max-age=0; samesite=lax`;
 }
-
-/** Up to two initials for the avatar: "Maria Alva" → "MA", "Cher" → "C". */
-export function initials(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  return parts
-    .slice(0, 2)
-    .map((part) => part[0].toUpperCase())
-    .join("");
-}

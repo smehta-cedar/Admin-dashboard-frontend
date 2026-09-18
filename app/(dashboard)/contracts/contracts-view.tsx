@@ -10,18 +10,14 @@ import { NoteList } from "@/components/note-list";
 import { PageHeader } from "@/components/page-header";
 import { MAP_BUCKETS, UsMap } from "@/components/us-map";
 import { US_MAP_VIEWBOX } from "@/components/us-map-shapes";
+import { UnsavedBanner } from "@/components/unsaved-banner";
 import type { AgentRecord } from "@/lib/agents";
 import type { CarrierContractNote, CarrierContractRecord } from "@/lib/carrier-contracts";
 import type { CarrierRecord } from "@/lib/carriers";
 import { US_STATE_NAMES, US_STATES, stateSummary, writableStates } from "@/lib/us-states";
-import {
-  APPOINTMENT_FIELD_LABELS,
-  AppointmentDialog,
-  saveAppointment,
-  type AppointmentEditor,
-  type AppointmentError,
-  type AppointmentValues,
-} from "./appointment-dialog";
+import { byName } from "@/lib/text";
+import { APPOINTMENT_FIELD_LABELS, AppointmentDialog } from "./appointment-dialog";
+import { useAppointments } from "./use-appointments";
 
 /*
  * Contracts by state: where agents can write, as a view over carrier
@@ -36,8 +32,8 @@ import {
  * appointment there. Picking a state lists the same appointments two ways: By
  * agent (each agent with the carriers that appoint them there) or By carrier
  * (each carrier with the agents it appoints there). The Appointments table
- * lists every appointment of an active agent, sorts and searches (agent,
- * carrier, state code or name), and expands to show its states and notes.
+ * lists every appointment, sorts and searches (agent, carrier, state code or
+ * name), and expands to show its states and notes.
  *
  * Add contract, the table's Edit and a state panel line all open the shared
  * AppointmentDialog (./appointment-dialog.tsx), the same form Contracts by
@@ -45,14 +41,14 @@ import {
  * states the chosen agent and carrier share. Since every appointment stays
  * within both ceilings, a state's By carrier list only holds carriers
  * available there, and its By agent list only agents licensed there.
- * Only active agents appear: `agents` holds active agents only, and
- * an appointment for any other agent stays in state but is never shown.
+ * Inactive agents follow the same rule as inactive carriers: their
+ * appointments are listed and editable, marked "(inactive)", but never counted
+ * — the map, the stats and the state panel's counts are active agents only.
  * Appointments and notes live in component state only: nothing reaches a
  * server, and a refresh brings back the JSON.
  */
 
-/** An active agent. Inactive agents are never passed in. */
-type AgentOption = Pick<AgentRecord, "id" | "name" | "licensedStates" | "licenseNumbers">;
+type AgentOption = Pick<AgentRecord, "id" | "name" | "status" | "licensedStates" | "licenseNumbers">;
 type CarrierOption = Pick<CarrierRecord, "id" | "name" | "status" | "availableStates">;
 
 type ContractsViewProps = {
@@ -67,7 +63,7 @@ type ContractsViewProps = {
 /** How the selected state's appointments are grouped. */
 type StateView = "agent" | "carrier";
 
-/** An appointment of an active agent, with names resolved and states in code order. */
+/** An appointment with names resolved and states in code order. */
 type AppointmentRow = {
   contract: CarrierContractRecord;
   agent: AgentOption;
@@ -94,6 +90,7 @@ const COLUMNS: DataTableColumn<AppointmentRow>[] = [
         className="-ml-1 flex items-center gap-1 whitespace-nowrap rounded-md px-1 py-0.5 text-fg hover:bg-surface-hover"
       >
         {agent.name}
+        {agent.status === "inactive" ? <span className="text-fg-faint">(inactive)</span> : null}
         <svg
           aria-hidden="true"
           viewBox="0 0 20 20"
@@ -145,7 +142,8 @@ const MAP_ZOOM = { min: 0.3, max: 2, buttonStep: 0.15 };
 /** Map box height as a share of the map's Fit height. */
 const MAP_BOX_HEIGHT = 0.78;
 
-const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
+/** Counts (map, stats, panel) are active agents only; lists show everyone. */
+const isActive = (row: AppointmentRow) => row.agent.status === "active";
 
 export function ContractsView({
   initialContracts,
@@ -154,17 +152,21 @@ export function ContractsView({
   carriers,
   agencyLicenseNumbers,
 }: ContractsViewProps) {
-  const [contracts, setContracts] = useState(initialContracts);
-  const [notes, setNotes] = useState(initialNotes);
   const [unsavedCount, setUnsavedCount] = useState(0);
-  const [editor, setEditor] = useState<AppointmentEditor | null>(null);
+  const { contracts, notes, editor, setEditor, saveContract } = useAppointments({
+    initialContracts,
+    initialNotes,
+    agents,
+    carriers,
+    onSaved: () => setUnsavedCount((count) => count + 1),
+  });
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   const [stateView, setStateView] = useState<StateView>("agent");
   // Map width as a share of its box (1 = Fit). Session only: a refresh resets it to 75%.
   const [mapZoom, setMapZoom] = useState(0.75);
   const id = useId();
 
-  // Every appointment of an active agent, sorted by agent then carrier name (the
+  // Every appointment of a known agent, sorted by agent then carrier name (the
   // order a cleared header sort returns to). Rebuilt from live state, so an
   // edit recolors the map and moves rows at once.
   const rows = useMemo<AppointmentRow[]>(() => {
@@ -205,17 +207,21 @@ export function ContractsView({
     return byState;
   }, [rows]);
 
-  // The map counts distinct agents, not appointments.
+  // The map counts distinct active agents, not appointments.
   const counts = useMemo(
     () =>
       Object.fromEntries(
-        [...rowsByState].map(([code, list]) => [code, new Set(list.map((row) => row.agent.id)).size]),
+        [...rowsByState].map(([code, list]) => [
+          code,
+          new Set(list.filter(isActive).map((row) => row.agent.id)).size,
+        ]),
       ),
     [rowsByState],
   );
 
-  const writingAgentCount = new Set(rows.filter((row) => row.states.length > 0).map((row) => row.agent.id))
-    .size;
+  const writingAgentCount = new Set(
+    rows.filter((row) => isActive(row) && row.states.length > 0).map((row) => row.agent.id),
+  ).size;
   const statesCovered = [...rowsByState.keys()].filter((code) => code in US_STATE_NAMES).length;
 
   const stats = [
@@ -226,7 +232,6 @@ export function ContractsView({
 
   const selectedRows = selectedCode ? (rowsByState.get(selectedCode) ?? []) : [];
   const selectedName = selectedCode ? (US_STATE_NAMES[selectedCode] ?? selectedCode) : null;
-  const selectedAgentCount = counts[selectedCode ?? ""] ?? 0;
 
   // The selected state's appointments grouped both ways. Rows are already
   // sorted by agent then carrier, so By agent needs no resort.
@@ -247,6 +252,8 @@ export function ContractsView({
   };
   const byAgent = groupBy("agent", "carrier");
   const byCarrier = groupBy("carrier", "agent");
+  // The panel lists inactive agents too, so its count says how many it holds.
+  const selectedInactiveCount = byAgent.filter((group) => group.item.status === "inactive").length;
 
   const columns = useMemo<DataTableColumn<AppointmentRow>[]>(
     () => [
@@ -274,45 +281,11 @@ export function ContractsView({
     [],
   );
 
-  const agentName = (agentId: string) =>
-    agents.find((agent) => agent.id === agentId)?.name ?? `Agent ${agentId}`;
-  const carrierName = (carrierId: string) =>
-    carriers.find((carrier) => carrier.id === carrierId)?.name ?? `Carrier ${carrierId}`;
-  const availableStates = (carrierId: string) =>
-    carriers.find((carrier) => carrier.id === carrierId)?.availableStates ?? [];
-  const licensedStates = (agentId: string) =>
-    agents.find((agent) => agent.id === agentId)?.licensedStates ?? [];
-
   // Clamped and rounded to 0.01 so button clicks don't drift into float noise.
   const changeZoom = (delta: number) =>
     setMapZoom(
       Math.round(Math.min(MAP_ZOOM.max, Math.max(MAP_ZOOM.min, mapZoom + delta)) * 100) / 100,
     );
-
-  /** Adds or edits a contract through saveAppointment. Returns the dialog's error message, if any. */
-  const saveContract = (
-    values: AppointmentValues,
-    editing?: CarrierContractRecord,
-  ): AppointmentError | null => {
-    const result = saveAppointment({
-      contracts,
-      notes,
-      values,
-      editing,
-      agentName,
-      carrierName,
-      availableStates,
-      licensedStates,
-    });
-    if (result.error !== null) return result.error;
-    // Saving an edit with nothing changed just closes, without a note.
-    if (result.changed) {
-      setContracts(result.contracts);
-      setNotes(result.notes);
-      setUnsavedCount((count) => count + 1);
-    }
-    return null;
-  };
 
   const addButton = (
     <button type="button" onClick={() => setEditor({ mode: "add" })} className={PRIMARY_BUTTON_CLASS}>
@@ -329,7 +302,16 @@ export function ContractsView({
     stateView === "agent"
       ? byAgent.map(({ item, others }) => ({
           key: item.id,
-          title: <Link href={`/agents/${item.id}`} className="hover:underline">{item.name}</Link>,
+          title: (
+            <>
+              <Link href={`/agents/${item.id}`} className="hover:underline">
+                {item.name}
+              </Link>
+              {item.status === "inactive" ? (
+                <span className="font-normal text-fg-faint"> (inactive)</span>
+              ) : null}
+            </>
+          ),
           // This state's licence number, on the right of the agent name.
           licenseNumber: selectedCode ? item.licenseNumbers[selectedCode] : undefined,
           label: `Carriers appointing ${item.name}`,
@@ -361,7 +343,7 @@ export function ContractsView({
             id: agent.id,
             href: `/agents/${agent.id}`,
             name: agent.name,
-            inactive: false,
+            inactive: agent.status === "inactive",
             contract,
             states,
             editLabel: `Edit ${agent.name} at ${item.name}`,
@@ -386,15 +368,7 @@ export function ContractsView({
         actions={addButton}
       />
 
-      <div role="status">
-        {unsavedCount > 0 ? (
-          <p className="mb-4 rounded-md bg-warn-soft px-3 py-2 text-sm text-warn-ink">
-            {unsavedCount === 1 ? "1 change" : `${unsavedCount} changes`} made on this page only.
-            Nothing is saved yet, so refreshing (or leaving the page) undoes{" "}
-            {unsavedCount === 1 ? "it" : "them"}.
-          </p>
-        ) : null}
-      </div>
+      <UnsavedBanner count={unsavedCount} />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]">
         <section aria-labelledby={`${id}-map-title`}>
@@ -527,7 +501,8 @@ export function ContractsView({
                     ))}
                   </div>
                   <p role="status" className="mt-1 text-xs text-fg-muted text-right">
-                      {selectedAgentCount === 1 ? "Agent" : "Agents"}: {selectedAgentCount} |{" "}
+                      {byAgent.length === 1 ? "Agent" : "Agents"}: {byAgent.length}
+                      {selectedInactiveCount > 0 ? ` (${selectedInactiveCount} inactive)` : ""} |{" "}
                       {byCarrier.length === 1 ? "Carrier" : "Carriers"}: {byCarrier.length}
                     </p>
                     </div>
