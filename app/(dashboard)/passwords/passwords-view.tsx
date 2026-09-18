@@ -6,78 +6,58 @@ import { PRIMARY_BUTTON_CLASS, ROW_BUTTON_CLASS, TOOLBAR_INPUT_CLASS } from "@/c
 import { CredentialValue } from "@/components/credential-value";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
-import { NoteList } from "@/components/note-list";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge, statusRank } from "@/components/status-badge";
 import { UnsavedBanner } from "@/components/unsaved-banner";
-import type { LoginNote, LoginRecord } from "@/lib/logins";
+import type { PasswordNote, PasswordRecord } from "@/lib/passwords";
 import { byName } from "@/lib/text";
 import {
-  LOGIN_FIELD_LABELS,
-  LoginDialog,
-  saveLogin,
+  PasswordDialog,
+  savePassword,
   type AgentOption,
   type CarrierOption,
-  type LoginEditor,
-  type LoginError,
-  type LoginValues,
-} from "./login-dialog";
+  type PasswordEditor,
+  type PasswordError,
+  type PasswordValues,
+} from "./password-dialog";
 
 /*
- * Logins table with dummy add and edit. Each login is one agent at one
- * carrier. Add login and a row's Edit open the shared LoginDialog
- * (./login-dialog.tsx: `LoginDialog` + pure `saveLogin`, the same shape as the
- * other entity dialogs); every add or edit records a note listing what changed
- * (agent and carrier by name), and clicking an agent name expands the row to
- * show that login's notes. A carrier dropdown filters the list (?carrier=<id>);
- * within it, the table sorts by header and narrows by search. Logins and notes
- * live in component state only: nothing reaches a server, and a refresh brings
- * back the JSON.
+ * Passwords table with dummy add and edit. Each password is one
+ * agent at one carrier. Add password and a row's Edit open the shared
+ * PasswordDialog (./password-dialog.tsx: `PasswordDialog` + pure
+ * `savePassword`, the same shape as the other entity dialogs); every add
+ * or edit records a note listing what changed (agent and carrier by name),
+ * notes stay in state for the change log but rows don't expand. A carrier
+ * dropdown filters the list (?carrier=<id>); within it, the table sorts by
+ * header and narrows by search. Passwords and notes live in component state
+ * only: nothing reaches a server, and a refresh brings back the JSON.
  */
 
-type LoginsViewProps = {
-  initialLogins: LoginRecord[];
-  initialNotes: LoginNote[];
+type PasswordsViewProps = {
+  initialPasswords: PasswordRecord[];
+  initialNotes: PasswordNote[];
   agents: AgentOption[];
   carriers: CarrierOption[];
 };
 
-/** A table row: the login with its agent and carrier names looked up. */
-type LoginRow = { login: LoginRecord; agent: string; carrier: string };
+/** A table row: the password with its agent and carrier names looked up. */
+type PasswordRow = {
+  password: PasswordRecord;
+  agent: string;
+  carrier: string;
+};
 
 /*
  * Sort and search run in DataTable. The password is neither sortable nor
  * searchable, so typing part of one never reveals which row it belongs to.
  * The actions column is added in the view, since Edit opens its dialog.
  */
-const COLUMNS: DataTableColumn<LoginRow>[] = [
+const COLUMNS: DataTableColumn<PasswordRow>[] = [
   {
     id: "agent",
     header: "Agent",
-    cell: ({ agent, carrier }, { expanded, toggleExpanded, detailsId }) => (
-      <button
-        type="button"
-        onClick={toggleExpanded}
-        aria-expanded={expanded}
-        aria-controls={expanded ? detailsId : undefined}
-        className="-ml-1 flex items-center gap-1 whitespace-nowrap rounded-md px-1 py-0.5 text-fg hover:bg-surface-hover"
-      >
-        {agent}
-        <span className="sr-only"> at {carrier}</span>
-        <svg
-          aria-hidden="true"
-          viewBox="0 0 20 20"
-          className={`size-4 shrink-0 text-fg-subtle transition-transform ${expanded ? "rotate-90" : ""}`}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={1.5}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M8 5l5 5-5 5" />
-        </svg>
-      </button>
-    ),
+    cell: ({ agent }) => agent,
+    className: "whitespace-nowrap text-fg",
     sortValue: ({ agent }) => agent,
     searchText: ({ agent }) => agent,
   },
@@ -92,33 +72,43 @@ const COLUMNS: DataTableColumn<LoginRow>[] = [
   {
     id: "username",
     header: "Portal username",
-    cell: ({ login }) => <CredentialValue value={login.username} label="username" />,
+    cell: ({ password }) => (
+      <CredentialValue value={password.username} label="username" />
+    ),
     className: "text-fg-muted",
-    sortValue: ({ login }) => login.username,
-    searchText: ({ login }) => login.username,
+    sortValue: ({ password }) => password.username,
+    searchText: ({ password }) => password.username,
   },
   {
     id: "password",
     header: "Password",
-    cell: ({ login }) => <CredentialValue value={login.portalPassword} label="password" secret />,
+    cell: ({ password }) => (
+      <CredentialValue value={password.portalPassword} label="password" secret />
+    ),
     className: "text-fg-muted",
   },
   {
     id: "status",
     header: "Status",
-    cell: ({ login }) => <StatusBadge status={login.status} />,
-    sortValue: ({ login }) => statusRank(login.status),
-    searchText: ({ login }) => login.status,
+    cell: ({ password }) => <StatusBadge status={password.status} />,
+    sortValue: ({ password }) => statusRank(password.status),
+    searchText: ({ password }) => password.status,
   },
 ];
 
-export function LoginsView({ initialLogins, initialNotes, agents, carriers }: LoginsViewProps) {
-  const [logins, setLogins] = useState(initialLogins);
+export function PasswordsView({
+  initialPasswords,
+  initialNotes,
+  agents,
+  carriers,
+}: PasswordsViewProps) {
+  const [passwords, setPasswords] = useState(initialPasswords);
   const [notes, setNotes] = useState(initialNotes);
   const [unsavedCount, setUnsavedCount] = useState(0);
-  const [editor, setEditor] = useState<LoginEditor | null>(null);
-  // Shown when Add saves a login the carrier filter hides. Each add sets a new
-  // object, so a second hidden add restarts the timer even with the same message.
+  const [editor, setEditor] = useState<PasswordEditor | null>(null);
+  // Shown when Add saves a password the carrier filter hides. Each add
+  // sets a new object, so a second hidden add restarts the timer even with
+  // the same message.
   const [hiddenNotice, setHiddenNotice] = useState<{ message: string } | null>(null);
   const id = useId();
   const searchParams = useSearchParams();
@@ -147,7 +137,7 @@ export function LoginsView({ initialLogins, initialNotes, agents, carriers }: Lo
     window.history.replaceState(null, "", query ? `?${query}` : window.location.pathname);
   };
 
-  // The hidden-login notice clears itself after a few seconds.
+  // The hidden-record notice clears itself after a few seconds.
   useEffect(() => {
     if (!hiddenNotice) return;
     const timeout = setTimeout(() => setHiddenNotice(null), 6000);
@@ -155,33 +145,33 @@ export function LoginsView({ initialLogins, initialNotes, agents, carriers }: Lo
   }, [hiddenNotice]);
 
   // Narrowed to the carrier filter, sorted by agent name, then carrier name
-  // (the order a cleared header sort returns to). Rebuilt when logins change,
-  // so an add or edit lands in place right away, or drops out if it no longer
-  // matches the filter.
-  const rows = useMemo<LoginRow[]>(() => {
+  // (the order a cleared header sort returns to). Rebuilt when passwords
+  // change, so an add or edit lands in place right away, or drops out if it
+  // no longer matches the filter.
+  const rows = useMemo<PasswordRow[]>(() => {
     const agentNames = new Map(agents.map((agent) => [agent.id, agent.name]));
     const carrierNames = new Map(carriers.map((carrier) => [carrier.id, carrier.name]));
-    return logins
-      .filter((login) => !carrierFilter || login.carrierId === carrierFilter)
-      .map((login) => ({
-        login,
-        agent: agentNames.get(login.agentId) ?? `Agent ${login.agentId}`,
-        carrier: carrierNames.get(login.carrierId) ?? `Carrier ${login.carrierId}`,
+    return passwords
+      .filter((record) => !carrierFilter || record.carrierId === carrierFilter)
+      .map((password) => ({
+        password,
+        agent: agentNames.get(password.agentId) ?? `Agent ${password.agentId}`,
+        carrier: carrierNames.get(password.carrierId) ?? `Carrier ${password.carrierId}`,
       }))
       .sort((a, b) => a.agent.localeCompare(b.agent) || a.carrier.localeCompare(b.carrier));
-  }, [logins, carrierFilter, agents, carriers]);
+  }, [passwords, carrierFilter, agents, carriers]);
 
-  const columns = useMemo<DataTableColumn<LoginRow>[]>(
+  const columns = useMemo<DataTableColumn<PasswordRow>[]>(
     () => [
       ...COLUMNS,
       {
         id: "actions",
         header: "Actions",
         srOnlyHeader: true,
-        cell: ({ login, agent, carrier }) => (
+        cell: ({ password, agent, carrier }) => (
           <button
             type="button"
-            onClick={() => setEditor({ mode: "edit", login })}
+            onClick={() => setEditor({ mode: "edit", password })}
             className={ROW_BUTTON_CLASS}
           >
             Edit
@@ -197,18 +187,28 @@ export function LoginsView({ initialLogins, initialNotes, agents, carriers }: Lo
     [],
   );
 
-  /** Adds or edits through saveLogin, then flags a login the filter hides. Returns the dialog's errors, if any. */
-  const save = (values: LoginValues, editing?: LoginRecord): LoginError[] => {
-    const result = saveLogin({ logins, notes, values, editing, agentName, carrierName });
-    if (result.login === null) return result.errors;
+  /** Adds or edits through savePassword, then flags a record the filter hides. */
+  const save = (
+    values: PasswordValues,
+    editing?: PasswordRecord,
+  ): PasswordError[] => {
+    const result = savePassword({
+      passwords,
+      notes,
+      values,
+      editing,
+      agentName,
+      carrierName,
+    });
+    if (result.password === null) return result.errors;
     if (!result.changed) return [];
 
-    setLogins(result.logins);
+    setPasswords(result.passwords);
     setNotes(result.notes);
     setUnsavedCount((count) => count + 1);
     if (!editing && carrierFilter && values.carrierId !== carrierFilter) {
       setHiddenNotice({
-        message: `Login added for ${carrierName(values.carrierId)}. It's hidden by the current filter.`,
+        message: `Password added for ${carrierName(values.carrierId)}. It's hidden by the current filter.`,
       });
     }
     return [];
@@ -221,14 +221,14 @@ export function LoginsView({ initialLogins, initialNotes, agents, carriers }: Lo
       onClick={() => setEditor({ mode: "add", carrierId: carrierFilter || undefined })}
       className={PRIMARY_BUTTON_CLASS}
     >
-      Add login
+      Add password
     </button>
   );
 
   return (
     <>
       <PageHeader
-        title="Logins"
+        title="Passwords"
         actions={
           <>
             <label htmlFor={`${id}-carrier-filter`} className="sr-only">
@@ -262,35 +262,24 @@ export function LoginsView({ initialLogins, initialNotes, agents, carriers }: Lo
         ) : null}
       </div>
 
-      {logins.length === 0 ? (
+      {passwords.length === 0 ? (
         <EmptyState
-          title="No logins yet"
-          description="Add a login to see it listed here."
+          title="No passwords yet"
+          description="Add a password to see it listed here."
           action={addButton}
         />
       ) : (
         <DataTable
           rows={rows}
           columns={columns}
-          getRowId={({ login }) => login.id}
-          unit={["login", "logins"]}
-          searchPlaceholder="Search agent, carrier, number…"
-          emptyMessage={`No logins for ${carrierName(carrierFilter)}.`}
-          renderDetails={({ login }) => (
-            <section className="max-w-2xl">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
-                Notes
-              </h3>
-              <NoteList
-                notes={notes.filter((note) => note.loginId === login.id)}
-                labels={LOGIN_FIELD_LABELS}
-              />
-            </section>
-          )}
+          getRowId={({ password }) => password.id}
+          unit={["password", "passwords"]}
+          searchPlaceholder="Search agent, carrier, username…"
+          emptyMessage={`No passwords for ${carrierName(carrierFilter)}.`}
         />
       )}
 
-      <LoginDialog
+      <PasswordDialog
         editor={editor}
         agents={agents}
         carriers={carriers}

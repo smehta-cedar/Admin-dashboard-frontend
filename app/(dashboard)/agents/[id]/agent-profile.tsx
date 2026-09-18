@@ -7,7 +7,7 @@ import { HydratedNoteList } from "@/components/hydrated-note-list";
 import {
   Count,
   Detail,
-  LoginsPanel,
+  PasswordsPanel,
   Panel,
   PanelEmpty,
   PROFILE_BUTTON_CLASS,
@@ -16,7 +16,7 @@ import {
   ProfileNameRow,
   ProfileTable,
   StateChipCell,
-  type ProfileLogin,
+  type ProfilePassword,
 } from "@/components/profile-shell";
 import { StateLicensesPanel } from "@/components/state-licenses-panel";
 import { StatusBadge } from "@/components/status-badge";
@@ -43,10 +43,10 @@ import {
 
 /*
  * Profile for one agent: identity, then everything linked to them — the states
- * they can write in, contracted carriers, what is still pending, logins, and
- * change notes. Logins are still edited on their page. Two things are editable
- * here: the agent's own fields (Edit opens the same AgentDialog as the Agents
- * list) and appointing this agent to a carrier.
+ * they can write in, contracted carriers, what is still pending, passwords,
+ * and change notes. Passwords are still edited on their page. Two things
+ * are editable here: the agent's own fields (Edit opens the same AgentDialog as
+ * the Agents list) and appointing this agent to a carrier.
  *
  * Layout, from the shared pieces in components/profile-shell.tsx, top to
  * bottom — no tabs and no sticky rail:
@@ -62,11 +62,11 @@ import {
  *   Carriers | State licences (50/50 from `lg`)
  *                   — what the page is opened for, beside the licences that
  *                     bound it
- *   Logins | Notes (70/30 from `lg`)
- *                   — the wide logins table beside the audit trail
+ *   Passwords | Notes (70/30 from `lg`)
+ *                   — the wide passwords table beside the audit trail
  *
  * Below `lg` everything stacks in that reading order: name, identity,
- * unsaved banner, Pending, Carriers, State licences, Logins, Notes.
+ * unsaved banner, Pending, Carriers, State licences, Passwords, Notes.
  *
  * States show in two places. The State licences panel is the agent's own
  * licences as rows (lib/agent-state-licenses.ts: number, status, start and end
@@ -106,8 +106,8 @@ type AgentProfileProps = {
   initialContractNotes: CarrierContractNote[];
   /** Every agent's licence rows, in ID order: new row IDs need them all. Only this agent's are shown. */
   initialLicenses: AgentStateLicenseRecord[];
-  /** This agent's logins, the carrier as the party, sorted by carrier name. */
-  logins: ProfileLogin[];
+  /** This agent's passwords, the carrier as the party, sorted by carrier name. */
+  passwords: ProfilePassword[];
   /** Every agent's notes, newest first: new note IDs need them all. Only this agent's are shown. */
   initialNotes: AgentNote[];
 };
@@ -126,16 +126,16 @@ type PendingItem = { key: string; title: string; detail: string; href?: string; 
 type PendingInput = {
   agent: AgentRecord;
   agentCarriers: (CarrierOption & { writable: string[]; writingNumber: string })[];
-  logins: ProfileLogin[];
+  passwords: ProfilePassword[];
 };
 
 /**
  * What still needs doing for this agent, worked out from the page's own data:
  * missing licences or licence numbers, appointments that can't write anywhere yet, licensed
- * states no carrier covers, contracts without a writing number, carriers without a login,
- * logins without a contract, and logins still pending.
+ * states no carrier covers, contracts without a writing number, carriers without a name
+ * password, passwords without a contract, and passwords still pending.
  */
-function pendingItems({ agent, agentCarriers, logins }: PendingInput): PendingItem[] {
+function pendingItems({ agent, agentCarriers, passwords }: PendingInput): PendingItem[] {
   const items: PendingItem[] = [];
 
   if (agent.licensedStates.length === 0) {
@@ -195,41 +195,44 @@ function pendingItems({ agent, agentCarriers, logins }: PendingInput): PendingIt
   }
 
   // One line however many carriers, so a new agent's list stays short.
-  const withoutLogin = agentCarriers.filter(
-    (carrier) => !logins.some((login) => login.carrierId === carrier.id),
+  const withoutPassword = agentCarriers.filter(
+    (carrier) => !passwords.some((record) => record.carrierId === carrier.id),
   );
-  if (withoutLogin.length > 0) {
+  if (withoutPassword.length > 0) {
     items.push({
-      key: "no-login",
-      title: `Add ${withoutLogin.length === 1 ? "a login" : "logins"} for ${listText(withoutLogin.map((carrier) => carrier.name))}`,
-      detail: "Contracted, but no portal login recorded.",
-      href: withoutLogin.length === 1 ? `/logins?carrier=${withoutLogin[0].id}` : "/logins",
-      linkLabel: "Logins",
+      key: "no-password",
+      title: `Add ${withoutPassword.length === 1 ? "a password" : "passwords"} for ${listText(withoutPassword.map((carrier) => carrier.name))}`,
+      detail: "Contracted, but no portal password recorded.",
+      href:
+        withoutPassword.length === 1
+          ? `/passwords?carrier=${withoutPassword[0].id}`
+          : "/passwords",
+      linkLabel: "Passwords",
     });
   }
 
-  for (const login of logins) {
-    if (!agentCarriers.some((carrier) => carrier.id === login.carrierId)) {
+  for (const record of passwords) {
+    if (!agentCarriers.some((carrier) => carrier.id === record.carrierId)) {
       items.push({
-        key: `uncontracted-${login.id}`,
-        title: `${login.partyName} login has no contract`,
-        detail: "A login is recorded, but this agent isn't appointed with the carrier.",
+        key: `uncontracted-${record.id}`,
+        title: `${record.partyName} password has no contract`,
+        detail: "A password is recorded, but this agent isn't appointed with the carrier.",
       });
     }
   }
 
-  for (const login of logins) {
-    if (login.status === "pending") {
+  for (const record of passwords) {
+    if (record.status === "pending") {
       const writingNumber =
-        agentCarriers.find((carrier) => carrier.id === login.carrierId)?.writingNumber ?? "";
+        agentCarriers.find((carrier) => carrier.id === record.carrierId)?.writingNumber ?? "";
       items.push({
-        key: `pending-${login.id}`,
-        title: `${login.partyName} login is pending`,
+        key: `pending-${record.id}`,
+        title: `${record.partyName} password is pending`,
         detail: writingNumber
           ? `Writing number ${writingNumber}. Mark it active once the carrier confirms.`
           : "Mark it active once the carrier confirms.",
-        href: `/logins?carrier=${login.carrierId}`,
-        linkLabel: "Logins",
+        href: `/passwords?carrier=${record.carrierId}`,
+        linkLabel: "Passwords",
       });
     }
   }
@@ -244,7 +247,7 @@ export function AgentProfile({
   initialContracts,
   initialContractNotes,
   initialLicenses,
-  logins,
+  passwords,
   initialNotes,
 }: AgentProfileProps) {
   const [agent, setAgent] = useState(initialAgent);
@@ -292,7 +295,7 @@ export function AgentProfile({
     })
     .sort(byName);
 
-  const pending = pendingItems({ agent, agentCarriers, logins });
+  const pending = pendingItems({ agent, agentCarriers, passwords });
   const hasAside = unsavedCount > 0 || pending.length > 0;
 
   // Contact rows: only the fields that are filled in.
@@ -489,8 +492,8 @@ export function AgentProfile({
 
         <StateLicensesPanel licenses={licenses} className="lg:col-span-5" />
 
-        {/* Row two, 70/30: the wide logins table beside the audit trail. */}
-        <LoginsPanel logins={logins} partyHeading="Carrier" className="lg:col-span-7" />
+        {/* Row two, 70/30: the wide passwords table beside the audit trail. */}
+        <PasswordsPanel passwords={passwords} partyHeading="Carrier" className="lg:col-span-7" />
 
         <Panel title="Notes" count={notes.length} className="lg:col-span-3">
           {/* Cancels NoteList's own top margin; the panel body already pads. */}

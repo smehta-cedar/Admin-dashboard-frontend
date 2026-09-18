@@ -25,7 +25,7 @@ import "server-only";
  * An appointment is still what makes an agent contracted — a licence alone
  * never does — so Contracts by state is a view over appointments, narrowed to
  * the states the agent and carrier share. Portal username and password stay
- * with Logins in lib/logins.ts.
+ * with Passwords in lib/passwords.ts.
  */
 
 import contractsJson from "@/data/carrier-contracts.json";

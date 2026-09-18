@@ -25,7 +25,7 @@ const NAV_ITEMS: NavItem[] = [
     ],
   },
   { href: "/rulebook", label: "Rulebook", icon: "rulebook" },
-  { href: "/logins", label: "Logins", icon: "logins" },
+  { href: "/passwords", label: "Passwords", icon: "passwords" },
   {
     href: "/contracts",
     label: "Contracts",

@@ -1,6 +1,6 @@
 /**
  * Every status a badge can show. Agents and carriers use active/inactive;
- * logins add pending; agent state licences add review and jit.
+ * passwords add pending; agent state licences add review and jit.
  */
 type Status = "active" | "review" | "pending" | "jit" | "inactive";
 

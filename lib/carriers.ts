@@ -8,7 +8,9 @@ import "server-only";
  *
  * A carrier is listed once however many lines of business it writes (e.g.
  * HealthSpring is both MAPD and Supp/Ancillary). Writing numbers are not
- * stored on carriers; they live with Logins in lib/logins.ts.
+ * stored on carriers; they live on carrier contracts in
+ * lib/carrier-contracts.ts. Portal username and password live with Name
+ * Passwords in lib/passwords.ts.
  *
  * availableStates is the carrier's footprint for the agency: one of the two
  * ceilings on every appointment with it (lib/carrier-contracts.ts), the other

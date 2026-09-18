@@ -4,7 +4,7 @@ import { getAgentStateLicenses } from "@/lib/agent-state-licenses";
 import { getAgent, getAgentNotes, getAgents } from "@/lib/agents";
 import { getCarrierContractNotes, getCarrierContracts } from "@/lib/carrier-contracts";
 import { getCarriers } from "@/lib/carriers";
-import { getLogins } from "@/lib/logins";
+import { getPasswords } from "@/lib/passwords";
 import { byName } from "@/lib/text";
 import { AgentProfile } from "./agent-profile";
 
@@ -19,13 +19,13 @@ export default async function AgentProfilePage(props: PageProps<"/agents/[id]">)
   const agent = await getAgent(id);
   if (!agent) notFound();
 
-  const [agents, notes, carrierContracts, contractNotes, logins, carriers, stateLicenses] =
+  const [agents, notes, carrierContracts, contractNotes, passwords, carriers, stateLicenses] =
     await Promise.all([
       getAgents(),
       getAgentNotes(),
       getCarrierContracts(),
       getCarrierContractNotes(),
-      getLogins(),
+      getPasswords(),
       getCarriers(),
       getAgentStateLicenses(),
     ]);
@@ -50,12 +50,12 @@ export default async function AgentProfilePage(props: PageProps<"/agents/[id]">)
       initialContractNotes={contractNotes}
       // Every agent's rows: a new licence's ID must be unique across them all.
       initialLicenses={stateLicenses}
-      logins={logins
-        .filter((login) => login.agentId === id)
-        .map((login) => ({
-          ...login,
-          partyName: carrierName(login.carrierId),
-          partyHref: `/carriers/${login.carrierId}`,
+      passwords={passwords
+        .filter((record) => record.agentId === id)
+        .map((record) => ({
+          ...record,
+          partyName: carrierName(record.carrierId),
+          partyHref: `/carriers/${record.carrierId}`,
         }))
         .sort((a, b) => a.partyName.localeCompare(b.partyName))}
       initialNotes={notes}

@@ -7,7 +7,7 @@ import { EditIcon } from "@/components/edit-icon";
 import { LicenseNumber } from "@/components/license-number";
 import { StatusBadge } from "@/components/status-badge";
 import { TablePagination, useTablePagination } from "@/components/table-pagination";
-import type { LoginRecord } from "@/lib/logins";
+import type { PasswordRecord } from "@/lib/passwords";
 import { US_STATE_NAMES } from "@/lib/us-states";
 import { initials } from "@/lib/text";
 
@@ -17,8 +17,8 @@ import { initials } from "@/lib/text";
  * the header card (the "label  value" rows beside one titled aside, e.g.
  * licensed states as licence cards), and the titled panels holding related
  * lists — a small table (`ProfileTable`, with `StateChipCell` for a states
- * column) and the Logins panel both agent and carrier profiles show. Each
- * profile lays these out itself. Profile pages that use these are client
+ * column) and the Passwords panel both agent and carrier profiles show.
+ * Each profile lays these out itself. Profile pages that use these are client
  * components; `ProfileTable` paginates through `table-pagination`.
  */
 
@@ -362,45 +362,52 @@ export function StateChipCell({ codes, label, empty }: StateChipCellProps) {
   );
 }
 
-/** A login row on a profile, with the other party (carrier or agent) resolved to a link. */
-export type ProfileLogin = LoginRecord & { partyName: string; partyHref: string };
+/** A password row on a profile, with the other party (carrier or agent) resolved to a link. */
+export type ProfilePassword = PasswordRecord & {
+  partyName: string;
+  partyHref: string;
+};
 
-type LoginsPanelProps = {
+type PasswordsPanelProps = {
   /** Sorted by party name. */
-  logins: ProfileLogin[];
+  passwords: ProfilePassword[];
   /** Heading of the first column: "Carrier" on an agent, "Agent" on a carrier. */
   partyHeading: string;
   /** Extra classes on the panel, e.g. a column span. */
   className?: string;
 };
 
-/** The Logins panel: the other party, portal username, password and status. */
-export function LoginsPanel({ logins, partyHeading, className }: LoginsPanelProps) {
+/** The Passwords panel: the other party, portal username, password and status. */
+export function PasswordsPanel({
+  passwords,
+  partyHeading,
+  className,
+}: PasswordsPanelProps) {
   return (
-    <Panel title="Logins" count={logins.length} className={className}>
-      {logins.length === 0 ? (
-        <PanelEmpty>No logins recorded.</PanelEmpty>
+    <Panel title="Passwords" count={passwords.length} className={className}>
+      {passwords.length === 0 ? (
+        <PanelEmpty>No passwords recorded.</PanelEmpty>
       ) : (
         <ProfileTable
           columns={[partyHeading, "Portal username", "Password", "Status"]}
-          rows={logins}
-          rowKey={(login) => login.id}
+          rows={passwords}
+          rowKey={(record) => record.id}
         >
-          {(login) => (
+          {(record) => (
             <>
               <td className="min-w-24 whitespace-nowrap px-3 py-2.5">
-                <Link href={login.partyHref} className={PROFILE_LINK_CLASS}>
-                  {login.partyName}
+                <Link href={record.partyHref} className={PROFILE_LINK_CLASS}>
+                  {record.partyName}
                 </Link>
               </td>
               <td className="px-3 py-2.5 text-fg-muted">
-                <CredentialValue value={login.username} label="username" />
+                <CredentialValue value={record.username} label="username" />
               </td>
               <td className="px-3 py-2.5 text-fg-muted">
-                <CredentialValue value={login.portalPassword} label="password" secret />
+                <CredentialValue value={record.portalPassword} label="password" secret />
               </td>
               <td className="px-3 py-2.5">
-                <StatusBadge status={login.status} />
+                <StatusBadge status={record.status} />
               </td>
             </>
           )}

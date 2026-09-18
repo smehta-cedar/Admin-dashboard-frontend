@@ -6,7 +6,7 @@ import { EntitySwitcher } from "@/components/entity-switcher";
 import { HydratedNoteList } from "@/components/hydrated-note-list";
 import {
   Detail,
-  LoginsPanel,
+  PasswordsPanel,
   Panel,
   PanelEmpty,
   PROFILE_LINK_CLASS,
@@ -16,7 +16,7 @@ import {
   ProfileTable,
   StateChip,
   StateChipCell,
-  type ProfileLogin,
+  type ProfilePassword,
 } from "@/components/profile-shell";
 import { StatusBadge } from "@/components/status-badge";
 import { UnsavedBanner } from "@/components/unsaved-banner";
@@ -35,15 +35,16 @@ import {
 /*
  * Profile for one carrier: identity (including the states it is available in,
  * one ceiling on its appointments), then everything linked to it — contracted
- * agents, logins, and change notes. An agent row shows the states they can
- * actually write here: their appointment narrowed to their own licences
+ * agents, passwords, and change notes. An agent row shows the states they
+ * can actually write here: their appointment narrowed to their own licences
  * (Agents) and this carrier's footprint. Edit opens the same CarrierDialog as
  * the Carriers list. Agent names link to their profiles.
  *
  * Same layout as the agent profile, built from the shared pieces in
  * components/profile-shell.tsx: the name row (initials, name, status, Edit)
  * over one header card holding the carrier's details beside its available
- * states, then panels: Agents beside Notes, and Logins full width under them.
+ * states, then panels: Agents beside Notes, and Passwords full width
+ * under them.
  *
  * Dummy like the rest: the carrier and notes live in component state, and a
  * refresh brings back the JSON. page.tsx keys this component by carrier ID, so
@@ -66,8 +67,8 @@ type CarrierProfileProps = {
   allCarriers: CarrierRecord[];
   /** Contracted agents, sorted by name. */
   agents: AgentRow[];
-  /** This carrier's logins, the agent as the party, sorted by agent name. */
-  logins: ProfileLogin[];
+  /** This carrier's passwords, the agent as the party, sorted by agent name. */
+  passwords: ProfilePassword[];
   /** Every carrier's notes, newest first: new note IDs need them all. Only this carrier's are shown. */
   initialNotes: CarrierNote[];
 };
@@ -78,7 +79,7 @@ export function CarrierProfile({
   initialCarrier,
   allCarriers,
   agents,
-  logins,
+  passwords,
   initialNotes,
 }: CarrierProfileProps) {
   const [carrier, setCarrier] = useState(initialCarrier);
@@ -208,7 +209,7 @@ export function CarrierProfile({
           </div>
         </Panel>
 
-        <LoginsPanel logins={logins} partyHeading="Agent" className="xl:col-span-2" />
+        <PasswordsPanel passwords={passwords} partyHeading="Agent" className="xl:col-span-2" />
       </div>
 
       <CarrierDialog editor={editor} onSave={saveCarrierEdit} onClose={() => setEditor(null)} />

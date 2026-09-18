@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { getAgents } from "@/lib/agents";
 import { getCarrierContracts } from "@/lib/carrier-contracts";
 import { getCarrier, getCarrierNotes, getCarriers } from "@/lib/carriers";
-import { getLogins } from "@/lib/logins";
+import { getPasswords } from "@/lib/passwords";
 import { byName } from "@/lib/text";
 import { CarrierProfile } from "./carrier-profile";
 
@@ -18,11 +18,11 @@ export default async function CarrierProfilePage(props: PageProps<"/carriers/[id
   const carrier = await getCarrier(id);
   if (!carrier) notFound();
 
-  const [carriers, notes, carrierContracts, logins, agents] = await Promise.all([
+  const [carriers, notes, carrierContracts, passwords, agents] = await Promise.all([
     getCarriers(),
     getCarrierNotes(),
     getCarrierContracts(),
-    getLogins(),
+    getPasswords(),
     getAgents(),
   ]);
 
@@ -57,12 +57,12 @@ export default async function CarrierProfilePage(props: PageProps<"/carriers/[id
             : [];
         })
         .sort(byName)}
-      logins={logins
-        .filter((login) => login.carrierId === id)
-        .map((login) => ({
-          ...login,
-          partyName: agentName(login.agentId),
-          partyHref: `/agents/${login.agentId}`,
+      passwords={passwords
+        .filter((record) => record.carrierId === id)
+        .map((record) => ({
+          ...record,
+          partyName: agentName(record.agentId),
+          partyHref: `/agents/${record.agentId}`,
         }))
         .sort((a, b) => a.partyName.localeCompare(b.partyName))}
       initialNotes={notes}

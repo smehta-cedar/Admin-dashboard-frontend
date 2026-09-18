@@ -8,33 +8,35 @@ import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
 import type { AgentRecord } from "@/lib/agents";
 import type { CarrierRecord } from "@/lib/carriers";
 import { diffValues, nextId } from "@/lib/change-notes";
-import type { LoginField, LoginNote, LoginRecord } from "@/lib/logins";
+import type { PasswordField, PasswordNote, PasswordRecord } from "@/lib/passwords";
 import { byName } from "@/lib/text";
 
 /*
- * The one Add / Edit login dialog: agent, carrier, portal username and
- * password, status. Writing numbers live on carrier contracts. The Logins page
- * opens it from Add login (the carrier pre-picked from its filter) and a row's
- * Edit.
+ * The one Add / Edit password dialog: agent, carrier, portal username and
+ * password, status. Writing numbers live on carrier contracts. The Name
+ * Passwords page opens it from Add password (the carrier pre-picked from
+ * its filter) and a row's Edit.
  *
- * The view owns its logins and notes state and passes `onSave`, which calls
- * `saveLogin` below and sets that state. Adds and edits are dummy: nothing
- * reaches a server, and a refresh brings back the JSON.
+ * The view owns its passwords and notes state and passes `onSave`, which
+ * calls `savePassword` below and sets that state. Adds and edits are
+ * dummy: nothing reaches a server, and a refresh brings back the JSON.
  */
 
-/** Which dialog is open. Add may start on a carrier; edit holds the login as it was. */
-export type LoginEditor = { mode: "add"; carrierId?: string } | { mode: "edit"; login: LoginRecord };
+/** Which dialog is open. Add may start on a carrier; edit holds the record as it was. */
+export type PasswordEditor =
+  | { mode: "add"; carrierId?: string }
+  | { mode: "edit"; password: PasswordRecord };
 
-export type LoginValues = Omit<LoginRecord, "id">;
+export type PasswordValues = Omit<PasswordRecord, "id">;
 
 /** A save error, shown under the field it names. Several can fail at once. */
-export type LoginError = { field: "carrierId" | "portalPassword"; message: string };
+export type PasswordError = { field: "carrierId" | "portalPassword"; message: string };
 
 export type AgentOption = Pick<AgentRecord, "id" | "name" | "status">;
 export type CarrierOption = Pick<CarrierRecord, "id" | "name" | "status">;
 
 /** Also the order changes are compared and listed in. */
-export const LOGIN_FIELD_LABELS: Record<LoginField, string> = {
+export const PASSWORD_FIELD_LABELS: Record<PasswordField, string> = {
   agentId: "Agent",
   carrierId: "Carrier",
   username: "Portal username",
@@ -42,84 +44,98 @@ export const LOGIN_FIELD_LABELS: Record<LoginField, string> = {
   status: "Status",
 };
 
-const FIELDS = Object.keys(LOGIN_FIELD_LABELS) as LoginField[];
+const FIELDS = Object.keys(PASSWORD_FIELD_LABELS) as PasswordField[];
 
 const EMPTY_VALUES = { agentId: "", carrierId: "", username: "", portalPassword: "" };
 
 /** Recorded in notes only as "Password changed", never with its value. */
-const REDACTED_FIELDS: LoginField[] = ["portalPassword"];
+const REDACTED_FIELDS: PasswordField[] = ["portalPassword"];
 
 type SaveInput = {
-  logins: LoginRecord[];
-  /** Every login note, so the new note's ID is unique. */
-  notes: LoginNote[];
-  values: LoginValues;
-  /** The login being edited; leave out when adding. */
-  editing?: LoginRecord;
+  passwords: PasswordRecord[];
+  /** Every password note, so the new note's ID is unique. */
+  notes: PasswordNote[];
+  values: PasswordValues;
+  /** The record being edited; leave out when adding. */
+  editing?: PasswordRecord;
   agentName: (agentId: string) => string;
   carrierName: (carrierId: string) => string;
 };
 
 type SaveResult =
-  | { errors: LoginError[]; login: null }
+  | { errors: PasswordError[]; password: null }
   | {
       errors: [];
-      /** The login as saved; on an edit that changed nothing, the record as it was. */
-      login: LoginRecord;
-      /** False when an edit changed nothing: no new logins or note. */
+      /** The record as saved; on an edit that changed nothing, the record as it was. */
+      password: PasswordRecord;
+      /** False when an edit changed nothing: no new passwords or note. */
       changed: boolean;
-      logins: LoginRecord[];
-      notes: LoginNote[];
+      passwords: PasswordRecord[];
+      notes: PasswordNote[];
     };
 
 /**
- * Adds or edits a login, pure. Returns the next logins and notes (a note only
- * when something changed), or every error to show: a second login for the
- * same agent at the same carrier, and a blank password.
+ * Adds or edits a password, pure. Returns the next passwords and
+ * notes (a note only when something changed), or every error to show: a second
+ * password for the same agent at the same carrier, and a blank password.
  */
-export function saveLogin({ logins, notes, values, editing, agentName, carrierName }: SaveInput): SaveResult {
-  const others = logins.filter((login) => login.id !== editing?.id);
+export function savePassword({
+  passwords,
+  notes,
+  values,
+  editing,
+  agentName,
+  carrierName,
+}: SaveInput): SaveResult {
+  const others = passwords.filter((record) => record.id !== editing?.id);
   const pairOwner = others.find(
-    (login) => login.agentId === values.agentId && login.carrierId === values.carrierId,
+    (record) => record.agentId === values.agentId && record.carrierId === values.carrierId,
   );
 
   // Messages name agents and carriers, never IDs.
-  const errors: LoginError[] = [];
+  const errors: PasswordError[] = [];
   if (pairOwner) {
     errors.push({
       field: "carrierId",
-      message: `${agentName(values.agentId)} already has a login at ${carrierName(values.carrierId)}.`,
+      message: `${agentName(values.agentId)} already has a password at ${carrierName(values.carrierId)}.`,
     });
   }
   // Required, and spaces alone don't count. A valid password is still saved as typed.
   if (values.portalPassword.trim() === "") {
     errors.push({ field: "portalPassword", message: "Password can't be blank." });
   }
-  if (errors.length > 0) return { errors, login: null };
+  if (errors.length > 0) return { errors, password: null };
 
   /** Values as notes show them: agent and carrier by name. */
-  const shown = (from: LoginValues) => ({
+  const shown = (from: PasswordValues) => ({
     ...from,
     agentId: agentName(from.agentId),
     carrierId: carrierName(from.carrierId),
   });
-  const loginId = editing?.id ?? nextId(logins);
-  const saved = { id: loginId, ...values };
-  const changes = diffValues(FIELDS, editing ? shown(editing) : EMPTY_VALUES, shown(values), REDACTED_FIELDS);
+  const passwordId = editing?.id ?? nextId(passwords);
+  const saved = { id: passwordId, ...values };
+  const changes = diffValues(
+    FIELDS,
+    editing ? shown(editing) : EMPTY_VALUES,
+    shown(values),
+    REDACTED_FIELDS,
+  );
   // Saving an edit with nothing changed just closes, without a note.
-  if (changes.length === 0) return { errors: [], login: saved, changed: false, logins, notes };
+  if (changes.length === 0) {
+    return { errors: [], password: saved, changed: false, passwords, notes };
+  }
 
   return {
     errors: [],
-    login: saved,
+    password: saved,
     changed: true,
-    logins: editing
-      ? logins.map((login) => (login.id === loginId ? saved : login))
-      : [...logins, saved],
+    passwords: editing
+      ? passwords.map((record) => (record.id === passwordId ? saved : record))
+      : [...passwords, saved],
     notes: [
       {
         id: nextId(notes),
-        loginId,
+        passwordId,
         kind: editing ? "edited" : "added",
         createdAt: new Date().toISOString(),
         changes,
@@ -129,18 +145,24 @@ export function saveLogin({ logins, notes, values, editing, agentName, carrierNa
   };
 }
 
-type LoginDialogProps = {
+type PasswordDialogProps = {
   /** Null keeps the dialog closed. */
-  editor: LoginEditor | null;
+  editor: PasswordEditor | null;
   agents: AgentOption[];
   carriers: CarrierOption[];
   /** Saves the values; returns the errors to show instead of closing. */
-  onSave: (values: LoginValues, editing?: LoginRecord) => LoginError[];
+  onSave: (values: PasswordValues, editing?: PasswordRecord) => PasswordError[];
   /** Runs for every close: Cancel, Escape, backdrop click, or a save. */
   onClose: () => void;
 };
 
-export function LoginDialog({ editor, agents, carriers, onSave, onClose }: LoginDialogProps) {
+export function PasswordDialog({
+  editor,
+  agents,
+  carriers,
+  onSave,
+  onClose,
+}: PasswordDialogProps) {
   const { dialogRef, close } = useModalDialog(editor !== null);
   const id = useId();
 
@@ -148,7 +170,7 @@ export function LoginDialog({ editor, agents, carriers, onSave, onClose }: Login
   return (
     <ModalDialog dialogRef={dialogRef} labelledBy={`${id}-title`} onClose={onClose}>
       {editor ? (
-        <LoginForm
+        <PasswordForm
           id={id}
           editor={editor}
           agents={agents}
@@ -161,20 +183,27 @@ export function LoginDialog({ editor, agents, carriers, onSave, onClose }: Login
   );
 }
 
-type LoginFormProps = Omit<LoginDialogProps, "editor" | "onClose"> & {
+type PasswordFormProps = Omit<PasswordDialogProps, "editor" | "onClose"> & {
   id: string;
-  editor: LoginEditor;
+  editor: PasswordEditor;
   close: () => void;
 };
 
 /** The dialog's form. Mounted per open, so its errors start clear each time. */
-function LoginForm({ id, editor, agents, carriers, onSave, close }: LoginFormProps) {
-  const editing = editor.mode === "edit" ? editor.login : undefined;
-  const [errors, setErrors] = useState<LoginError[]>([]);
+function PasswordForm({
+  id,
+  editor,
+  agents,
+  carriers,
+  onSave,
+  close,
+}: PasswordFormProps) {
+  const editing = editor.mode === "edit" ? editor.password : undefined;
+  const [errors, setErrors] = useState<PasswordError[]>([]);
 
-  const messageFor = (field: LoginError["field"]) =>
+  const messageFor = (field: PasswordError["field"]) =>
     errors.find((error) => error.field === field)?.message ?? null;
-  const clear = (...fields: LoginError["field"][]) =>
+  const clear = (...fields: PasswordError["field"][]) =>
     setErrors((current) => current.filter((error) => !fields.includes(error.field)));
 
   const agentName = (agentId: string) =>
@@ -188,7 +217,7 @@ function LoginForm({ id, editor, agents, carriers, onSave, close }: LoginFormPro
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
-    const text = (field: LoginField) => String(data.get(field) ?? "").trim();
+    const text = (field: PasswordField) => String(data.get(field) ?? "").trim();
     const status = text("status");
     const saveErrors = onSave(
       {
@@ -213,12 +242,12 @@ function LoginForm({ id, editor, agents, carriers, onSave, close }: LoginFormPro
       <h2 id={`${id}-title`} className="text-base font-semibold text-fg">
         {editing
           ? `Edit ${agentName(editing.agentId)} at ${carrierName(editing.carrierId)}`
-          : "Add login"}
+          : "Add password"}
       </h2>
       <p className="mt-1 text-sm text-fg-muted">
         {editing
           ? "Saving records a note of what changed. Nothing is saved anywhere yet; refreshing undoes it."
-          : "Not saved anywhere yet. The login stays in the list until you refresh."}
+          : "Not saved anywhere yet. The password stays in the list until you refresh."}
       </p>
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -251,7 +280,9 @@ function LoginForm({ id, editor, agents, carriers, onSave, close }: LoginFormPro
             id={`${id}-carrier`}
             name="carrierId"
             required
-            defaultValue={editor.mode === "edit" ? editor.login.carrierId : (editor.carrierId ?? "")}
+            defaultValue={
+              editor.mode === "edit" ? editor.password.carrierId : (editor.carrierId ?? "")
+            }
             aria-invalid={carrierError ? true : undefined}
             aria-describedby={carrierError ? `${id}-carrier-error` : undefined}
             onChange={() => clear("carrierId")}
@@ -269,7 +300,7 @@ function LoginForm({ id, editor, agents, carriers, onSave, close }: LoginFormPro
         <Field
           label="Portal username"
           htmlFor={`${id}-username`}
-          hint="Portal login for this agent at this carrier."
+          hint="Portal username for this agent at this carrier."
           hintId={`${id}-username-hint`}
         >
           <input
@@ -325,7 +356,7 @@ function LoginForm({ id, editor, agents, carriers, onSave, close }: LoginFormPro
           Cancel
         </button>
         <button type="submit" className={PRIMARY_BUTTON_CLASS}>
-          {editing ? "Save changes" : "Add login"}
+          {editing ? "Save changes" : "Add password"}
         </button>
       </div>
     </form>

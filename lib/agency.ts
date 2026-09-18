@@ -11,7 +11,7 @@ import "server-only";
  * The agency has the same producer shape as an agent (NPN, licensed states
  * with licence numbers, contact details) because it is licensed like one. It
  * is the org identity, licence footprint and roster only: it is not a
- * participant in carrier contracts or logins, which stay on individual agents.
+ * participant in carrier contracts or passwords, which stay on individual agents.
  * There is one agency, so no ID and no list.
  */
 

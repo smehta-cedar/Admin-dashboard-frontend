@@ -1,7 +1,7 @@
 # Entity page pattern
 
 How the Agents page is built, written as a reference for the next entity pages
-(Carriers, Rulebook, Logins, Contracts, Users, Agency). Reference implementation:
+(Carriers, Rulebook, Passwords, Contracts, Users, Agency). Reference implementation:
 
 - [lib/agents.ts](../lib/agents.ts) — types and data access
 - [data/agents.json](../data/agents.json), [data/agent-notes.json](../data/agent-notes.json) — fake data
@@ -47,10 +47,10 @@ Shared pieces (extracted when Carriers landed — use these, don't copy):
 | `components/unsaved-banner.tsx` | `UnsavedBanner({ count, className? })` (§9) |
 | `components/hydrated-note-list.tsx` | `HydratedNoteList` — `NoteList` gated on hydration, for a profile's Notes panel |
 | `components/entity-switcher.tsx` | `EntitySwitcher({ label, currentId, options, hrefFor })` — the profile's "Switch agent/carrier" select, sorted by name, inactive grouped last |
-| `components/credential-value.tsx` | `CredentialValue` (copy-on-click, masked when `secret`), `PasswordInput` (eye toggle) — Logins, Users, sign-in, profiles |
+| `components/credential-value.tsx` | `CredentialValue` (copy-on-click, masked when `secret`), `PasswordInput` (eye toggle) — Passwords, Users, sign-in, profiles |
 | `components/license-number.tsx` | `LicenseNumber` (a licensed-state card's number, click to copy, or "No number yet"; agent and agency profiles) |
 | `components/producer-form.tsx` | `ProducerForm` + `producerNoteValues`, `unnumberedStatesError` — the one agent/agency form (see Agency) |
-| `components/profile-shell.tsx` | Profile layout pieces: `ProfileBackLink`, `ProfileNameRow`, `ProfileHeader`, `ProducerDetails`, `Detail`, `LicenseCards`, `StateChip`, `Count`, `Panel`, `PanelEmpty`, `ProfileTable` (paginated), `StateChipCell`, `LoginsPanel`, `PROFILE_BUTTON_CLASS` (see Contracts → Profiles) |
+| `components/profile-shell.tsx` | Profile layout pieces: `ProfileBackLink`, `ProfileNameRow`, `ProfileHeader`, `ProducerDetails`, `Detail`, `LicenseCards`, `StateChip`, `Count`, `Panel`, `PanelEmpty`, `ProfileTable` (paginated), `StateChipCell`, `PasswordsPanel`, `PROFILE_BUTTON_CLASS` (see Contracts → Profiles) |
 | `app/(dashboard)/contracts/use-appointments.ts` | `useAppointments` — contracts + notes state, the open `AppointmentDialog` editor, and its `saveContract` (see Contracts → One dialog) |
 
 Constants a client view needs from an entity (like `LINES_OF_BUSINESS`) go in
@@ -130,7 +130,7 @@ only; the markup and classes are ours. v9's API is not v8's: `useTable` +
   getRowId={(agent) => agent.id}
   unit={["agent", "agents"]}
   searchPlaceholder="Search name, NPN, email…"
-  emptyMessage="No logins for Humana."   // optional; rows empty, no search
+  emptyMessage="No passwords for Humana."   // optional; rows empty, no search
   renderDetails={(agent) => …}           // optional; see §7
 />
 ```
@@ -139,7 +139,7 @@ A column: `{ id, header, cell(row, ctx), className?, sortValue?, searchText?, sr
 
 - **Sort:** a column with `sortValue` gets a header button. Clicks cycle
   ascending → descending → the order `rows` came in (so the view's default
-  order, e.g. ID order or Logins' agent-then-carrier, is the "cleared" state).
+  order, e.g. ID order or Passwords' agent-then-carrier, is the "cleared" state).
   One column at a time. Numbers compare numerically (`Number(id)`, counts);
   text ignores case and sorts "2" before "10". Status columns sort by
   `statusRank`. The sorted `th` gets `aria-sort`; the arrow icon is `aria-hidden`.
@@ -156,7 +156,7 @@ A column: `{ id, header, cell(row, ctx), className?, sortValue?, searchText?, sr
   `ProfileTable` on profiles uses the same control.
 - **No match:** one row, "No agents match “foo”." with a Clear search button.
   `EmptyState` is still used by the view when the list itself is empty.
-- **Filters that live in the URL** (Logins' carrier) stay in the view and
+- **Filters that live in the URL** (Passwords' carrier) stay in the view and
   narrow `rows` before they reach `DataTable`; `TOOLBAR_INPUT_CLASS` styles them.
 - Actions column: `{ id: "actions", header: "Actions", srOnlyHeader: true, className: "text-right" }`.
   When it needs `setEditor`, build `columns` with `useMemo` in the view
@@ -175,7 +175,7 @@ Styling (inside `DataTable`):
   Primary name: `text-fg`, `whitespace-nowrap`.
 - Status badge: `rounded-md px-2 py-0.5 text-xs font-medium capitalize` +
   `active: bg-brand-soft text-brand-ink`, `inactive: bg-surface-hover text-fg-muted`
-  (and `pending: bg-warn-soft text-warn-ink` for Logins; `review: bg-info-soft text-info-ink`
+  (and `pending: bg-warn-soft text-warn-ink` for Passwords; `review: bg-info-soft text-info-ink`
   and an outlined neutral `jit` for state licences).
 - Row action: text button `Edit` with sr-only entity name
   (`Edit<span className="sr-only"> {name}</span>`), right-aligned.
@@ -474,7 +474,7 @@ shared pieces in `components/profile-shell.tsx`, top to bottom:
 `ProfileHeader` (`details` = `Detail` rows or `ProducerDetails`, beside one
 titled aside, e.g. `LicenseCards` or `StateChip`s), `UnsavedBanner`, then
 `Panel`s: a `ProfileTable` (headings + `<tr>` per row; the caller renders the
-`<td>`s, with `StateChipCell` for a states column), `LoginsPanel` (agent and
+`<td>`s, with `StateChipCell` for a states column), `PasswordsPanel` (agent and
 carrier profiles; `page.tsx` resolves the other party into `partyName` /
 `partyHref`), and Notes as `HydratedNoteList`. `PROFILE_BUTTON_CLASS` is the
 soft-brand action button ("+ Add carrier"). The agent profile, top to bottom:
@@ -499,19 +499,19 @@ soft-brand action button ("+ Add carrier"). The agent profile, top to bottom:
   from `lg`: Carriers (a table: Carrier, Writing number, Writable states,
   Status; writing number from the contract, or "No writing number";
   "+ Add carrier" in its title row) beside `StateLicensesPanel`, 50/50; then
-  `LoginsPanel` beside Notes, 70/30. Below `lg` they stack in that order. No
+  `PasswordsPanel` beside Notes, 70/30. Below `lg` they stack in that order. No
   sticky rail, no tabs.
 - **Pending** is derived by `pendingItems`, not stored — there are no task
   records yet: no licences, licensed states with no licence number, an appointment with no writable states, licensed
-  states no appointment covers, contracts with no writing number, carriers with no login (one line), a login with
-  no contract, and logins whose status is pending. Swap it for real tasks when
+  states no appointment covers, contracts with no writing number, carriers with no password (one line), a password with
+  no contract, and passwords whose status is pending. Swap it for real tasks when
   they exist.
 
 The carrier profile (`carrier-profile.tsx`, a client component) follows
 the same layout: name row (initials, name, status, Edit), a header card with
 Carrier ID / aliases / lines of business beside **Available states** as
 `StateChip`s, then panels — Agents (a table: Agent, Writing number, Writable
-states, Status) beside Notes, and Logins full width under them (`Panel
+states, Status) beside Notes, and Passwords full width under them (`Panel
 className="xl:col-span-2"`).
 Edit opens the shared `CarrierDialog` (same form as the Carriers list) filled
 in from the carrier; saves stay on the page only until refresh, with the same
@@ -558,41 +558,44 @@ The profile shows the rows in `StateLicensesPanel` (State, Licence #, Status,
 Start, End; dates formatted from the string with `formatLicenceDate`, not
 `Date`, so server and client agree). No licences list page.
 
-### Logins
+### Passwords
 
-Files: [lib/logins.ts](../lib/logins.ts),
-[app/(dashboard)/logins/page.tsx](../app/(dashboard)/logins/page.tsx),
-[app/(dashboard)/logins/logins-view.tsx](../app/(dashboard)/logins/logins-view.tsx),
-[app/(dashboard)/logins/login-dialog.tsx](../app/(dashboard)/logins/login-dialog.tsx)
-(`LoginDialog` + pure `saveLogin`, which returns every error at once like
-`saveCarrier`; `LOGIN_FIELD_LABELS` lives there; Add starts on the filtered
+Distinct from `app/login` (sign-in to this app). Passwords are carrier
+portal credentials stored in the dashboard.
+
+Files: [lib/passwords.ts](../lib/passwords.ts),
+[app/(dashboard)/passwords/page.tsx](../app/(dashboard)/passwords/page.tsx),
+[app/(dashboard)/passwords/passwords-view.tsx](../app/(dashboard)/passwords/passwords-view.tsx),
+[app/(dashboard)/passwords/password-dialog.tsx](../app/(dashboard)/passwords/password-dialog.tsx)
+(`PasswordDialog` + pure `savePassword`, which returns every error at once like
+`saveCarrier`; `PASSWORD_FIELD_LABELS` lives there; Add starts on the filtered
 carrier via `{ mode: "add", carrierId }`),
 [components/credential-value.tsx](../components/credential-value.tsx).
 
-Logins is the first entity that points at other entities. A login is one
+Passwords is the first entity that points at other entities. A password is one
 agent's portal access at one carrier. The writing number (producer ID) lives
 on the carrier contract.
 
 | Field | Required | Type | Notes |
 | --- | --- | --- | --- |
 | `agentId` | yes | string | Shown by agent name. |
-| `carrierId` | yes | string | Shown by carrier name. One login per agent + carrier. |
+| `carrierId` | yes | string | Shown by carrier name. One password per agent + carrier. |
 | `username` | yes | string | Portal username. |
 | `portalPassword` | yes | string | Portal password, stored exactly as typed. Dummy values only (see Security). |
 | `status` | yes | `"active" \| "pending" \| "inactive"` | Default `"active"` on add. |
 
-**Loading.** `page.tsx` loads logins, notes, agents and carriers, and passes
+**Loading.** `page.tsx` loads passwords, notes, agents and carriers, and passes
 slim `{ id, name, status }` options; the form's agent and carrier `<select>`s
 are sorted by name with inactive ones marked "(inactive)". `page.tsx` also
 calls `await connection()` so the route renders per request: the view reads
 `?carrier=` with `useSearchParams`, and on a prerendered page that needs a
 Suspense boundary (or the build fails) and would render the table on the
-client. `getLogins()` returns ID order; a record missing `portalPassword`
+client. `getPasswords()` returns ID order; a record missing `portalPassword`
 loads as `""`, and a missing or unknown `status` loads as `"active"` with a
-`console.warn` naming the login ID (server log, not the browser).
+`console.warn` naming the password ID (server log, not the browser).
 
-**Status.** `LoginStatus` in `lib/logins.ts` adds `pending`; it is
-Logins-only. The Agent and Carrier status types are unchanged
+**Status.** `PasswordStatus` in `lib/passwords.ts` adds `pending`; it is
+Passwords-only. The Agent and Carrier status types are unchanged
 (`active | inactive`). `StatusBadge` accepts all three (pending is amber, §6).
 
 **Table.**
@@ -601,36 +604,36 @@ Logins-only. The Agent and Carrier status types are unchanged
   No ID column; agent and carrier show names.
 - Default sort: agent name, then carrier name. Rows are rebuilt from state on
   every render, so an add or edit lands in its sorted place at once.
-- The agent name is the expand button (§7). The expanded row shows Notes only
-  (no aliases). Several rows can be open at once (`Set` of login IDs).
+- Rows do not expand: agent and carrier are plain text (notes still record on
+  add/edit, same as Agents and Carriers).
 
 **Carrier filter.**
 
-- A `<select>` in `PageHeader` actions, left of Add login. Styled as
+- A `<select>` in `PageHeader` actions, left of Add password. Styled as
   `INPUT_CLASS` without `mt-1` and `w-full`; sr-only label "Filter by carrier".
   Options: "All carriers", then every carrier sorted by name (including ones
-  with no logins), with " (inactive)" after inactive carriers.
+  with no passwords), with " (inactive)" after inactive carriers.
 - Stored as `?carrier=<carrierId>`. The value is React state seeded from the
   URL on first render, so the server and first client render agree (no flash
-  of all logins, no hydration mismatch). A change sets state and calls
+  of all passwords, no hydration mismatch). A change sets state and calls
   `window.history.replaceState`: no reload, no refetch. "All carriers" removes
   the param. State drives the controlled select, rather than reading
   `useSearchParams` on each render, so it updates on the same render.
 - Missing or unknown ID means all carriers; an unknown ID is left in the URL
   but the dropdown shows "All carriers".
-- Filtering is client-side on the loaded list, before the sort. A login edited
+- Filtering is client-side on the loaded list, before the sort. A password edited
   so it no longer matches drops out of the list; the filter is not reset.
-- A filtered carrier with no logins shows one table row:
-  "No logins for <carrier name>." (`EmptyState` is still used when there are no
-  logins at all.)
+- A filtered carrier with no passwords shows one table row:
+  "No passwords for <carrier name>." (`EmptyState` is still used when there are no
+  passwords at all.)
 - **Add pre-fill:** with a valid filter, Add opens with that carrier selected
   (inactive carriers too), still editable. With no filter it starts empty.
-  Edit always starts on the login's own carrier. The form remounts on every
+  Edit always starts on the password's own carrier. The form remounts on every
   open, so it uses the filter at that moment.
-- **Hidden-login message:** when Add saves a login for a carrier other than the
-  filter, a gray notice ("Login added for UHC. It's hidden by the current
+- **Hidden-record message:** when Add saves a password for a carrier other than the
+  filter, a gray notice ("Password added for UHC. It's hidden by the current
   filter.") shows in the `role="status"` region under the unsaved banner. It
-  clears on the next filter change or after 6 seconds; it is keyed by login
+  clears on the next filter change or after 6 seconds; it is keyed by password
   ID, so a second hidden add restarts the timer.
 
 **Validation.**
@@ -639,8 +642,8 @@ Logins-only. The Agent and Carrier status types are unchanged
 - The password is **not** trimmed or lowercased and has no `pattern`.
   `onSubmit` rejects it when it is blank after trimming ("Password can't be
   blank."); otherwise it is saved exactly as typed, spaces included.
-- One login per agent + carrier, error under Carrier:
-  "Maria Alva already has a login at Humana."
+- One password per agent + carrier, error under Carrier:
+  "Maria Alva already has a password at Humana."
 - Messages use agent and carrier names, never IDs.
 
 **Notes.**
@@ -664,7 +667,7 @@ Logins-only. The Agent and Carrier status types are unchanged
 - The eye button toggles that row only: `aria-label` "Show password" / "Hide
   password"; eye icon while hidden, eye-off while visible.
 - Reveal state is a boolean in each cell, reset whenever the value changes, so a page
-  reload, a row filtered out and back, and a newly added login all start
+  reload, a row filtered out and back, and a newly added password all start
   hidden, and an edit that saves a new password hides it again. An edit that
   leaves the password alone keeps a revealed row as it was.
 - Copy: clicking the value (a `<button>` with `cursor-pointer` and a hover) or
@@ -676,7 +679,6 @@ Logins-only. The Agent and Carrier status types are unchanged
   mounted.
 - The clipboard needs a secure context: HTTPS or `localhost`. Over plain http
   on a network address, every copy shows "Couldn't copy".
-- Only the agent button expands a row, so these buttons never trigger it.
 - The form uses `PasswordInput`: `type="password"` until its eye button shows
   it, hidden again every time the dialog opens, `autoComplete="new-password"`
   so the browser doesn't fill in the signed-in user's own saved password.
@@ -684,12 +686,12 @@ Logins-only. The Agent and Carrier status types are unchanged
 
 **Security.**
 
-- `data/logins.json` is committed to git, so it holds dummy passwords only
-  (`dummy-pass-1` … `dummy-pass-5`). The TODO in `lib/logins.ts` says real
+- `data/passwords.json` is committed to git, so it holds dummy passwords only
+  (`dummy-pass-1` … `dummy-pass-5`). The TODO in `lib/passwords.ts` says real
   passwords come only after the move to Supabase with admin-only access.
 - Masking is on-screen only. Today every password is sent to the browser in
   the page's props and can be read in developer tools.
-- Supabase plan: don't send passwords with the list. Fetch one login's password
+- Supabase plan: don't send passwords with the list. Fetch one password's password
   when it is revealed or copied, from an admin-only query.
 
 ### Users
@@ -714,7 +716,7 @@ sign-in path) rather than half-wired here.
 | `email` | yes | string | What they sign in with. Unique, ignoring case. |
 | `role` | yes | `"admin" \| "staff"` | Default `"staff"` on add. **Stored and shown only** — nothing is gated by it yet; every signed-in user sees the whole app. |
 | `status` | yes | `"active" \| "inactive"` | Inactive users can't sign in (and are signed out on their next request). |
-| `password` | yes | string | Dummy only, like Logins; never trimmed; redacted in notes. |
+| `password` | yes | string | Dummy only, like Passwords; never trimmed; redacted in notes. |
 
 - Columns: **Name (expands to Notes), Email, Password (masked `CredentialValue`,
   never sortable or searchable), Role, Status, [actions]**. ID order.
@@ -724,7 +726,7 @@ sign-in path) rather than half-wired here.
 - Dialog errors under the field: "Email x already belongs to Y.", "Password
   can't be blank.".
 - Notes record the password as `diffValues(FIELDS, before, after, ["password"])`
-  (§Logins).
+  (§Passwords).
 
 ### Fake session (until Supabase Auth)
 
@@ -793,7 +795,7 @@ first.
   through the profile's Edit like the agent's), then **Agents** (read-only table of every agent: name →
   `/agents/[id]`, licensed-state chips, status; "Manage on Agents →") beside
   **Notes**.
-- Not a participant in contracts or logins: appointments stay on individual
+- Not a participant in contracts or passwords: appointments stay on individual
   agents. Multi-agency is out of scope.
 - Nav: a footer item pinned to the bottom of the rail and drawer
   (`footerItems` on `AppShell`).

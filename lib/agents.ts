@@ -21,8 +21,10 @@ import "server-only";
  * dialog edits those rows, then derives the two fields again the same way
  * (lib/state-licenses.ts).
  *
- * Writing numbers are not stored on agents or carriers. They live with
- * Logins in lib/logins.ts (one agent's producer ID at one carrier).
+ * Writing numbers are not stored on agents or carriers. They live on carrier
+ * contracts in lib/carrier-contracts.ts (one agent's producer ID at one
+ * carrier). Portal username and password live with Passwords in
+ * lib/passwords.ts.
  *
  * The commission matrix still uses the slim `Agent` ({ id, name }) from
  * commissions.ts. Don't widen that; use AgentRecord here for agent detail.
