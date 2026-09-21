@@ -110,7 +110,7 @@ export function AgentsView({ initialAgents, initialNotes, initialLicenses }: Age
             className={`inline-flex items-center gap-1.5 ${ROW_BUTTON_CLASS}`}
           >
             <EditIcon className="size-3.5 shrink-0" />
-            Edit<span className="sr-only"> {agent.name}</span>
+            <span className="sr-only"> {agent.name}</span>
           </button>
         ),
         className: "text-right",

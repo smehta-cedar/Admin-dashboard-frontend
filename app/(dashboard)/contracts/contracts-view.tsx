@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useId, useMemo, useState } from "react";
-import { INPUT_CLASS, PRIMARY_BUTTON_CLASS, ROW_BUTTON_CLASS } from "@/components/classes";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { PRIMARY_BUTTON_CLASS, ROW_BUTTON_CLASS, TOOLBAR_INPUT_CLASS } from "@/components/classes";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
 import { LicenseNumber } from "@/components/license-number";
@@ -28,8 +28,9 @@ import { useAppointments } from "./use-appointments";
  * reach past either ceiling. The selected state's agency licence number sits
  * under the state name and copies on click.
  *
- * A map colors each state by how many distinct active agents have at least one
- * appointment there. Picking a state lists the same appointments two ways: By
+ * A full-width map colors each state by how many distinct active agents have at
+ * least one appointment there. Picking a state on the map slides a
+ * panel in from the right, which lists the same appointments two ways: By
  * agent (each agent with the carriers that appoint them there) or By carrier
  * (each carrier with the agents it appoints there). The Appointments table
  * lists every appointment, sorts and searches (agent, carrier, state code or
@@ -174,6 +175,12 @@ export function ContractsView({
     onSaved: () => setUnsavedCount((count) => count + 1),
   });
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
+  // The state the panel shows. It outlives `selectedCode` so the panel keeps
+  // its content while it slides out.
+  const [panelCode, setPanelCode] = useState<string | null>(null);
+  const panelOpen = selectedCode !== null;
+  const panelRef = useRef<HTMLElement>(null);
+  const mapRef = useRef<HTMLDivElement>(null);
   const [stateView, setStateView] = useState<StateView>("agent");
   // Map width as a share of its box (1 = Fit). Session only: a refresh resets it to 75%.
   const [mapZoom, setMapZoom] = useState(0.75);
@@ -243,8 +250,49 @@ export function ContractsView({
     { label: "Appointments", value: String(rows.length) },
   ];
 
-  const selectedRows = selectedCode ? (rowsByState.get(selectedCode) ?? []) : [];
-  const selectedName = selectedCode ? (US_STATE_NAMES[selectedCode] ?? selectedCode) : null;
+  const selectState = (code: string | null) => {
+    setSelectedCode(code);
+    if (code) setPanelCode(code);
+  };
+
+  // Closing makes the panel inert, so focus inside it moves back to the state
+  // it was opened from (still the pressed one on the map at this point).
+  const closePanel = () => {
+    if (panelRef.current?.contains(document.activeElement)) {
+      mapRef.current?.querySelector<SVGPathElement>('[aria-pressed="true"]')?.focus();
+    }
+    setSelectedCode(null);
+  };
+
+  // Escape or a press anywhere outside closes the panel, unless the appointment
+  // dialog is open over it (the dialog takes that Escape and those clicks
+  // itself). A state on the map doesn't count as outside, nor does anything
+  // marked `data-keeps-panel` (the State select, the zoom buttons): those swap
+  // the panel's content or move the map under it. An outside press leaves
+  // focus to whatever was pressed.
+  useEffect(() => {
+    if (!panelOpen || editor) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closePanel();
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (panelRef.current?.contains(target)) return;
+      if (target.closest("[data-keeps-panel]")) return;
+      if (mapRef.current?.contains(target) && target.closest("path")) return;
+      setSelectedCode(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [panelOpen, editor]);
+
+  const selectedRows = panelCode ? (rowsByState.get(panelCode) ?? []) : [];
+  const selectedName = panelCode ? (US_STATE_NAMES[panelCode] ?? panelCode) : null;
 
   // The selected state's appointments grouped both ways. Rows are already
   // sorted by agent then carrier, so By agent needs no resort.
@@ -326,7 +374,7 @@ export function ContractsView({
             </>
           ),
           // This state's licence number, on the right of the agent name.
-          licenseNumber: selectedCode ? item.licenseNumbers[selectedCode] : undefined,
+          licenseNumber: panelCode ? item.licenseNumbers[panelCode] : undefined,
           label: `Carriers appointing ${item.name}`,
           chips: others.map(({ contract, carrier, states }) => ({
             id: carrier.id,
@@ -378,234 +426,266 @@ export function ContractsView({
             ))}
           </dl>
         }
-        actions={addButton}
+        actions={
+          <>
+            {/* The map's keyboard and small-screen twin: both open the state panel. */}
+            <label htmlFor={`${id}-state`} className="sr-only">
+              Show a state
+            </label>
+            <select
+              id={`${id}-state`}
+              data-keeps-panel
+              value={selectedCode ?? ""}
+              onChange={(event) => selectState(event.target.value || null)}
+              className={TOOLBAR_INPUT_CLASS}
+            >
+              <option value="">Choose a state…</option>
+              {US_STATES.map((state) => (
+                <option key={state.code} value={state.code}>
+                  {state.name}
+                </option>
+              ))}
+            </select>
+            {addButton}
+          </>
+        }
       />
+
+ 
 
       <UnsavedBanner count={unsavedCount} />
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]">
-        <section aria-labelledby={`${id}-map-title`}>
-          <h2 id={`${id}-map-title`} className="sr-only">
-            Where active agents can write
-          </h2>
-          {/*
-           * The box is the map's Fit shape at 78% height; the map inside is sized
-           * by zoom. When it overflows the box scrolls both ways to pan; otherwise
-           * auto margins center it (and, unlike flex centering, never clip it).
-           * The zoom buttons (top-right) and legend (bottom-left) sit outside the
-           * scroller, so they stay pinned while the map pans under them.
-           */}
-          <div className="relative rounded-lg border border-line p-4">
-            <div
-              className="flex overflow-auto"
-              style={{
-                aspectRatio: `${US_MAP_VIEWBOX.width} / ${US_MAP_VIEWBOX.height * MAP_BOX_HEIGHT}`,
-              }}
-            >
-              <div className="m-auto shrink-0" style={{ width: `${Math.round(mapZoom * 100)}%` }}>
-                <UsMap
-                  counts={counts}
-                  selectedCode={selectedCode}
-                  onSelect={setSelectedCode}
-                  unit={["agent", "agents"]}
-                />
-              </div>
-            </div>
+      <section aria-labelledby={`${id}-map-title`}>
+        <h2 id={`${id}-map-title`} className="sr-only">
+          Where active agents can write
+        </h2>
 
-            <div className="absolute right-3 top-3 z-10 flex flex-col divide-y divide-line overflow-hidden rounded-md bg-surface/90 text-sm font-medium text-fg-muted shadow-sm ring-1 ring-line/80">
-              <button
-                type="button"
-                onClick={() => changeZoom(MAP_ZOOM.buttonStep)}
-                disabled={mapZoom >= MAP_ZOOM.max}
-                aria-label="Zoom in"
-                className="flex size-7 items-center justify-center hover:bg-surface-hover disabled:opacity-40 disabled:hover:bg-transparent"
-              >
-                +
-              </button>
-              <button
-                type="button"
-                onClick={() => changeZoom(-MAP_ZOOM.buttonStep)}
-                disabled={mapZoom <= MAP_ZOOM.min}
-                aria-label="Zoom out"
-                className="flex size-7 items-center justify-center hover:bg-surface-hover disabled:opacity-40 disabled:hover:bg-transparent"
-              >
-                −
-              </button>
-            </div>
-
-            <div className="absolute bottom-3 left-3 z-10 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md bg-surface/90 px-2 py-1.5 text-xs text-fg-muted shadow-sm ring-1 ring-line/80">
-              <span>Active agents appointed</span>
-              <ul className="flex items-center gap-2">
-                {MAP_BUCKETS.map((bucket) => (
-                  <li key={bucket.label} className="flex items-center gap-1">
-                    <span
-                      aria-hidden="true"
-                      className={`size-3 rounded-sm ring-1 ring-inset ring-line ${bucket.swatch}`}
-                    />
-                    <span className="tabular-nums">{bucket.label}</span>
-                  </li>
-                ))}
-              </ul>
+        {/*
+         * The box is the map's Fit shape at 78% height; the map inside is sized
+         * by zoom. When it overflows the box scrolls both ways to pan; otherwise
+         * auto margins center it (and, unlike flex centering, never clip it).
+         * The zoom buttons (top-left, clear of the state panel) and legend
+         * (bottom-left) sit outside the scroller, so they stay pinned while the
+         * map pans under them.
+         */}
+        <div className="relative rounded-lg border border-line p-4">
+          <div
+            className="flex overflow-auto"
+            style={{
+              aspectRatio: `${US_MAP_VIEWBOX.width} / ${US_MAP_VIEWBOX.height * MAP_BOX_HEIGHT}`,
+            }}
+          >
+            <div ref={mapRef} className="m-auto shrink-0" style={{ width: `${Math.round(mapZoom * 100)}%` }}>
+              <UsMap
+                counts={counts}
+                selectedCode={selectedCode}
+                onSelect={selectState}
+                unit={["agent", "agents"]}
+              />
             </div>
           </div>
-        </section>
 
-        <section aria-labelledby={`${id}-detail-title`} className="min-w-0">
-          <label htmlFor={`${id}-state`} className="block text-sm font-medium text-fg">
-            State
-          </label>
-          <select
-            id={`${id}-state`}
-            value={selectedCode ?? ""}
-            onChange={(event) => setSelectedCode(event.target.value || null)}
-            className={INPUT_CLASS}
+          <div data-keeps-panel className="absolute left-3 top-3 z-10 flex flex-col divide-y divide-line overflow-hidden rounded-md bg-surface/90 text-sm font-medium text-fg-muted shadow-sm ring-1 ring-line/80">
+            <button
+              type="button"
+              onClick={() => changeZoom(MAP_ZOOM.buttonStep)}
+              disabled={mapZoom >= MAP_ZOOM.max}
+              aria-label="Zoom in"
+              className="flex size-7 items-center justify-center hover:bg-surface-hover disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              +
+            </button>
+            <button
+              type="button"
+              onClick={() => changeZoom(-MAP_ZOOM.buttonStep)}
+              disabled={mapZoom <= MAP_ZOOM.min}
+              aria-label="Zoom out"
+              className="flex size-7 items-center justify-center hover:bg-surface-hover disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              −
+            </button>
+          </div>
+
+          <div className="absolute bottom-3 left-3 z-10 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md bg-surface/90 px-2 py-1.5 text-xs text-fg-muted shadow-sm ring-1 ring-line/80">
+            <span>Active agents appointed</span>
+            <ul className="flex items-center gap-2">
+              {MAP_BUCKETS.map((bucket) => (
+                <li key={bucket.label} className="flex items-center gap-1">
+                  <span
+                    aria-hidden="true"
+                    className={`size-3 rounded-sm ring-1 ring-inset ring-line ${bucket.swatch}`}
+                  />
+                  <span className="tabular-nums">{bucket.label}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/*
+           * The selected state's panel is a right sidebar, the nav rail's
+           * mirror: fixed under the navbar, full height, sliding in from the
+           * right over the page (nothing shifts). It is not modal: the map
+           * stays usable, so picking another state swaps its content in place. Closed, it is inert and hidden (visibility flips
+           * only once the slide-out ends). Being fixed, its place in the DOM
+           * (right after the map) only matters for reading and tab order.
+           */}
+          <aside
+            ref={panelRef}
+            aria-labelledby={`${id}-detail-title`}
+            inert={!panelOpen}
+            className={`fixed bottom-0 right-0 top-14 z-20 flex w-96 max-w-full flex-col border-l border-line bg-surface shadow-xl transition-[translate,visibility] duration-300 ease-out motion-reduce:transition-none ${
+              panelOpen ? "translate-x-0" : "invisible translate-x-full"
+            }`}
           >
-            <option value="">Choose a state…</option>
-            {US_STATES.map((state) => (
-              <option key={state.code} value={state.code}>
-                {state.name}
-              </option>
-            ))}
-          </select>
-
-          <div className="mt-4 rounded-lg border border-line p-4">
-            {selectedName ? (
-              <>
-                {/*
-                 * State name, then the agency licence for that state (click to
-                 * copy), then agent/carrier counts. Toggle stays top-right.
-                 */}
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h2
-                      id={`${id}-detail-title`}
-                      className="truncate text-lg font-semibold text-fg"
-                    >
-                      {selectedName}
-                    </h2>
-                    <div className="mt-0.5 flex items-baseline text-xs text-fg-muted">
-                      <LicenseNumber
-                        value={selectedCode ? agencyLicenseNumbers[selectedCode] : undefined}
-                        className="text-xs text-fg-muted"
-                      />
-                    </div>
-
-                  </div>
-                  <div>
-                  <div
-                    role="group"
-                    aria-label="Group by"
-                    className="inline-flex shrink-0 rounded-md bg-surface-muted p-0.5 text-sm"
-                  >
-                    {viewOptions.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        aria-pressed={stateView === option.value}
-                        onClick={() => setStateView(option.value)}
-                        className={`whitespace-nowrap rounded px-2 py-1 font-medium ${
-                          stateView === option.value
-                            ? "bg-surface text-fg shadow-xs ring-1 ring-line"
-                            : "text-fg-muted hover:text-fg"
-                        }`}
+            <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+              {selectedName ? (
+                <>
+                  {/*
+                   * State name, then the agency licence for that state (click to
+                   * copy), with Close top-right; the group toggle and the
+                   * agent/carrier counts sit on the row under them.
+                   */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h2
+                        id={`${id}-detail-title`}
+                        className="truncate text-lg font-semibold text-fg"
                       >
-                        {option.label}
-                      </button>
-                    ))}
+                        {selectedName}
+                      </h2>
+                      <div className="mt-0.5 flex items-baseline text-xs text-fg-muted">
+                        <LicenseNumber
+                          value={panelCode ? agencyLicenseNumbers[panelCode] : undefined}
+                          className="text-xs text-fg-muted"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={closePanel}
+                      aria-label={`Close ${selectedName}`}
+                      className="-mr-2 -mt-1 shrink-0 rounded-md p-2 text-fg-muted hover:bg-surface-hover hover:text-fg"
+                    >
+                      <svg
+                        aria-hidden="true"
+                        viewBox="0 0 20 20"
+                        className="size-5"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={1.5}
+                        strokeLinecap="round"
+                      >
+                        <path d="M5 5l10 10M15 5L5 15" />
+                      </svg>
+                    </button>
                   </div>
-                  <p role="status" className="mt-1 text-xs text-fg-muted text-right">
+
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                    <div
+                      role="group"
+                      aria-label="Group by"
+                      className="inline-flex shrink-0 rounded-md bg-surface-muted p-0.5 text-sm"
+                    >
+                      {viewOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          aria-pressed={stateView === option.value}
+                          onClick={() => setStateView(option.value)}
+                          className={`whitespace-nowrap rounded px-2 py-1 font-medium ${
+                            stateView === option.value
+                              ? "bg-surface text-fg shadow-xs ring-1 ring-line"
+                              : "text-fg-muted hover:text-fg"
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                    <p role="status" className="text-xs text-fg-muted">
                       {byAgent.length === 1 ? "Agent" : "Agents"}: {byAgent.length}
                       {selectedInactiveCount > 0 ? ` (${selectedInactiveCount} inactive)` : ""} |{" "}
                       {byCarrier.length === 1 ? "Carrier" : "Carriers"}: {byCarrier.length}
                     </p>
-                    </div>
-                </div>
+                  </div>
 
-                {selectedRows.length > 0 ? (
-                  <>
-                    
-                    <ul className="mt-6 space-y-4 text-sm p-2  ">
-                      {selectedGroups.map((group) => (
-                        <li key={group.key} className="border-b border-line pb-4 ">
-                          <p className="flex items-baseline justify-between gap-3 font-semibold text-fg">
-                            <span className="min-w-0">{group.title}</span>
-                            {stateView === "agent" ? (
-                              <span
-                                className={`shrink-0 font-mono text-sm font-normal tabular-nums ${
-                                  group.licenseNumber ? "text-fg-muted" : "text-fg-faint"
-                                }`}
-                                title={
-                                  group.licenseNumber
-                                    ? `Licence number ${group.licenseNumber}`
-                                    : "No licence number on file for this state"
-                                }
-                              >
-                                {group.licenseNumber ?? "No number yet"}
-                              </span>
-                            ) : null}
-                          </p>
-                          <ul aria-label={group.label} className=" pl-4 list-disc" >
-                            {group.chips.map((chip) => (
-                              // Clicking the line opens Edit; the name link goes to the
-                              // profile instead. The states button is the keyboard way in.
-                              <li
-                                key={chip.id}
-                                onClick={() => setEditor({ mode: "edit", contract: chip.contract })}
-                                className="cursor-pointer rounded hover:bg-surface-hover"
-                              >
-                                {/* Name stays whole; a long code list wraps on the right. */}
-                                <div className="flex items-baseline justify-between gap-2">
-                                  <span className="shrink-0">
-                                    <Link
-                                      href={chip.href}
-                                      onClick={(event) => event.stopPropagation()}
-                                      className="text-xs text-fg-subtle hover:text-fg hover:underline"
+                  {selectedRows.length > 0 ? (
+                    <>
+                
+                      <ul className="mt-6 space-y-4 text-sm p-2  ">
+                        {selectedGroups.map((group) => (
+                          <li key={group.key} className="border-b border-line pb-4 ">
+                            <p className="flex items-baseline justify-between gap-3 font-semibold text-fg">
+                              <span className="min-w-0">{group.title}</span>
+                              {stateView === "agent" ? (
+                                <span
+                                  className={`shrink-0 font-mono text-sm font-normal tabular-nums ${
+                                    group.licenseNumber ? "text-fg-muted" : "text-fg-faint"
+                                  }`}
+                                  title={
+                                    group.licenseNumber
+                                      ? `Licence number ${group.licenseNumber}`
+                                      : "No licence number on file for this state"
+                                  }
+                                >
+                                  {group.licenseNumber ?? "No number yet"}
+                                </span>
+                              ) : null}
+                            </p>
+                            <ul aria-label={group.label} className=" pl-4 list-disc" >
+                              {group.chips.map((chip) => (
+                                // Clicking the line opens Edit; the name link goes to the
+                                // profile instead. The states button is the keyboard way in.
+                                <li
+                                  key={chip.id}
+                                  onClick={() => setEditor({ mode: "edit", contract: chip.contract })}
+                                  className="cursor-pointer rounded hover:bg-surface-hover"
+                                >
+                                  {/* Name stays whole; a long code list wraps on the right. */}
+                                  <div className="flex items-baseline justify-between gap-2">
+                                    <span className="shrink-0">
+                                      <Link
+                                        href={chip.href}
+                                        onClick={(event) => event.stopPropagation()}
+                                        className="text-xs text-fg-subtle hover:text-fg hover:underline"
+                                      >
+                                        {chip.name}
+                                      </Link>
+                                      {chip.inactive ? (
+                                        <span className="text-xs text-fg-faint"> (inactive)</span>
+                                      ) : null}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setEditor({ mode: "edit", contract: chip.contract });
+                                      }}
+                                      title={chip.editLabel}
+                                      className="min-w-0 rounded px-1 text-right text-xs tabular-nums text-fg-faint hover:text-fg"
                                     >
-                                      {chip.name}
-                                    </Link>
-                                    {chip.inactive ? (
-                                      <span className="text-xs text-fg-faint"> (inactive)</span>
-                                    ) : null}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      setEditor({ mode: "edit", contract: chip.contract });
-                                    }}
-                                    title={chip.editLabel}
-                                    className="min-w-0 rounded px-1 text-right text-xs tabular-nums text-fg-faint hover:text-fg"
-                                  >
-                                    {stateSummary(chip.states)}
-                                    <span className="sr-only">. {chip.editLabel}</span>
-                                  </button>
-                                </div>
-                              </li>
-                            ))}
-                          </ul>
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                ) : (
-                  <p className="mt-3 text-sm text-fg-subtle">
-                    No agents can operate in {selectedName} via any carrier yet.
-                  </p>
-                )}
-              </>
-            ) : (
-              <>
-                <h2 id={`${id}-detail-title`} className="text-base font-semibold text-fg">
-                  No state selected
-                </h2>
-                <p className="mt-1 text-sm text-fg-muted">
-                  Click a state on the map to view the agents and carriers that can operate in that state.
-                </p>
-              </>
-            )}
-          </div>
-        </section>
-      </div>
+                                      {stateSummary(chip.states)}
+                                      <span className="sr-only">. {chip.editLabel}</span>
+                                    </button>
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  ) : (
+                    <p className="mt-3 text-sm text-fg-subtle">
+                      No agents can operate in {selectedName} via any carrier yet.
+                    </p>
+                  )}
+                </>
+              ) : null}
+            </div>
+          </aside>
+        </div>
+      </section>
 
       <section aria-labelledby={`${id}-table-title`} className="mt-8">
         <h2 id={`${id}-table-title`} className="mb-3 text-base font-semibold text-fg">

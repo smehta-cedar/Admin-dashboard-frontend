@@ -454,7 +454,21 @@ its By agent list only agents licensed there):
 
 - The map counts distinct active agents with at least one appointment in the
   state.
-- A selected state lists the same appointments By agent (carriers under each
+- The map takes the full page width. Its keyboard and small-screen twin, a
+  "Choose a state…" select, sits in `PageHeader` actions left of Add contract
+  (sr-only label, `TOOLBAR_INPUT_CLASS` — the same spot as Passwords' carrier
+  filter); both open the state panel.
+- Picking a state slides in a right sidebar, the nav rail's mirror: `fixed`
+  under the navbar (`top-14`), full height, `w-96`, over the page with no
+  backdrop and no layout shift. The zoom buttons sit top-left to stay clear
+  of it. It is not modal: the map stays usable and another pick swaps the
+  content in place. Close button or Escape closes it (not while
+  `AppointmentDialog` is open) and returns focus to that state on the map; a
+  press anywhere outside it closes it too, except on a map state or anything
+  marked `data-keeps-panel` (the State select, the zoom buttons);
+  closed, it is `inert` + `invisible`. `panelCode` outlives `selectedCode` so
+  the content stays while it slides out.
+- The panel lists the same appointments By agent (carriers under each
   agent) or By carrier (agents under each carrier). Names link to profiles;
   the rest of a line opens Edit.
 - The Appointments table (Agent, Carrier, States, Edit) searches state codes
