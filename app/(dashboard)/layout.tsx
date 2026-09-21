@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import type { NavItem } from "@/components/sidebar";
+import { getSearchIndex } from "@/lib/search-index";
 import { getSessionUser } from "@/lib/session";
 
 const NAV_ITEMS: NavItem[] = [
@@ -51,8 +52,11 @@ export default async function DashboardLayout({
   const user = await getSessionUser();
   if (!user) redirect("/login");
 
+  // After the gate: the index holds record data, so only a signed-in user gets it.
+  const searchIndex = await getSearchIndex();
+
   return (
-    <AppShell navItems={NAV_ITEMS} footerItems={FOOTER_ITEMS} user={user}>
+    <AppShell navItems={NAV_ITEMS} footerItems={FOOTER_ITEMS} user={user} searchIndex={searchIndex}>
       {children}
     </AppShell>
   );

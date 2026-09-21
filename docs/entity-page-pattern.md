@@ -149,7 +149,17 @@ A column: `{ id, header, cell(row, ctx), className?, sortValue?, searchText?, sr
   `DataTable` filters on it (server render included) and follows every change.
   While the scope's list page is on screen the navbar rewrites `?q=` with
   `replaceState` on each keystroke, so the table filters live with no server
-  trip; from any other page, Enter opens the list with `?q=`. Escape clears.
+  trip; from any other page, Enter opens the list with `?q=`.
+  On every page the box also drops a list of the scope's matching records as
+  you type (up to 6, then "See all N in Agents", which is the Enter search).
+  Picking one opens its profile (agents, carriers) or its list narrowed to
+  that row (`?q=` with the row's own words). Arrows move, Enter picks, Escape
+  closes the list and a second Escape clears the box. The records come from
+  `getSearchIndex()` (`lib/search-index.ts`), built in the dashboard layout
+  and passed down through `AppShell` and `Navbar`; each entry's `text` mirrors
+  the table's `searchText` columns, so keep the two in step, and never put a
+  password in it (the whole index reaches the browser). A new searchable page
+  adds its entries there under its list href.
   From `md` the box sits in the middle of the navbar; below that it is a row
   under the bar. A new list page built on `DataTable` only needs
   `searchable: true` on its nav item.

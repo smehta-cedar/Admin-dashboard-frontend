@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import type { SessionUser } from "@/lib/fake-session";
+import type { SearchIndex } from "@/lib/search";
 import { BrandLogo } from "./brand-logo";
 import { Navbar } from "./navbar";
 import { currentNavLabel, Sidebar, type NavItem } from "./sidebar";
@@ -27,10 +28,12 @@ type AppShellProps = {
   footerItems?: NavItem[];
   /** The signed-in user, shown in the navbar. */
   user: SessionUser;
+  /** Records the navbar search suggests while typing, per search scope. */
+  searchIndex: SearchIndex;
   children: ReactNode;
 };
 
-export function AppShell({ navItems, footerItems = [], user, children }: AppShellProps) {
+export function AppShell({ navItems, footerItems = [], user, searchIndex, children }: AppShellProps) {
   const drawerRef = useRef<HTMLDialogElement>(null);
   const drawerId = useId();
   const railId = useId();
@@ -96,6 +99,7 @@ export function AppShell({ navItems, footerItems = [], user, children }: AppShel
         railId={railId}
         pageTitle={currentNavLabel([...navItems, ...footerItems], pathname)}
         searchScopes={[...navItems, ...footerItems].filter((item) => item.searchable)}
+        searchIndex={searchIndex}
         user={user}
       />
 

@@ -16,7 +16,7 @@ import {
 import { useSearchParams } from "next/navigation";
 import { Fragment, useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { TablePagination, useTablePagination } from "@/components/table-pagination";
-import { SEARCH_PARAM } from "@/lib/search";
+import { SEARCH_PARAM, searchWords } from "@/lib/search";
 
 /*
  * Shared list table: click a header to sort (asc → desc → original order); the
@@ -90,11 +90,7 @@ const sortRows = <T extends RowData>(): SortFn<Features, T> => (rowA, rowB, colu
 /** Every word in the query must appear somewhere in the row's searchable text. */
 const matchesQuery = <T extends RowData>(): FilterFn<Features, T> => (row, columnId, query: string) => {
   const haystack = row.getValue<string>(columnId);
-  return query
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(Boolean)
-    .every((word) => haystack.includes(word));
+  return searchWords(query).every((word) => haystack.includes(word));
 };
 
 export function DataTable<T extends RowData>({

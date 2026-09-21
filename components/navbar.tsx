@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { clearSessionCookie, type SessionUser } from "@/lib/fake-session";
+import type { SearchIndex } from "@/lib/search";
 import { initials } from "@/lib/text";
 import { BrandLogo } from "./brand-logo";
 import { NavbarSearch } from "./navbar-search";
@@ -25,6 +26,8 @@ type NavbarProps = {
   pageTitle?: string;
   /** Sidebar links the search can be narrowed to; the scope select lists them. */
   searchScopes: NavItem[];
+  /** Records the search suggests while typing, per scope. */
+  searchIndex: SearchIndex;
   /** The signed-in user: avatar opens a menu with name, email and Sign out. */
   user: SessionUser;
 };
@@ -37,6 +40,7 @@ export function Navbar({
   railId,
   pageTitle,
   searchScopes,
+  searchIndex,
   user,
 }: NavbarProps) {
   return (
@@ -96,7 +100,7 @@ export function Navbar({
             page keeps a visually hidden <h1> (PageHeader) for screen readers. */}
         <p className="min-w-0 flex-1 truncate text-lg font-semibold tracking-tight text-fg">{pageTitle}</p>
         {/* From `md`; narrower screens get the row under the bar instead. */}
-        <NavbarSearch scopes={searchScopes} className="hidden w-64 shrink-0 md:flex lg:w-80" />
+        <NavbarSearch scopes={searchScopes} index={searchIndex} className="hidden w-64 shrink-0 md:flex lg:w-80" />
         <div className="ml-auto flex items-center justify-end gap-1 md:ml-0 md:flex-1">
           <ThemeToggle />
           <NotificationsButton />
@@ -107,7 +111,7 @@ export function Navbar({
           scrolls away with the page. */}
       {searchScopes.length > 0 ? (
         <div className="border-b border-line bg-surface px-4 py-2 sm:px-6 md:hidden">
-          <NavbarSearch scopes={searchScopes} className="flex w-full" />
+          <NavbarSearch scopes={searchScopes} index={searchIndex} className="flex w-full" />
         </div>
       ) : null}
     </>
