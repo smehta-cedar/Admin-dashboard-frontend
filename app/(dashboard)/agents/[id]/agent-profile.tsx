@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useId, useState, type ReactNode } from "react";
-import { EntitySwitcher } from "@/components/entity-switcher";
 import { HydratedNoteList } from "@/components/hydrated-note-list";
 import {
   Count,
@@ -12,7 +11,6 @@ import {
   PanelEmpty,
   PROFILE_BUTTON_CLASS,
   PROFILE_LINK_CLASS,
-  ProfileBackLink,
   ProfileNameRow,
   ProfileTable,
   StateChipCell,
@@ -359,16 +357,6 @@ export function AgentProfile({
 
   return (
     <div className="mx-auto max-w-7xl pb-12">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <ProfileBackLink href="/agents" label="Agents" />
-        <EntitySwitcher
-          label="Switch agent"
-          currentId={agent.id}
-          options={agents}
-          hrefFor={(id) => `/agents/${id}`}
-        />
-      </div>
-
       <ProfileNameRow
         name={agent.name}
         status={agent.status}

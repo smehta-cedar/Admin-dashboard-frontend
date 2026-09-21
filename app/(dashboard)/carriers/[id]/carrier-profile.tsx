@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { EntitySwitcher } from "@/components/entity-switcher";
 import { HydratedNoteList } from "@/components/hydrated-note-list";
 import {
   Detail,
@@ -10,7 +9,6 @@ import {
   Panel,
   PanelEmpty,
   PROFILE_LINK_CLASS,
-  ProfileBackLink,
   ProfileHeader,
   ProfileNameRow,
   ProfileTable,
@@ -112,16 +110,6 @@ export function CarrierProfile({
 
   return (
     <div className="mx-auto max-w-7xl">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <ProfileBackLink href="/carriers" label="Carriers" />
-        <EntitySwitcher
-          label="Switch carrier"
-          currentId={carrier.id}
-          options={carriers}
-          hrefFor={(id) => `/carriers/${id}`}
-        />
-      </div>
-
       <ProfileNameRow
         name={carrier.name}
         status={carrier.status}

@@ -13,16 +13,20 @@ import {
   type RowData,
   type SortFn,
 } from "@tanstack/react-table";
-import { Fragment, useId, useMemo, useState, type ReactNode } from "react";
-import { TOOLBAR_INPUT_CLASS } from "@/components/classes";
+import { useSearchParams } from "next/navigation";
+import { Fragment, useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { TablePagination, useTablePagination } from "@/components/table-pagination";
+import { SEARCH_PARAM } from "@/lib/search";
 
 /*
- * Shared list table: click a header to sort (asc → desc → original order), type
- * in the search box to narrow rows. TanStack Table (v9) only sorts and filters;
+ * Shared list table: click a header to sort (asc → desc → original order); the
+ * navbar search narrows rows. TanStack Table (v9) only sorts and filters;
  * this component owns the markup (docs/entity-page-pattern.md §6–7), so cells
  * stay free to render links, badges, credential buttons and Edit. Client-side
  * pagination (5 / 10 / 20) sits under the table via `table-pagination`.
+ *
+ * There is no search box here: the navbar search (components/navbar-search.tsx)
+ * writes `?q=`, and the table filters on whatever that holds.
  *
  * Display only: rows come from the view's state, and adds and edits in the view
  * show up here on the next render, in their sorted place.
@@ -46,7 +50,7 @@ export type DataTableColumn<T extends RowData> = {
   className?: string;
   /** Makes the column sortable. Numbers sort numerically; text ignores case and sorts "2" before "10". */
   sortValue?: (row: T) => string | number;
-  /** Text the search box matches for this column. Leave out to keep a column unsearchable (e.g. passwords). */
+  /** Text the navbar search matches for this column. Leave out to keep a column unsearchable (e.g. passwords). */
   searchText?: (row: T) => string | string[];
 };
 
@@ -55,10 +59,8 @@ type DataTableProps<T extends RowData> = {
   /** Keep this stable (module constant or `useMemo`): a new array re-derives the sort and filter. */
   columns: DataTableColumn<T>[];
   getRowId: (row: T) => string;
-  /** Singular and plural row noun: "Search agents", "3 of 12 agents". */
+  /** Singular and plural row noun: "3 of 12 agents". */
   unit: [string, string];
-  /** Placeholder for the search box. Defaults to "Search <plural>…". */
-  searchPlaceholder?: string;
   /** Content of a row's details row. Rows only expand through a cell calling `toggleExpanded`. */
   renderDetails?: (row: T) => ReactNode;
   /** Shown as one table row when `rows` is empty (not when a search hides everything). */
@@ -100,12 +102,14 @@ export function DataTable<T extends RowData>({
   columns,
   getRowId,
   unit,
-  searchPlaceholder,
   renderDetails,
   emptyMessage,
 }: DataTableProps<T>) {
   const id = useId();
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
+  // Dashboard routes render per request, so the server sees ?q= too and the
+  // first render is already filtered.
+  const urlQuery = useSearchParams().get(SEARCH_PARAM) ?? "";
 
   // TanStack only sees sortable columns plus one hidden column holding all the
   // searchable text, so a query can match words from different columns.
@@ -130,6 +134,7 @@ export function DataTable<T extends RowData>({
     columns: tableColumns,
     data: rows,
     getRowId: (row) => getRowId(row),
+    initialState: { globalFilter: urlQuery },
     sortDescFirst: false,
     enableMultiSort: false,
     globalFilterFn: matchesQuery<T>(),
@@ -158,43 +163,24 @@ export function DataTable<T extends RowData>({
       return next;
     });
 
-  const clearSearch = () => table.setGlobalFilter("");
+  // A navbar search (or back/forward) changed ?q= while the table is mounted.
+  useEffect(() => {
+    table.setGlobalFilter(urlQuery);
+    // Only the URL drives this; `table` is left out on purpose.
+  }, [urlQuery]);
+
+  // The query lives in the URL, so clearing it there clears the navbar's box
+  // and, through the effect above, this table.
+  const clearSearch = () => {
+    const params = new URLSearchParams(window.location.search);
+    params.delete(SEARCH_PARAM);
+    const rest = params.toString();
+    window.history.replaceState(null, "", rest ? `?${rest}` : window.location.pathname);
+  };
 
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <div className="relative w-full sm:w-72">
-          <label htmlFor={`${id}-search`} className="sr-only">
-            Search {plural}
-          </label>
-          <svg
-            aria-hidden="true"
-            viewBox="0 0 20 20"
-            className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-fg-faint"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.5}
-            strokeLinecap="round"
-          >
-            <circle cx="9" cy="9" r="5.5" />
-            <path d="M13 13l3.5 3.5" />
-          </svg>
-          <input
-            id={`${id}-search`}
-            type="search"
-            value={query}
-            onChange={(event) => table.setGlobalFilter(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape" && query) {
-                event.preventDefault();
-                clearSearch();
-              }
-            }}
-            placeholder={searchPlaceholder ?? `Search ${plural}…`}
-            autoComplete="off"
-            className={`${TOOLBAR_INPUT_CLASS} w-full pl-8`}
-          />
-        </div>
+      <div className="mb-3 flex justify-end">
         <p aria-live="polite" className="text-sm tabular-nums text-fg-muted">
           {searching
             ? `${visibleRows.length} of ${rows.length} ${rows.length === 1 ? singular : plural}`

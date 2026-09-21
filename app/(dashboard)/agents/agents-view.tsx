@@ -160,7 +160,6 @@ export function AgentsView({ initialAgents, initialNotes, initialLicenses }: Age
           columns={columns}
           getRowId={(agent) => agent.id}
           unit={["agent", "agents"]}
-          searchPlaceholder="Search name, NPN, email…"
         />
       )}
 

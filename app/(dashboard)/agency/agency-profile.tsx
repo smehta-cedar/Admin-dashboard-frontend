@@ -92,7 +92,6 @@ export function AgencyProfile({
         status={agency.status}
         eyebrow="Agency"
         onEdit={() => setEditing(agency)}
-        className=""
       />
 
       <ProfileHeader

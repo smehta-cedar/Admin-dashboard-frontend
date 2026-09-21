@@ -6,6 +6,8 @@ import { useEffect, useId, useRef, useState } from "react";
 import { clearSessionCookie, type SessionUser } from "@/lib/fake-session";
 import { initials } from "@/lib/text";
 import { BrandLogo } from "./brand-logo";
+import { NavbarSearch } from "./navbar-search";
+import type { NavItem } from "./sidebar";
 import { ThemeToggle } from "./theme-toggle";
 
 type NavbarProps = {
@@ -19,6 +21,10 @@ type NavbarProps = {
   onToggleRail?: () => void;
   /** Id of the desktop rail, for aria-controls on the collapse control. */
   railId?: string;
+  /** Name of the page being viewed, shown right after the brand cell. */
+  pageTitle?: string;
+  /** Sidebar links the search can be narrowed to; the scope select lists them. */
+  searchScopes: NavItem[];
   /** The signed-in user: avatar opens a menu with name, email and Sign out. */
   user: SessionUser;
 };
@@ -29,48 +35,49 @@ export function Navbar({
   railCollapsed,
   onToggleRail,
   railId,
+  pageTitle,
+  searchScopes,
   user,
 }: NavbarProps) {
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-line bg-surface px-4 sm:px-6 lg:pl-0 lg:pr-8">
-      {/* Brand strip; absolute so the bar stays h-14. */}
-      <div aria-hidden="true" className="bg-brand-gradient absolute inset-x-0 top-0 h-0.5" />
-      <button
-        type="button"
-        onClick={onMenuClick}
-        aria-label="Open navigation"
-        aria-haspopup="dialog"
-        aria-controls={drawerId}
-        className="-ml-2 rounded-md p-2 text-fg-muted hover:bg-surface-hover hover:text-fg lg:hidden"
-      >
-        <HamburgerIcon />
-      </button>
-      {/* From `lg` this cell matches the sidebar's width. Logo and the collapse
-          control sit side by side; collapsed, the mark and control share the
-          narrow rail. */}
-      <div
-        className={`flex items-center self-stretch lg:shrink-0 lg:border-r lg:border-line lg:bg-surface-muted lg:transition-[width] ${
-          railCollapsed
-            ? "lg:w-16 lg:justify-center lg:px-0"
-            : "lg:w-60 lg:justify-between lg:gap-1 lg:px-3"
-        }`}
-      >
-        <Link
-          href="/"
-          className={`flex items-center gap-3 ${
-            railCollapsed ? "lg:hidden" : "lg:min-w-0 lg:flex-1 lg:px-3"
+    <>
+      <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-line bg-surface px-4 sm:px-6 lg:pl-0 lg:pr-8">
+        {/* Brand strip; absolute so the bar stays h-14. */}
+        <div aria-hidden="true" className="bg-brand-gradient absolute inset-x-0 top-0 h-0.5" />
+        <button
+          type="button"
+          onClick={onMenuClick}
+          aria-label="Open navigation"
+          aria-haspopup="dialog"
+          aria-controls={drawerId}
+          className="-ml-2 rounded-md p-2 text-fg-muted hover:bg-surface-hover hover:text-fg lg:hidden"
+        >
+          <HamburgerIcon />
+        </button>
+        {/* From `lg` this cell matches the sidebar's width: the wordmark, or
+            just the mark over the collapsed rail. */}
+        <div
+          className={`flex items-center self-stretch lg:shrink-0 lg:border-r lg:border-line lg:bg-surface-muted lg:transition-[width] ${
+            railCollapsed ? "lg:w-16 lg:justify-center lg:px-0" : "lg:w-60 lg:px-3"
           }`}
         >
-          <span className="sm:hidden">
-            <BrandLogo compact height={32} />
-          </span>
-          <span className="hidden sm:block lg:hidden">
-            <BrandLogo height={34} />
-          </span>
-          <span className="hidden lg:block">
-            <BrandLogo height={34} />
-          </span>
-        </Link>
+          <Link
+            href="/"
+            className={`flex items-center gap-3 ${railCollapsed ? "" : "lg:min-w-0 lg:px-3"}`}
+          >
+            <span className="sm:hidden">
+              <BrandLogo compact height={32} />
+            </span>
+            <span className="hidden sm:block lg:hidden">
+              <BrandLogo height={34} />
+            </span>
+            <span className="hidden lg:block">
+              {railCollapsed ? <BrandLogo compact height={32} /> : <BrandLogo height={34} />}
+            </span>
+          </Link>
+        </div>
+        {/* Collapse control, just left of the title. `lg:ml-3` puts the icon on
+            the page content's left edge. */}
         {onToggleRail ? (
           <button
             type="button"
@@ -79,18 +86,31 @@ export function Navbar({
             aria-controls={railId}
             aria-label={railCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             title={railCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            className="hidden rounded-md p-2 text-fg-subtle hover:bg-brand-soft/60 hover:text-fg lg:inline-flex lg:shrink-0"
+            className="hidden rounded-md p-2 text-fg-muted hover:bg-surface-hover hover:text-fg lg:ml-3 lg:inline-flex lg:shrink-0"
           >
             <HamburgerIcon />
           </button>
         ) : null}
-      </div>
-      <div className="ml-auto flex items-center gap-1">
-        <ThemeToggle />
-        <NotificationsButton />
-        <UserMenu user={user} />
-      </div>
-    </header>
+        {/* Title and the right-hand cluster take equal shares from `md`, which
+            keeps the search between them in the middle. Not a heading: the
+            page keeps a visually hidden <h1> (PageHeader) for screen readers. */}
+        <p className="min-w-0 flex-1 truncate text-lg font-semibold tracking-tight text-fg">{pageTitle}</p>
+        {/* From `md`; narrower screens get the row under the bar instead. */}
+        <NavbarSearch scopes={searchScopes} className="hidden w-64 shrink-0 md:flex lg:w-80" />
+        <div className="ml-auto flex items-center justify-end gap-1 md:ml-0 md:flex-1">
+          <ThemeToggle />
+          <NotificationsButton />
+          <UserMenu user={user} />
+        </div>
+      </header>
+      {/* Below `md` the bar has no room, so the search sits in its own row and
+          scrolls away with the page. */}
+      {searchScopes.length > 0 ? (
+        <div className="border-b border-line bg-surface px-4 py-2 sm:px-6 md:hidden">
+          <NavbarSearch scopes={searchScopes} className="flex w-full" />
+        </div>
+      ) : null}
+    </>
   );
 }
 

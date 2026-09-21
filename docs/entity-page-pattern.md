@@ -33,7 +33,7 @@ Shared pieces (extracted when Carriers landed — use these, don't copy):
 
 | File | Exports |
 | --- | --- |
-| `components/page-header.tsx` | `PageHeader` (title + `actions` slot) |
+| `components/page-header.tsx` | `PageHeader` (sr-only `<h1>` title — the navbar shows the page name — plus description and `actions` slot) |
 | `components/empty-state.tsx` | `EmptyState` (title, description, `action`) |
 | `components/field.tsx` | `Field` (label + input + hint/error) |
 | `components/note-list.tsx` | `NoteList` (generic; pass `labels={FIELD_LABELS}`) |
@@ -46,11 +46,10 @@ Shared pieces (extracted when Carriers landed — use these, don't copy):
 | `lib/text.ts` | `byName` (sort comparator), `initials("Maria Alva") → "MA"` — the only copies |
 | `components/unsaved-banner.tsx` | `UnsavedBanner({ count, className? })` (§9) |
 | `components/hydrated-note-list.tsx` | `HydratedNoteList` — `NoteList` gated on hydration, for a profile's Notes panel |
-| `components/entity-switcher.tsx` | `EntitySwitcher({ label, currentId, options, hrefFor })` — the profile's "Switch agent/carrier" select, sorted by name, inactive grouped last |
 | `components/credential-value.tsx` | `CredentialValue` (copy-on-click, masked when `secret`), `PasswordInput` (eye toggle) — Passwords, Users, sign-in, profiles |
 | `components/license-number.tsx` | `LicenseNumber` (a licensed-state card's number, click to copy, or "No number yet"; agent and agency profiles) |
 | `components/producer-form.tsx` | `ProducerForm` + `producerNoteValues`, `unnumberedStatesError` — the one agent/agency form (see Agency) |
-| `components/profile-shell.tsx` | Profile layout pieces: `ProfileBackLink`, `ProfileNameRow`, `ProfileHeader`, `ProducerDetails`, `Detail`, `LicenseCards`, `StateChip`, `Count`, `Panel`, `PanelEmpty`, `ProfileTable` (paginated), `StateChipCell`, `PasswordsPanel`, `PROFILE_BUTTON_CLASS` (see Contracts → Profiles) |
+| `components/profile-shell.tsx` | Profile layout pieces: `ProfileNameRow`, `ProfileHeader`, `ProducerDetails`, `Detail`, `LicenseCards`, `StateChip`, `Count`, `Panel`, `PanelEmpty`, `ProfileTable` (paginated), `StateChipCell`, `PasswordsPanel`, `PROFILE_BUTTON_CLASS` (see Contracts → Profiles) |
 | `app/(dashboard)/contracts/use-appointments.ts` | `useAppointments` — contracts + notes state, the open `AppointmentDialog` editor, and its `saveContract` (see Contracts → One dialog) |
 
 Constants a client view needs from an entity (like `LINES_OF_BUSINESS`) go in
@@ -129,7 +128,6 @@ only; the markup and classes are ours. v9's API is not v8's: `useTable` +
   columns={columns}        // DataTableColumn<T>[], stable (module const or useMemo)
   getRowId={(agent) => agent.id}
   unit={["agent", "agents"]}
-  searchPlaceholder="Search name, NPN, email…"
   emptyMessage="No passwords for Humana."   // optional; rows empty, no search
   renderDetails={(agent) => …}           // optional; see §7
 />
@@ -143,18 +141,30 @@ A column: `{ id, header, cell(row, ctx), className?, sortValue?, searchText?, sr
   One column at a time. Numbers compare numerically (`Number(id)`, counts);
   text ignores case and sorts "2" before "10". Status columns sort by
   `statusRank`. The sorted `th` gets `aria-sort`; the arrow icon is `aria-hidden`.
-- **Search:** one box above the table (sr-only label "Search <plural>",
-  Escape clears). Every word typed must appear in the row's combined
+- **Search:** the table has no box of its own; the navbar search
+  (`components/navbar-search.tsx`) is the only one. It has a scope select
+  joined to its left, listing the sidebar links marked `searchable: true` in
+  `app/(dashboard)/layout.tsx`, and defaults to the section being viewed. The
+  query lives in the URL as `?q=` (`SEARCH_PARAM` in `lib/search.ts`):
+  `DataTable` filters on it (server render included) and follows every change.
+  While the scope's list page is on screen the navbar rewrites `?q=` with
+  `replaceState` on each keystroke, so the table filters live with no server
+  trip; from any other page, Enter opens the list with `?q=`. Escape clears.
+  From `md` the box sits in the middle of the navbar; below that it is a row
+  under the bar. A new list page built on `DataTable` only needs
+  `searchable: true` on its nav item.
+- **Matching:** every word typed must appear in the row's combined
   `searchText` across columns, ignoring case, so "maria humana" works. Include
   aliases (Agents, Carriers) and state names (Contracts by state). **Never** give a
   password column `searchText` or `sortValue`.
-- **Count:** beside the search, `aria-live="polite"`: "12 agents", or
+- **Count:** above the table on the right, `aria-live="polite"`: "12 agents", or
   "3 of 12 agents" while searching.
 - **Pagination:** client-side, under the table (`table-pagination.tsx`). Default
   5 rows; Show select for 5 / 10 / 20; range text and ‹ ›. Hidden while the
   filtered list fits in 5 or fewer. Resets to page 1 when the search changes.
   `ProfileTable` on profiles uses the same control.
-- **No match:** one row, "No agents match “foo”." with a Clear search button.
+- **No match:** one row, "No agents match “foo”." with a Clear search button (drops `?q=`, which
+  also empties the navbar box).
   `EmptyState` is still used by the view when the list itself is empty.
 - **Filters that live in the URL** (Passwords' carrier) stay in the view and
   narrow `rows` before they reach `DataTable`; `TOOLBAR_INPUT_CLASS` styles them.
@@ -469,7 +479,6 @@ rows.
 
 All three profiles (agent, carrier, agency) lay themselves out from the
 shared pieces in `components/profile-shell.tsx`, top to bottom:
-`ProfileBackLink` beside `EntitySwitcher` (`components/entity-switcher.tsx`),
 `ProfileNameRow` (avatar, name, status, Edit; `eyebrow` for "Agency"),
 `ProfileHeader` (`details` = `Detail` rows or `ProducerDetails`, beside one
 titled aside, e.g. `LicenseCards` or `StateChip`s), `UnsavedBanner`, then

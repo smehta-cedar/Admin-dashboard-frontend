@@ -28,7 +28,10 @@ export default function RootLayout({
             the first paint, so there is no flash of the wrong theme. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
-      <body className="min-h-screen font-sans">
+      {/* Browser extensions add attributes to <body> before React hydrates
+          (ColorZilla's `cz-shortcut-listen`); this covers <body>'s own
+          attributes only, not anything inside it. */}
+      <body className="min-h-screen font-sans" suppressHydrationWarning>
         <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>

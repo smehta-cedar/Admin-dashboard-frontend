@@ -623,7 +623,6 @@ export function ContractsView({
             columns={columns}
             getRowId={({ contract }) => contract.id}
             unit={["appointment", "appointments"]}
-            searchPlaceholder="Search agent, carrier or state…"
             renderDetails={({ contract, states }) => (
               <div className="grid gap-4 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
                 <section>

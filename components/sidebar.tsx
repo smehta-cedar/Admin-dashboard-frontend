@@ -19,6 +19,11 @@ export type NavItem = {
   icon?: NavIconName;
   /** Sub-links rendered indented under this item. */
   children?: NavItem[];
+  /**
+   * The page lists its records in a `DataTable`, so the navbar search offers
+   * it as a scope and sends the query there as `?q=`.
+   */
+  searchable?: boolean;
 };
 
 type SidebarProps = {
@@ -39,6 +44,20 @@ function isActive(pathname: string, href: string, activePrefix?: string) {
   if (activePrefix) return pathname.startsWith(activePrefix);
   if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/**
+ * Label of the link the sidebar marks current, for the navbar's page title:
+ * the matching sub-link if there is one ("By carriers"), else the section.
+ */
+export function currentNavLabel(items: NavItem[], pathname: string) {
+  for (const item of items) {
+    if (pathname === item.href) return item.label;
+    const child = item.children?.find((link) => isActive(pathname, link.href, link.activePrefix));
+    if (child) return child.label;
+    if (isActive(pathname, item.href)) return item.label;
+  }
+  return undefined;
 }
 
 const LINK_BASE = "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium";

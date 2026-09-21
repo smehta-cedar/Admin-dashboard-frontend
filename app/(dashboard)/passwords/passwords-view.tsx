@@ -274,7 +274,6 @@ export function PasswordsView({
           columns={columns}
           getRowId={({ password }) => password.id}
           unit={["password", "passwords"]}
-          searchPlaceholder="Search agent, carrier, username…"
           emptyMessage={`No passwords for ${carrierName(carrierFilter)}.`}
         />
       )}

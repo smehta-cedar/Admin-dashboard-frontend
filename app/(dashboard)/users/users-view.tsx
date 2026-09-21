@@ -157,7 +157,6 @@ export function UsersView({ initialUsers, initialNotes }: UsersViewProps) {
           columns={columns}
           getRowId={({ user }) => user.id}
           unit={["user", "users"]}
-          searchPlaceholder="Search name, email, role…"
           renderDetails={({ user }) => (
             <section className="max-w-2xl">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">

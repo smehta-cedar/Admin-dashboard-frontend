@@ -33,30 +33,6 @@ export const PROFILE_TH_CLASS = `whitespace-nowrap px-3 py-2 ${PROFILE_LABEL_CLA
 export const PROFILE_BUTTON_CLASS =
   "inline-flex items-center gap-1.5 rounded-md bg-brand-soft px-2.5 py-1 text-sm font-medium text-brand-ink shadow-sm hover:bg-brand-strong hover:text-white";
 
-/** The "‹ Agents" link at the top of a profile, back to the entity's list. */
-export function ProfileBackLink({ href, label }: { href: string; label: string }) {
-  return (
-    <Link
-      href={href}
-      className="-ml-1 inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-sm font-medium text-fg-muted hover:bg-brand-soft hover:text-brand-ink"
-    >
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 20 20"
-        className="size-4 shrink-0"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.5}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M12 5l-5 5 5 5" />
-      </svg>
-      {label}
-    </Link>
-  );
-}
-
 /** The round initials badge that sits beside a profile's name. */
 export function ProfileAvatar({ name }: { name: string }) {
   return (
@@ -76,14 +52,12 @@ type ProfileNameRowProps = {
   eyebrow?: string;
   /** Opens the entity's edit dialog. */
   onEdit: () => void;
-  /** Margin above: `mt-4` under a back-link row, none when the row is first. */
-  className?: string;
 };
 
 /** The name row: avatar, name with its status badge, and Edit on the right. */
-export function ProfileNameRow({ name, status, eyebrow, onEdit, className = "mt-4" }: ProfileNameRowProps) {
+export function ProfileNameRow({ name, status, eyebrow, onEdit }: ProfileNameRowProps) {
   return (
-    <div className={`flex flex-wrap items-center justify-between gap-3 ${className}`}>
+    <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex min-w-0 items-center gap-3.5">
         <ProfileAvatar name={name} />
         <div className="min-w-0">

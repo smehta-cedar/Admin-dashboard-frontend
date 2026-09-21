@@ -154,7 +154,6 @@ export function CarriersView({ initialCarriers, initialNotes }: CarriersViewProp
           columns={columns}
           getRowId={(carrier) => carrier.id}
           unit={["carrier", "carriers"]}
-          searchPlaceholder="Search name, alias, line, state…"
         />
       )}
 

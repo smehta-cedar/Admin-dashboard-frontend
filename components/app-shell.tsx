@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import type { SessionUser } from "@/lib/fake-session";
 import { BrandLogo } from "./brand-logo";
 import { Navbar } from "./navbar";
-import { Sidebar, type NavItem } from "./sidebar";
+import { currentNavLabel, Sidebar, type NavItem } from "./sidebar";
 
 /*
  * Page frame: sticky navbar on top, a nav rail on the left from `lg` up, and
@@ -94,6 +94,8 @@ export function AppShell({ navItems, footerItems = [], user, children }: AppShel
         railCollapsed={collapsed}
         onToggleRail={toggleCollapsed}
         railId={railId}
+        pageTitle={currentNavLabel([...navItems, ...footerItems], pathname)}
+        searchScopes={[...navItems, ...footerItems].filter((item) => item.searchable)}
         user={user}
       />
 
