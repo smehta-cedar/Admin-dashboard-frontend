@@ -1,0 +1,56 @@
+[
+  {
+    "id": "1",
+    "agentId": "5",
+    "type": "licensing",
+    "state": "AZ",
+    "status": "pending",
+    "createdAt": "2026-09-10T15:20:00.000Z",
+    "note": "Two Arizona referrals waiting."
+  },
+  {
+    "id": "2",
+    "agentId": "3",
+    "type": "contract",
+    "carrierId": "10",
+    "status": "approved",
+    "createdAt": "2026-09-02T13:05:00.000Z"
+  },
+  {
+    "id": "3",
+    "agentId": "1",
+    "type": "dayOff",
+    "startDate": "2026-09-28",
+    "endDate": "2026-10-02",
+    "status": "pending",
+    "createdAt": "2026-09-15T18:40:00.000Z",
+    "note": "Family trip."
+  },
+  {
+    "id": "4",
+    "agentId": "2",
+    "type": "dayOff",
+    "startDate": "2026-10-12",
+    "endDate": "2026-10-16",
+    "status": "approved",
+    "createdAt": "2026-09-08T16:00:00.000Z"
+  },
+  {
+    "id": "5",
+    "agentId": "4",
+    "type": "dayOff",
+    "startDate": "2026-09-14",
+    "endDate": "2026-09-15",
+    "status": "denied",
+    "createdAt": "2026-09-11T14:30:00.000Z",
+    "note": "Open enrollment prep week."
+  },
+  {
+    "id": "6",
+    "agentId": "2",
+    "type": "contract",
+    "carrierId": "22",
+    "status": "pending",
+    "createdAt": "2026-09-21T17:10:00.000Z"
+  }
+]

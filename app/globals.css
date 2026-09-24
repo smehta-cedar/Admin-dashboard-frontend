@@ -74,6 +74,20 @@
   --color-info-ink: #1e40af;
   --color-info-soft: #eff6ff;
 
+  /* ---- Summary cards -------------------------------------------------- */
+  /* The count cards at the top of a profile: one accent per card so four
+     numbers in a row don't blur together. `ink` draws the icon and the bar,
+     `soft` is the tint behind the icon. Named by hue, not by card, since they
+     mean nothing beyond "not the same as the neighbour". */
+  --color-stat-blue-ink: #1d4ed8;
+  --color-stat-blue-soft: #dbeafe;
+  --color-stat-amber-ink: #b45309;
+  --color-stat-amber-soft: #fef3c7;
+  --color-stat-indigo-ink: #4338ca;
+  --color-stat-indigo-soft: #e0e7ff;
+  --color-stat-green-ink: #15803d;
+  --color-stat-green-soft: #dcfce7;
+
   /* ---- Chips ---------------------------------------------------------- */
   /* Carrier chips in the by-agent list: a warm neutral, deliberately unlike
      the sage used for agents so the two lists never read as the same thing. */
@@ -151,6 +165,17 @@ html.dark {
   --color-warn-soft: #2a2312;
   --color-info-ink: #93c5fd;
   --color-info-soft: #172035;
+
+  /* Inks lighten so the icon and bar stay the bright element on the dark
+     card; tints go deep so the icon still sits on a visibly coloured slab. */
+  --color-stat-blue-ink: #93c5fd;
+  --color-stat-blue-soft: #172035;
+  --color-stat-amber-ink: #fcd34d;
+  --color-stat-amber-soft: #2a2312;
+  --color-stat-indigo-ink: #a5b4fc;
+  --color-stat-indigo-soft: #1f1d3d;
+  --color-stat-green-ink: #86efac;
+  --color-stat-green-soft: #14301f;
 
   --color-carrier-chip: #2b2522;
   --color-carrier-chip-ink: #e3dbd4;

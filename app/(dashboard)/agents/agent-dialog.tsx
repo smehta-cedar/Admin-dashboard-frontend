@@ -13,14 +13,23 @@ import type { AgentStateLicenseRecord } from "@/lib/agent-state-licenses";
 import type { AgentField, AgentNote, AgentRecord } from "@/lib/agents";
 import { diffValues, nextId } from "@/lib/change-notes";
 import { applyLicenceEdits, licenseNumbersOf, licensedStatesOf } from "@/lib/state-licenses";
+import {
+  agentContactExtra,
+  agentContactNoteValues,
+  incompleteAddressError,
+  type AgentContact,
+} from "./agent-contact-fields";
 
 /*
  * The one Add / Edit agent dialog: the shared ProducerForm
  * (components/producer-form.tsx) with agent wording — name, aliases, status,
  * NPN, email, phone, licensed states, and the licence number for each state
- * that is checked. The Agents page opens it from Add agent and a row's Edit; an
- * agent's profile opens it in edit mode from its own Edit button, so both
- * places edit an agent with exactly the same form and the same checks.
+ * that is checked — plus the agent-only personal contact section
+ * (./agent-contact-fields.tsx: personal email, personal phone, address),
+ * which the agency's copy of the form doesn't have. The Agents page opens it
+ * from a row's Edit and the Add agent page renders the same form; an
+ * agent's profile opens it in edit mode from its own Edit button, so every
+ * place edits an agent with exactly the same form and the same checks.
  *
  * The states and numbers the form edits are the agent's state licence rows
  * (lib/agent-state-licenses.ts): `saveAgent` updates those rows and derives
@@ -31,7 +40,10 @@ import { applyLicenceEdits, licenseNumbersOf, licensedStatesOf } from "@/lib/sta
  * reaches a server, and a refresh brings back the JSON.
  */
 
-/** Which dialog is open. Edit holds the agent as it was when the dialog opened. */
+/**
+ * Which dialog is open. Edit holds the agent as it was when the dialog opened.
+ * Add is still supported, though the list now links to /agents/new instead.
+ */
 export type AgentEditor = { mode: "add" } | { mode: "edit"; agent: AgentRecord };
 
 export type AgentValues = Omit<AgentRecord, "id">;
@@ -47,6 +59,9 @@ export const AGENT_FIELD_LABELS: Record<AgentField, string> = {
   npn: "NPN",
   email: "Email",
   phone: "Phone",
+  personalEmail: "Personal email",
+  personalPhone: "Personal phone",
+  address: "Address",
   licensedStates: "Licensed states",
   licenseNumbers: "Licence numbers",
 };
@@ -86,11 +101,18 @@ type SaveResult =
       licenses: AgentStateLicenseRecord[];
     };
 
+/** An agent as notes compare and show it: licence numbers as items, contact fields as text. */
+const agentNoteValues = (values: AgentValues) => ({
+  ...producerNoteValues(values),
+  ...agentContactNoteValues(values),
+});
+
 /**
  * Adds or edits an agent, pure. Returns the saved agent, the next licence rows
  * and the next notes (a note only when something changed), or the error to
- * show: an NPN that already belongs to another agent, or a licensed state with
- * no licence number. The view puts the agent into its own list.
+ * show: an NPN that already belongs to another agent, a licensed state with
+ * no licence number, or a partly filled address. The view puts the agent into
+ * its own list.
  */
 export function saveAgent({ agents, notes, licenses, values, editing }: SaveInput): SaveResult {
   const npnOwner = agents.find((agent) => agent.id !== editing?.id && agent.npn === values.npn);
@@ -104,6 +126,8 @@ export function saveAgent({ agents, notes, licenses, values, editing }: SaveInpu
   // The inputs are required too; this holds for any caller.
   const unnumbered = unnumberedStatesError(values);
   if (unnumbered) return { error: unnumbered, agent: null };
+  const incomplete = incompleteAddressError(values);
+  if (incomplete) return { error: incomplete, agent: null };
 
   const agentId = editing?.id ?? nextId(agents);
   // The licence rows are the truth; the agent's two fields are read back from them.
@@ -120,11 +144,7 @@ export function saveAgent({ agents, notes, licenses, values, editing }: SaveInpu
     licensedStates: licensedStatesOf(own),
     licenseNumbers: licenseNumbersOf(own),
   };
-  const changes = diffValues(
-    FIELDS,
-    editing ? producerNoteValues(editing) : {},
-    producerNoteValues(saved),
-  );
+  const changes = diffValues(FIELDS, editing ? agentNoteValues(editing) : {}, agentNoteValues(saved));
   // Saving an edit with nothing changed just closes, without a note.
   if (changes.length === 0) return { error: null, agent: saved, changed: false, notes, licenses };
 
@@ -155,6 +175,37 @@ type AgentDialogProps = {
   onClose: () => void;
 };
 
+type AgentFormProps = {
+  /** Prefix for element IDs; the `<h2>` is `${id}-title`. */
+  id: string;
+  /** The agent being edited; leave out for an empty add form. */
+  editing?: AgentRecord;
+  onSave: (values: AgentValues) => AgentError | null;
+  /** Cancel, and what runs after a successful save. */
+  close: () => void;
+};
+
+/** The agent form itself: the producer form with agent wording and the personal contact section. */
+export function AgentForm({ id, editing, onSave, close }: AgentFormProps) {
+  return (
+    <ProducerForm<AgentContact>
+      id={id}
+      title={editing ? `Edit ${editing.name}` : "Add agent"}
+      description={
+        editing
+          ? "Saving records a note of what changed. Nothing is saved anywhere yet; refreshing undoes it."
+          : "Not saved anywhere yet. The agent stays in the list until you refresh."
+      }
+      submitLabel={editing ? "Save changes" : "Add agent"}
+      labels={FORM_LABELS}
+      initial={editing}
+      extra={agentContactExtra(editing)}
+      onSave={onSave}
+      close={close}
+    />
+  );
+}
+
 export function AgentDialog({ editor, onSave, onClose }: AgentDialogProps) {
   const { dialogRef, close } = useModalDialog(editor !== null);
   const id = useId();
@@ -163,22 +214,7 @@ export function AgentDialog({ editor, onSave, onClose }: AgentDialogProps) {
   // Clearing the editor unmounts the form, which resets it.
   return (
     <ModalDialog dialogRef={dialogRef} labelledBy={`${id}-title`} onClose={onClose}>
-      {editor ? (
-        <ProducerForm
-          id={id}
-          title={editing ? `Edit ${editing.name}` : "Add agent"}
-          description={
-            editing
-              ? "Saving records a note of what changed. Nothing is saved anywhere yet; refreshing undoes it."
-              : "Not saved anywhere yet. The agent stays in the list until you refresh."
-          }
-          submitLabel={editing ? "Save changes" : "Add agent"}
-          labels={FORM_LABELS}
-          initial={editing}
-          onSave={onSave}
-          close={close}
-        />
-      ) : null}
+      {editor ? <AgentForm id={id} editing={editing} onSave={onSave} close={close} /> : null}
     </ModalDialog>
   );
 }

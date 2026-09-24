@@ -6,7 +6,10 @@
     "status": "active",
     "npn": "17654321",
     "email": "maria.alvarez@example.com",
-    "phone": "(555)010-2231"
+    "phone": "(555)010-2231",
+    "personalEmail": "maria.alva@example.net",
+    "personalPhone": "(555)010-8812",
+    "address": { "street": "1420 Cedar Grove Ln", "city": "Austin", "state": "TX", "zip": "78704" }
   },
   {
     "id": "2",
@@ -15,7 +18,10 @@
     "status": "active",
     "npn": "18234567",
     "email": "jcarter@example.com",
-    "phone": "(555)010-4410"
+    "phone": "(555)010-4410",
+    "personalEmail": "jim.carter@example.net",
+    "personalPhone": "(555)010-4477",
+    "address": { "street": "88 Lakeshore Dr", "city": "Baton Rouge", "state": "LA", "zip": "70808" }
   },
   {
     "id": "3",
@@ -33,7 +39,9 @@
     "status": "inactive",
     "npn": "16543210",
     "email": "bob.klein@example.com",
-    "phone": "(555)010-7788"
+    "phone": "(555)010-7788",
+    "personalEmail": "bob.klein@example.net",
+    "address": { "street": "301 Palmetto Ave", "city": "Tampa", "state": "FL", "zip": "33606" }
   },
   {
     "id": "5",
@@ -42,7 +50,9 @@
     "status": "active",
     "npn": "21456789",
     "email": "brandon.wahl@example.com",
-    "phone": "(555)010-9902"
+    "phone": "(555)010-9902",
+    "personalPhone": "(555)010-9950",
+    "address": { "street": "7 Ridge Ct", "city": "Albuquerque", "state": "NM", "zip": "87111" }
   },
   {
     "id": "6",
@@ -51,6 +61,9 @@
     "status": "inactive",
     "npn": "20123456",
     "email": "tom.nguyen@example.com",
-    "phone": "(555)010-6120"
+    "phone": "(555)010-6120",
+    "personalEmail": "tom.nan@example.net",
+    "personalPhone": "(555)010-6161",
+    "address": { "street": "950 Harbor View Rd", "city": "San Diego", "state": "CA", "zip": "92109" }
   }
 ]

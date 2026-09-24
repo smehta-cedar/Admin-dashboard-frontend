@@ -8,8 +8,13 @@ import type { SearchIndex } from "@/lib/search";
 import { initials } from "@/lib/text";
 import { BrandLogo } from "./brand-logo";
 import { NavbarSearch } from "./navbar-search";
+import { RequestDialog } from "./request-dialog";
 import type { NavItem } from "./sidebar";
 import { ThemeToggle } from "./theme-toggle";
+
+/** Icon buttons in the right-hand cluster share this look. */
+const ICON_BUTTON_CLASS =
+  "rounded-md p-2 text-fg-muted hover:bg-surface-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
 
 type NavbarProps = {
   /** Opens the mobile drawer. The button is hidden at `lg` and up. */
@@ -102,6 +107,7 @@ export function Navbar({
         {/* From `md`; narrower screens get the row under the bar instead. */}
         <NavbarSearch scopes={searchScopes} index={searchIndex} className="hidden w-64 shrink-0 md:flex lg:w-80" />
         <div className="ml-auto flex items-center justify-end gap-1 md:ml-0 md:flex-1">
+          <CreateRequestButton />
           <ThemeToggle />
           <NotificationsButton />
           <UserMenu user={user} />
@@ -134,6 +140,41 @@ function HamburgerIcon() {
   );
 }
 
+/**
+ * "+" that opens the Create-a-request popup (./request-dialog.tsx) from any
+ * page. The request goes into the requests store on the dashboard layout, so
+ * it is there when HR is opened next.
+ */
+function CreateRequestButton() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-haspopup="dialog"
+        aria-label="Create a request"
+        title="Create a request"
+        className={ICON_BUTTON_CLASS}
+      >
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 20 20"
+          className="size-5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.5}
+          strokeLinecap="round"
+        >
+          <path d="M10 4v12M4 10h12" />
+        </svg>
+      </button>
+      <RequestDialog open={open} onClose={() => setOpen(false)} />
+    </>
+  );
+}
+
 /** Bell; placeholder until notifications exist. */
 function NotificationsButton() {
   return (
@@ -141,7 +182,7 @@ function NotificationsButton() {
       type="button"
       aria-label="Notifications"
       title="Notifications"
-      className="rounded-md p-2 text-fg-muted hover:bg-surface-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+      className={ICON_BUTTON_CLASS}
     >
       <svg
         aria-hidden="true"

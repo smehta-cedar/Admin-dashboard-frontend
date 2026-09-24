@@ -9,7 +9,9 @@ How the Agents page is built, written as a reference for the next entity pages
 - [app/(dashboard)/agents/agents-view.tsx](../app/(dashboard)/agents/agents-view.tsx) — client view
 
 Current stage: **view + dummy add/edit, no backend.** Data comes from JSON;
-changes live in React state and a refresh throws them away.
+changes live in React state and a refresh throws them away. On Agents that
+state sits in a client provider on the section's layout (see Agents → Add
+agent page) so the list and the Add agent page share it.
 
 ---
 
@@ -513,7 +515,7 @@ carrier profiles; `page.tsx` resolves the other party into `partyName` /
 soft-brand action button ("+ Add carrier"). The agent profile, top to bottom:
 
 - **Name row**: initials, name, status badge under it, and **Edit**, which opens
-  the same `AgentDialog` as the Agents list
+  the same `AgentDialog` as the Agents list's row Edit
   ([agents/agent-dialog.tsx](../app/(dashboard)/agents/agent-dialog.tsx):
   `AgentDialog` + pure `saveAgent`, the same shape as `carrier-dialog.tsx`;
   `AGENT_FIELD_LABELS` lives there). The profile keeps the agent in state, so
@@ -523,6 +525,9 @@ soft-brand action button ("+ Add carrier"). The agent profile, top to bottom:
   (mono) · email · phone · aliases, filled fields only, mailto/tel links kept.
   From `lg` it shares its row 3/5 | 2/5 with the **attention column**; while
   that column is empty the card takes the whole row.
+- **Personal contact row**: under the work cards, three more detail cards —
+  personal email, personal phone, address (`formatAddress` in `lib/address.ts`:
+  "street, city, ST zip"). Always all three; an empty one shows "—".
 - **Attention column**: the `role="status"` unsaved banner (agent edits and new
   appointments both count; always mounted), then the **Pending strip**, only
   when there is something pending (no empty state): one bordered list with the
@@ -556,6 +561,104 @@ count, searchable by code and name); **Agents** no longer has one (the profile
 shows licences). Both edit their list with `StateCheckboxes` in the add/edit
 dialog — `licensedStates` on Agents, `availableStates` on Carriers. Empty is
 allowed on both.
+
+### Requests (HR)
+
+Files: [lib/requests.ts](../lib/requests.ts) (server-only: types,
+`getRequests()`), [lib/request-options.ts](../lib/request-options.ts)
+(client-safe: `REQUEST_TYPES`, `REQUEST_TYPE_LABELS`, `REQUEST_STATUSES`, the
+pure `newRequest`), [data/requests.json](../data/requests.json),
+[components/requests-store.tsx](../components/requests-store.tsx),
+[components/request-dialog.tsx](../components/request-dialog.tsx).
+
+A request is one agent asking for one thing. `RequestRecord` is a union on
+`type`: `licensing` carries a `state` code, `contract` a `carrierId`, `dayOff`
+an inclusive `startDate` / `endDate` (`YYYY-MM-DD`). Every request has `id`,
+`agentId`, `status` (`pending | approved | denied`, pending when filed),
+`createdAt` and an optional `note`. A missing or unknown status loads as
+pending with a `console.warn`.
+
+- **Filed from anywhere.** The navbar's "+" (`CreateRequestButton`, just
+  left of the theme toggle, label "Create a request") opens `RequestDialog`
+  in the existing `ModalDialog`: type first, then that type's fields, the
+  agent, an optional note. `newRequest` checks the agent, the type's field
+  and that a day off ends on or after it starts, and returns a
+  `RequestError` shown under the field.
+- **Held above every page.** Because the button is global, the list lives in
+  `RequestsProvider`, mounted by the dashboard layout around `AppShell`
+  with the JSON plus slim `{ id, name, status }` agent and carrier options
+  (sorted by name; inactive ones marked in the selects).
+  `useRequestsStore()` gives `requests`, `agents`, `carriers`,
+  `unsavedCount`, `addRequest(values)` and `setStatus(id, status)`. A
+  request filed on any page is there when HR is opened; a refresh drops it.
+- No change notes yet: statuses change in place and the count feeds an
+  unsaved banner on the HR page.
+
+**HR page** ([app/(dashboard)/hr/](../app/(dashboard)/hr/): `page.tsx`,
+`hr-view.tsx`, `hr-calendar.tsx`; sidebar item "HR" with the `hr` icon; no
+role gate). `page.tsx` loads every agent's licence rows and today's date;
+the view takes requests and names from the store.
+
+- **Calendar** (`HrCalendar`): a plain `<table>` month grid from
+  `lib/calendar.ts` (`monthGrid`, `addMonths`, `monthLabel`, all on
+  `YYYY-MM-DD` strings, Sunday first, padded weeks), with previous / Today /
+  next. A day-off request draws on every day it covers as a bar rounded only
+  at its first and last day, coloured by status (pending amber, approved
+  green, denied struck through), the agent's name on the first day and on
+  each Sunday it runs into. A licence's `endDate` draws one chip that day
+  ("TX expires · Maria Alva"). Contracts have no date and stay on the list.
+  The month starts on the server's today (a prop) so the first render agrees.
+- **List**: a `DataTable` of every request — Type, Agent, Details (state
+  with its name, carrier name, or the date range, with the note under it),
+  Filed (the UTC date of `createdAt`, formatted from the string), Status as
+  a `<select>` of pending / approved / denied that calls `setStatus`. HR is
+  not a `searchable` nav item, so the table has no search of its own.
+
+### Agents: Add agent page and section store
+
+Add agent is a route, not a dialog: `app/(dashboard)/agents/new/page.tsx`
+(metadata "Add agent") renders `new-agent-view.tsx` — `PageHeader` plus the
+same `AgentForm` the dialog wraps (`agent-dialog.tsx` exports both), in a
+`max-w-3xl` card. Cancel and a successful save both `router.push("/agents")`.
+The static `new` segment wins over `[id]` beside it. Row Edit on the list and
+Edit on the profile still open `AgentDialog`.
+
+So that the new agent is in the list on the way back, the section's state
+lives above both pages: `agents/layout.tsx` (server) loads agents, notes and
+licence rows once and mounts `AgentsProvider` from `agents-store.tsx`
+(client). `useAgentsStore()` gives `agents`, `notes`, `licenses`,
+`unsavedCount` and `save(values, editing?)`, which runs `saveAgent` and sets
+all three lists. `agents/page.tsx` renders `AgentsView` with no props, and the
+list's Add agent button and empty-state action are `Link`s to `/agents/new`.
+A layout keeps its state across client navigations, so the unsaved banner
+count survives the round trip too; a refresh still starts over. The profile
+(`[id]`) sits under the same layout but keeps its own server-loaded state, so
+a brand-new agent has no profile until it exists in the JSON. The sidebar's
+"Agent profile" link uses `activeExcept: ["/agents/new"]` so the Add page is
+labelled "Agents" in the navbar, not "Agent profile".
+
+### Agent personal contact
+
+`AgentRecord` carries three optional, agent-only fields beside the work email
+and phone: `personalEmail`, `personalPhone` (same `formatPhone` format,
+applied on load and on save) and `address` (`Address` in `lib/address.ts`:
+street, city, two-letter state code, ZIP). The agency has none of them.
+
+- The fields live in `agents/agent-contact-fields.tsx`, which the agent
+  dialog hands to the shared `ProducerForm` as its `extra` section (rendered
+  after the phone field, read back off the submitted form). `ProducerForm` is
+  generic over that section's values, so `AgentValues` gains the three fields
+  and `AgencyValues` doesn't.
+- The address is all or nothing: `incompleteAddressError` (returned by
+  `saveAgent`, shown under the address fields as a `"address"` `ProducerError`)
+  rejects a partly filled one. The ZIP input has a `\d{5}(-\d{4})?` pattern;
+  the state is a `<select>` of `US_STATES`.
+- Notes label them "Personal email", "Personal phone", "Address"
+  (`AGENT_FIELD_LABELS`); `agentContactNoteValues` turns absent into `""`
+  and the address into its one-line text, so `diffValues` compares strings.
+- No table columns: the list searches them through the email, phone and name
+  columns (`formatAddress`, `phoneDigits`), and `getSearchIndex` mirrors that.
+- The profile shows them as a second row of detail cards (see Profiles).
 
 ### Agent state licences
 
@@ -805,7 +908,8 @@ add. `getAgency()` returns the object; `getAgencyNotes()` the notes, newest
 first.
 
 - Same producer shape as `AgentRecord` (name, aliases, status, npn,
-  licensedStates, licenseNumbers, email, phone), loaded the same way:
+  licensedStates, licenseNumbers, email, phone) minus the agent-only personal
+  contact fields (below), loaded the same way:
   `formatPhone`, and the two licence fields derived from the agency's licence
   rows (`lib/agency-state-licenses.ts`), not stored in `agency.json`.
   `saveAgency` takes and returns those rows exactly as `saveAgent` does.

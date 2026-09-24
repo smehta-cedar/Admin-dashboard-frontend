@@ -21,6 +21,10 @@ import "server-only";
  * dialog edits those rows, then derives the two fields again the same way
  * (lib/state-licenses.ts).
  *
+ * Email and phone are the agent's work contact. personalEmail, personalPhone
+ * and address are their own contact details, all optional and agent-only (the
+ * agency, which shares the producer form, has none of them).
+ *
  * Writing numbers are not stored on agents or carriers. They live on carrier
  * contracts in lib/carrier-contracts.ts (one agent's producer ID at one
  * carrier). Portal username and password live with Passwords in
@@ -32,6 +36,7 @@ import "server-only";
 
 import agentsJson from "@/data/agents.json";
 import notesJson from "@/data/agent-notes.json";
+import type { Address } from "@/lib/address";
 import { getAgentStateLicenses, type AgentStateLicenseRecord } from "@/lib/agent-state-licenses";
 import { formatPhone } from "@/lib/phone";
 import { licenseNumbersOf, licensedStatesOf } from "@/lib/state-licenses";
@@ -60,9 +65,15 @@ export type AgentRecord = {
   licenseNumbers: Record<string, string>;
   /** National Producer Number. Unique across agents. */
   npn: string;
+  /** Work email. */
   email: string;
-  /** "(555)010-4410" (formatPhone); other lengths stay as entered. */
+  /** Work phone, "(555)010-4410" (formatPhone); other lengths stay as entered. */
   phone: string;
+  personalEmail?: string;
+  /** Same format as `phone`. */
+  personalPhone?: string;
+  /** Home address: street, city, state code and ZIP. */
+  address?: Address;
 };
 
 /** Agent fields a note can record. The ID never changes. */
@@ -102,6 +113,7 @@ function toRecord(agent: StoredAgent, licenses: AgentStateLicenseRecord[]): Agen
   return {
     ...agent,
     phone: formatPhone(agent.phone),
+    ...(agent.personalPhone ? { personalPhone: formatPhone(agent.personalPhone) } : {}),
     licensedStates: licensedStatesOf(own),
     licenseNumbers: licenseNumbersOf(own),
   };

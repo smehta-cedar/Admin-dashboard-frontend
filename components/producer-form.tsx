@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { GHOST_BUTTON_CLASS, INPUT_CLASS, PRIMARY_BUTTON_CLASS } from "@/components/classes";
 import { Field } from "@/components/field";
 import { StateCheckboxes } from "@/components/state-checkboxes";
@@ -15,6 +15,10 @@ import { US_STATE_NAMES } from "@/lib/us-states";
  * checked state (required, so a state can't be added without its number).
  * Only the wording differs, so each dialog passes its `labels`, and the pure
  * save (saveAgent / saveAgency) stays with the dialog.
+ *
+ * Fields only one producer has go in `extra`: a section the dialog renders
+ * after the phone field and reads back off the submitted form (the agent's
+ * personal contact, agents/agent-contact-fields.tsx). The agency passes none.
  *
  * Mounted per open inside a ModalDialog, so its errors start clear each time.
  */
@@ -31,8 +35,24 @@ export type ProducerValues = {
   licenseNumbers: Record<string, string>;
 };
 
-/** A save error, shown under the field it names. */
-export type ProducerError = { field: "npn" | "licenseNumbers"; message: string };
+/** A save error, shown under the field it names. "address" is the agent-only section's. */
+export type ProducerError = { field: "npn" | "licenseNumbers" | "address"; message: string };
+
+/**
+ * A producer-specific section of the form. `render` draws its fields inside
+ * the grid (each child spans as it needs); `read` pulls their values off the
+ * submitted form, merged into the values `onSave` receives.
+ */
+export type ProducerExtra<E extends object> = {
+  render: (ctx: {
+    /** The form's ID prefix, for element IDs. */
+    id: string;
+    /** The save's "address" error, or null; `clearError` drops it on change. */
+    error: string | null;
+    clearError: () => void;
+  }) => ReactNode;
+  read: (data: FormData) => E;
+};
 
 /** The words that differ between an agent and the agency. */
 export type ProducerLabels = {
@@ -43,7 +63,7 @@ export type ProducerLabels = {
   licensedHint: string;
 };
 
-type ProducerFormProps = {
+type ProducerFormProps<E extends object> = {
   /** Prefix for element IDs; the `<h2>` is `${id}-title`, which the dialog is labelled by. */
   id: string;
   title: string;
@@ -51,9 +71,11 @@ type ProducerFormProps = {
   submitLabel: string;
   labels: ProducerLabels;
   /** Values to start from; leave out for an empty add form. */
-  initial?: ProducerValues;
+  initial?: ProducerValues & Partial<E>;
+  /** Fields only this producer has; see ProducerExtra. */
+  extra?: ProducerExtra<E>;
   /** Saves the values; returns the error to show instead of closing. */
-  onSave: (values: ProducerValues) => ProducerError | null;
+  onSave: (values: ProducerValues & E) => ProducerError | null;
   close: () => void;
 };
 
@@ -106,26 +128,31 @@ function readValues(form: HTMLFormElement): ProducerValues {
   };
 }
 
-export function ProducerForm({
+export function ProducerForm<E extends object = Record<never, never>>({
   id,
   title,
   description,
   submitLabel,
   labels,
   initial,
+  extra,
   onSave,
   close,
-}: ProducerFormProps) {
+}: ProducerFormProps<E>) {
   const [npnError, setNpnError] = useState<string | null>(null);
   const [numbersError, setNumbersError] = useState<string | null>(null);
+  const [addressError, setAddressError] = useState<string | null>(null);
   // Follows the checkboxes, so each checked state gets a licence number input.
   const [licensedCodes, setLicensedCodes] = useState(initial?.licensedStates ?? []);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const error = onSave(readValues(event.currentTarget));
+    const form = event.currentTarget;
+    const extraValues = extra ? extra.read(new FormData(form)) : ({} as E);
+    const error = onSave({ ...readValues(form), ...extraValues });
     if (error) {
       if (error.field === "npn") setNpnError(error.message);
+      else if (error.field === "address") setAddressError(error.message);
       else setNumbersError(error.message);
       return;
     }
@@ -226,6 +253,8 @@ export function ProducerForm({
             className={INPUT_CLASS}
           />
         </Field>
+
+        {extra?.render({ id, error: addressError, clearError: () => setAddressError(null) })}
 
         <StateCheckboxes
           legend="Licensed states"

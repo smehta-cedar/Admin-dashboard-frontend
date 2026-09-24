@@ -10,6 +10,7 @@ import "server-only";
  * the same way their table columns have no `searchText`.
  */
 
+import { formatAddress } from "@/lib/address";
 import { getAgents } from "@/lib/agents";
 import { getCarrierContracts } from "@/lib/carrier-contracts";
 import { getCarriers } from "@/lib/carriers";
@@ -47,7 +48,20 @@ export async function getSearchIndex(): Promise<SearchIndex> {
         `/agents/${agent.id}`,
         agent.name,
         [`NPN ${agent.npn}`, agent.email],
-        [agent.id, agent.npn, agent.name, ...agent.aliases, agent.status, agent.email, agent.phone, phoneDigits(agent.phone)],
+        [
+          agent.id,
+          agent.npn,
+          agent.name,
+          ...agent.aliases,
+          agent.status,
+          agent.email,
+          agent.phone,
+          phoneDigits(agent.phone),
+          agent.personalEmail ?? "",
+          agent.personalPhone ?? "",
+          phoneDigits(agent.personalPhone ?? ""),
+          formatAddress(agent.address),
+        ],
       ),
     ),
     "/carriers": carriers.map((carrier) =>

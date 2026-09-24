@@ -15,6 +15,8 @@ export type NavItem = {
    * href, e.g. a link to one profile that stands for all of them.
    */
   activePrefix?: string;
+  /** Paths under `activePrefix` that are not this link's, e.g. /agents/new under /agents/. */
+  activeExcept?: string[];
   /** Leading icon. Top-level items carry one; sub-links are text only. */
   icon?: NavIconName;
   /** Sub-links rendered indented under this item. */
@@ -40,8 +42,8 @@ type SidebarProps = {
 };
 
 /** "/" matches only itself; other items also match their nested routes. */
-function isActive(pathname: string, href: string, activePrefix?: string) {
-  if (activePrefix) return pathname.startsWith(activePrefix);
+function isActive(pathname: string, href: string, activePrefix?: string, activeExcept: string[] = []) {
+  if (activePrefix) return pathname.startsWith(activePrefix) && !activeExcept.includes(pathname);
   if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
@@ -53,7 +55,9 @@ function isActive(pathname: string, href: string, activePrefix?: string) {
 export function currentNavLabel(items: NavItem[], pathname: string) {
   for (const item of items) {
     if (pathname === item.href) return item.label;
-    const child = item.children?.find((link) => isActive(pathname, link.href, link.activePrefix));
+    const child = item.children?.find((link) =>
+      isActive(pathname, link.href, link.activePrefix, link.activeExcept),
+    );
     if (child) return child.label;
     if (isActive(pathname, item.href)) return item.label;
   }
@@ -101,7 +105,7 @@ export function Sidebar({
         {items.map((item) => {
           const children = item.children ?? [];
           const activeChild = children.some((child) =>
-            isActive(pathname, child.href, child.activePrefix),
+            isActive(pathname, child.href, child.activePrefix, child.activeExcept),
           );
           // With children, only an exact match marks the parent as the
           // current page; a matching child gets aria-current instead and the
@@ -153,6 +157,7 @@ export function Sidebar({
                             pathname,
                             child.href,
                             child.activePrefix,
+                            child.activeExcept,
                           );
                           return (
                             <li key={child.href}>
@@ -182,7 +187,12 @@ export function Sidebar({
                     }`}
                   >
                     {children.map((child) => {
-                      const childActive = isActive(pathname, child.href, child.activePrefix);
+                      const childActive = isActive(
+                        pathname,
+                        child.href,
+                        child.activePrefix,
+                        child.activeExcept,
+                      );
                       return (
                         <li key={child.href}>
                           <Link
