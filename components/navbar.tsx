@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useId, useRef, useState } from "react";
-import { clearSessionCookie, type SessionUser } from "@/lib/fake-session";
+import { useEffect, useId, useRef, useState, useTransition } from "react";
+import { logout } from "@/app/login/actions";
+import type { SessionUser } from "@/lib/auth-user";
 import type { SearchIndex } from "@/lib/search";
 import { initials } from "@/lib/text";
 import { BrandLogo } from "./brand-logo";
+import { ChangePasswordDialog } from "./change-password-dialog";
 import { NavbarSearch } from "./navbar-search";
 import { RequestDialog } from "./request-dialog";
 import type { NavItem } from "./sidebar";
@@ -33,7 +34,7 @@ type NavbarProps = {
   searchScopes: NavItem[];
   /** Records the search suggests while typing, per scope. */
   searchIndex: SearchIndex;
-  /** The signed-in user: avatar opens a menu with name, email and Sign out. */
+  /** The signed-in user: avatar opens a menu with name, email, View profile, Change password and Sign out. */
   user: SessionUser;
 };
 
@@ -200,10 +201,17 @@ function NotificationsButton() {
   );
 }
 
-/** Avatar that opens a menu with name, email and Sign out. */
+const MENU_ITEM_CLASS =
+  "block w-full px-3 py-2 text-left text-sm text-fg-muted hover:bg-surface-hover hover:text-fg";
+
+/**
+ * Avatar that opens a menu: name and email, then View profile (/profile),
+ * Change password (the dialog in ./change-password-dialog.tsx) and Sign out.
+ */
 function UserMenu({ user }: { user: SessionUser }) {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [signingOut, startSignOut] = useTransition();
   const rootRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
 
@@ -226,12 +234,10 @@ function UserMenu({ user }: { user: SessionUser }) {
   }, [open]);
 
   const signOut = () => {
-    clearSessionCookie();
     setOpen(false);
-    // The login page and the dashboard gate both read the cookie on the
-    // server; refresh so no signed-in render is reused.
-    router.push("/login");
-    router.refresh();
+    // The server action revokes the refresh token, clears the HttpOnly
+    // cookies and redirects to /login (app/login/actions.ts).
+    startSignOut(() => logout());
   };
 
   return (
@@ -242,6 +248,7 @@ function UserMenu({ user }: { user: SessionUser }) {
         aria-haspopup="menu"
         aria-controls={open ? menuId : undefined}
         aria-label={`Account menu for ${user.name}`}
+        disabled={signingOut}
         onClick={() => setOpen((current) => !current)}
         className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand-ink hover:ring-2 hover:ring-brand-strong/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
       >
@@ -258,16 +265,35 @@ function UserMenu({ user }: { user: SessionUser }) {
             <p className="truncate text-sm font-medium text-fg">{user.name}</p>
             <p className="truncate text-xs text-fg-muted">{user.email}</p>
           </div>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={signOut}
-            className="block w-full px-3 py-2 text-left text-sm text-fg-muted hover:bg-surface-hover hover:text-fg"
-          >
-            Sign out
-          </button>
+          <div className="border-b border-line py-1">
+            <Link
+              href="/profile"
+              role="menuitem"
+              onClick={() => setOpen(false)}
+              className={MENU_ITEM_CLASS}
+            >
+              View profile
+            </Link>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                setChangingPassword(true);
+              }}
+              className={MENU_ITEM_CLASS}
+            >
+              Change password
+            </button>
+          </div>
+          <div className="py-1">
+            <button type="button" role="menuitem" onClick={signOut} className={MENU_ITEM_CLASS}>
+              Sign out
+            </button>
+          </div>
         </div>
       ) : null}
+      <ChangePasswordDialog open={changingPassword} onClose={() => setChangingPassword(false)} />
     </div>
   );
 }

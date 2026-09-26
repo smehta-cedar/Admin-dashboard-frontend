@@ -1,29 +1,44 @@
 import "server-only";
 
 /*
- * Reads the fake session cookie on the server and resolves it to a user. The
- * dashboard layout calls this to gate the app and to name the signed-in user
- * in the navbar. Using cookies() makes every dashboard route render per
- * request, which is what a session needs anyway.
+ * Who is signed in, resolved on the server from the access-token cookie and
+ * GET /auth/me/. The dashboard layout calls this to gate the app and to name
+ * the user in the navbar; the landing and login pages call it to bounce a
+ * signed-in visitor to /overview.
+ *
+ * By the time a page renders, the proxy (proxy.ts) has already swapped an
+ * expiring access token for a fresh pair, so a plain read is enough here. A
+ * server component can't write cookies, so a token the API still rejects
+ * (revoked after a password change, a blocked account) just reads as signed
+ * out; the next login overwrites the cookies.
+ *
+ * Wrapped in React's cache() so a layout and its page (the profile page reads
+ * the full record through getApiUser) share one API call per request. Reading cookies() makes every caller render per request, which a
+ * session needs anyway.
  */
 
+import { cache } from "react";
 import { cookies } from "next/headers";
-import { SESSION_COOKIE, type SessionUser } from "@/lib/fake-session";
-import { getUsers } from "@/lib/users";
+import { apiRequest } from "@/lib/api";
+import { ACCESS_COOKIE } from "@/lib/auth-cookies";
+import { toSessionUser, type ApiUser, type SessionUser } from "@/lib/auth-user";
 
-/**
- * The signed-in user, or null when there is no cookie, it names no user, or
- * that user is inactive (an inactive user is signed out on their next request).
- */
-export async function getSessionUser(): Promise<SessionUser | null> {
+export type { SessionUser } from "@/lib/auth-user";
+
+/** The signed-in user exactly as the API serialises them; the profile page shows all of it. */
+export const getApiUser = cache(async (): Promise<ApiUser | null> => {
   const cookieStore = await cookies();
-  const userId = cookieStore.get(SESSION_COOKIE)?.value;
-  if (!userId) return null;
+  const access = cookieStore.get(ACCESS_COOKIE)?.value;
+  if (!access) return null;
 
-  const users = await getUsers();
-  const user = users.find((candidate) => candidate.id === userId);
-  if (!user || user.status === "inactive") return null;
+  const result = await apiRequest<ApiUser>("/auth/me/", { token: access });
+  // 401: the token is stale or revoked. Anything else (the API is down) is
+  // also "not signed in" for this render rather than a crash.
+  if (!result.ok) return null;
+  return result.data;
+});
 
-  const { id, name, email, role } = user;
-  return { id, name, email, role };
-}
+export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
+  const user = await getApiUser();
+  return user ? toSessionUser(user) : null;
+});

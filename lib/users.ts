@@ -8,8 +8,9 @@ import "server-only";
  * A user has a role (admin or staff) that is stored and shown but not yet
  * enforced: every signed-in user still sees the whole app. Agents and the
  * agency don't sign in yet; that login (and any link from a user to an
- * AgentRecord) is a later phase. Sign-in is a fake, client-side match against
- * this list (see app/login) until Supabase Auth lands.
+ * AgentRecord) is a later phase. Sign-in no longer uses this list: it goes
+ * through the Django API (app/login/actions.ts, lib/session.ts); this JSON
+ * only feeds the Users page until that page moves to the API too.
  *
  * TODO: real passwords only once storage moves to Supabase Auth. data/users.json
  * is committed to git and must hold dummy values only.

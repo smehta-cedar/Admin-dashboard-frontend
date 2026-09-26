@@ -56,12 +56,16 @@ const NAV_ITEMS: NavItem[] = [
 /** Pinned to the bottom of the rail: the one org record for this shop. */
 const FOOTER_ITEMS: NavItem[] = [{ href: "/agency", label: "Agency", icon: "agency" }];
 
+/** Reached from the navbar's account menu, not the rail, so the title is listed here. */
+const PAGE_TITLES: Record<string, string> = { "/profile": "My profile" };
+
 export default async function DashboardLayout({
   children,
 }: Readonly<{ children: ReactNode }>) {
-  // Soft gate: no valid fake session, no dashboard. Checked on the server so a
-  // signed-out visitor never sees a flash of the app. Not real auth (see
-  // lib/fake-session.ts); Supabase Auth replaces it.
+  // Gate: no valid session, no dashboard. Checked on the server so a
+  // signed-out visitor never sees a flash of the app. getSessionUser asks
+  // the API with the access-token cookie (lib/session.ts); the proxy has
+  // already refreshed an expiring token by this point.
   const user = await getSessionUser();
   if (!user) redirect("/login");
 
@@ -87,7 +91,13 @@ export default async function DashboardLayout({
       agents={agents.map(party).sort(byName)}
       carriers={carriers.map(party).sort(byName)}
     >
-      <AppShell navItems={NAV_ITEMS} footerItems={FOOTER_ITEMS} user={user} searchIndex={searchIndex}>
+      <AppShell
+        navItems={NAV_ITEMS}
+        footerItems={FOOTER_ITEMS}
+        user={user}
+        searchIndex={searchIndex}
+        pageTitles={PAGE_TITLES}
+      >
         {children}
       </AppShell>
     </RequestsProvider>

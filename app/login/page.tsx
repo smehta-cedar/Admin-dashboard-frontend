@@ -3,14 +3,13 @@ import { redirect } from "next/navigation";
 import { BrandLogo } from "@/components/brand-logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { getSessionUser } from "@/lib/session";
-import { getUsers } from "@/lib/users";
 import { LoginForm } from "./login-form";
 
 /*
- * Fake sign-in, outside the dashboard group so there is no sidebar or navbar.
- * The form matches what is typed against the users list in the browser and
- * sets a plain cookie; see lib/fake-session.ts for why that is only a
- * placeholder. Already signed in? Straight to the CRM home at /overview.
+ * Sign-in, outside the dashboard group so there is no sidebar or navbar.
+ * The form posts to the `login` server action (./actions.ts), which asks the
+ * API for a token pair and stores it in HttpOnly cookies. Already signed in?
+ * Straight to the CRM home at /overview.
  */
 
 export const metadata: Metadata = {
@@ -19,8 +18,6 @@ export const metadata: Metadata = {
 
 export default async function LoginPage() {
   if (await getSessionUser()) redirect("/overview");
-
-  const users = await getUsers();
 
   return (
     <div className="flex min-h-screen flex-col bg-canvas">
@@ -35,10 +32,7 @@ export default async function LoginPage() {
           </div>
           <h1 className="mt-6 text-center text-lg font-semibold text-fg">Sign in</h1>
 
-          <LoginForm
-            // Only what the match needs; the password is dummy data already in git.
-            users={users.map(({ id, email, password, status }) => ({ id, email, password, status }))}
-          />
+          <LoginForm />
         </div>
       </main>
     </div>

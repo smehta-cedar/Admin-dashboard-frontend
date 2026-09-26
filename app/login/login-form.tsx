@@ -1,58 +1,45 @@
 "use client";
 
-import { useId, useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useActionState, useId, useState } from "react";
 import { INPUT_CLASS, PRIMARY_BUTTON_CLASS } from "@/components/classes";
-import { Field } from "@/components/field";
-import { setSessionCookie } from "@/lib/fake-session";
-import type { UserRecord } from "@/lib/users";
 import { PasswordInput } from "@/components/credential-value";
+import { Field } from "@/components/field";
+import { login, type LoginState } from "./actions";
 
-/** The slice of each user the match needs. */
-type LoginUser = Pick<UserRecord, "id" | "email" | "password" | "status">;
-
-type LoginFormProps = {
-  users: LoginUser[];
-};
+const INITIAL_STATE: LoginState = { fieldErrors: {}, error: null };
 
 /**
- * Email + password, matched in the browser against the loaded users: email
- * ignoring case, password exactly. A match sets the session cookie and goes
- * to the dashboard; the error stays under the form otherwise.
+ * Email + password, posted to the `login` server action, which asks the API
+ * and sets the session cookies. On success the action redirects to the
+ * dashboard. On failure a message about one field (blank, not an email)
+ * shows under that field, and a message about the attempt (wrong password,
+ * blocked, throttled) under the form; all clear when either field is edited.
+ *
+ * The inputs are controlled: React resets a form's uncontrolled fields after
+ * its action settles, which would wipe both fields on a wrong password.
  */
-export function LoginForm({ users }: LoginFormProps) {
-  const router = useRouter();
+export function LoginForm() {
   const id = useId();
-  const [error, setError] = useState<string | null>(null);
-
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const email = String(data.get("email") ?? "").trim().toLowerCase();
-    // Not trimmed: spaces and case matter in a password.
-    const password = String(data.get("password") ?? "");
-
-    const user = users.find((candidate) => candidate.email.toLowerCase() === email);
-    // One message for both, so the form doesn't confirm which emails exist.
-    if (!user || user.password !== password) {
-      setError("Email or password is wrong.");
-      return;
-    }
-    if (user.status === "inactive") {
-      setError("That account is inactive.");
-      return;
-    }
-
-    setSessionCookie(user.id);
-    // The dashboard layout reads the cookie on the server; refresh so no
-    // cached signed-out render is reused.
-    router.push("/overview");
-    router.refresh();
-  };
+  const [state, formAction, pending] = useActionState(login, INITIAL_STATE);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  // The state object is replaced on every submit, so "dismissed" is scoped to
+  // the current result: typing hides its messages, and the next result shows again.
+  const [dismissedFor, setDismissedFor] = useState<LoginState | null>(null);
+  const shown = dismissedFor === state ? INITIAL_STATE : state;
+  const emailError = shown.fieldErrors.email;
+  const passwordError = shown.fieldErrors.password;
+  const formError = shown.error;
 
   return (
-    <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-      <Field label="Email" htmlFor={`${id}-email`}>
+    <form action={formAction} className="mt-6 space-y-4">
+      <Field
+        label="Email"
+        htmlFor={`${id}-email`}
+        hint={emailError}
+        hintId={`${id}-email-error`}
+        error={Boolean(emailError)}
+      >
         <input
           id={`${id}-email`}
           name="email"
@@ -60,34 +47,61 @@ export function LoginForm({ users }: LoginFormProps) {
           required
           autoComplete="username"
           autoFocus
-          aria-invalid={error ? true : undefined}
-          aria-describedby={error ? `${id}-error` : undefined}
-          onChange={() => setError(null)}
+          value={email}
+          aria-invalid={emailError || formError ? true : undefined}
+          aria-describedby={emailError ? `${id}-email-error` : formError ? `${id}-error` : undefined}
+          onChange={(event) => {
+            setEmail(event.target.value);
+            setDismissedFor(state);
+          }}
           className={INPUT_CLASS}
         />
       </Field>
-      <Field label="Password" htmlFor={`${id}-password`}>
+      <Field
+        label="Password"
+        htmlFor={`${id}-password`}
+        hint={passwordError}
+        hintId={`${id}-password-error`}
+        error={Boolean(passwordError)}
+      >
         <PasswordInput
           id={`${id}-password`}
           name="password"
           required
           autoComplete="current-password"
           spellCheck={false}
-          aria-invalid={error ? true : undefined}
-          aria-describedby={error ? `${id}-error` : undefined}
-          onChange={() => setError(null)}
+          value={password}
+          aria-invalid={passwordError || formError ? true : undefined}
+          aria-describedby={passwordError ? `${id}-password-error` : formError ? `${id}-error` : undefined}
+          onChange={(event) => {
+            setPassword(event.target.value);
+            setDismissedFor(state);
+          }}
           className={INPUT_CLASS}
         />
       </Field>
 
       {/* Stays mounted so the error is announced when it appears. */}
       <p id={`${id}-error`} role="alert" className="min-h-4 text-xs text-danger">
-        {error}
+        {formError}
       </p>
 
-      <button type="submit" className={`${PRIMARY_BUTTON_CLASS} w-full`}>
-        Sign in
+      <button type="submit" disabled={pending} className={`${PRIMARY_BUTTON_CLASS} w-full`}>
+        {pending ? "Signing in…" : "Sign in"}
       </button>
+
+      {/*
+       * Placeholder until the API has a forgot-password flow (request a reset
+       * link, then set a new password); today an administrator resets passwords.
+       */}
+      <div className="text-center">
+        <button
+          type="button"
+          className="text-xs font-medium text-brand-ink hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+        >
+          Forgot password?
+        </button>
+      </div>
     </form>
   );
 }

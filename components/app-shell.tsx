@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
-import type { SessionUser } from "@/lib/fake-session";
+import type { SessionUser } from "@/lib/auth-user";
 import type { SearchIndex } from "@/lib/search";
 import { BrandLogo } from "./brand-logo";
 import { Navbar } from "./navbar";
@@ -30,10 +30,19 @@ type AppShellProps = {
   user: SessionUser;
   /** Records the navbar search suggests while typing, per search scope. */
   searchIndex: SearchIndex;
+  /** Navbar titles for pages no nav item points at, by pathname, e.g. { "/profile": "My profile" }. */
+  pageTitles?: Record<string, string>;
   children: ReactNode;
 };
 
-export function AppShell({ navItems, footerItems = [], user, searchIndex, children }: AppShellProps) {
+export function AppShell({
+  navItems,
+  footerItems = [],
+  user,
+  searchIndex,
+  pageTitles = {},
+  children,
+}: AppShellProps) {
   const drawerRef = useRef<HTMLDialogElement>(null);
   const drawerId = useId();
   const railId = useId();
@@ -97,7 +106,7 @@ export function AppShell({ navItems, footerItems = [], user, searchIndex, childr
         railCollapsed={collapsed}
         onToggleRail={toggleCollapsed}
         railId={railId}
-        pageTitle={currentNavLabel([...navItems, ...footerItems], pathname)}
+        pageTitle={currentNavLabel([...navItems, ...footerItems], pathname) ?? pageTitles[pathname]}
         searchScopes={[...navItems, ...footerItems].filter((item) => item.searchable)}
         searchIndex={searchIndex}
         user={user}

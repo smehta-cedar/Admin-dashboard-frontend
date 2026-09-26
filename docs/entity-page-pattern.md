@@ -894,34 +894,61 @@ sign-in path) rather than half-wired here.
 - Notes record the password as `diffValues(FIELDS, before, after, ["password"])`
   (§Passwords).
 
-### Fake session (until Supabase Auth)
+### Session (Django API, JWT in HttpOnly cookies)
 
-Not an entity, but Users is what it signs in against.
+Not an entity, but this is how a user signs in. The API is
+`backend/apps/accounts/apis/auth/` (`login/`, `refresh/`, `logout/`, `me/`,
+`change-password/` under `/api/v1/auth/`). Only the Next server talks to it;
+the browser never holds a token.
 
-- [lib/fake-session.ts](../lib/fake-session.ts) (client-safe): the cookie name
-  `mc-fake-session`, whose value is the user's ID; `setSessionCookie` /
-  `clearSessionCookie` write it from the browser (30 days, `samesite=lax`,
-  **not** HttpOnly or signed — anyone can set it to any ID; it decides only who
-  the app shows as signed in); `SessionUser` (`id, name, email, role`, never the
-  password); `initials`.
+- [lib/api.ts](../lib/api.ts): `apiRequest(path, { method, body, token })`
+  against `API_URL` (`.env.local`, default `http://127.0.0.1:8000/api/v1`).
+  Unwraps the API envelope into `{ ok: true, data, message }` or
+  `{ ok: false, status, code, message, errors }`; never throws for an HTTP
+  error, and a network failure is status 0 / `network_error`.
+- [lib/auth-cookies.ts](../lib/auth-cookies.ts): the two cookies `cg-access`
+  and `cg-refresh` — **HttpOnly**, `SameSite=Lax`, `Secure` in production,
+  `max-age` taken from each JWT's `exp` (30 min / 7 days). `setAuthCookies` /
+  `clearAuthCookies` take a sink, so they work with `await cookies()` in a
+  server action and `response.cookies` in the proxy.
+- [lib/jwt.ts](../lib/jwt.ts): reads `exp` without verifying (timing only; the
+  API verifies signatures).
+- [lib/auth-user.ts](../lib/auth-user.ts) (client-safe): `ApiUser` (the
+  serializer shape) and `SessionUser` (`id, name, email, role, designation,
+  isSuperuser`; `name` falls back to the email). `toSessionUser` maps one to
+  the other.
 - [lib/session.ts](../lib/session.ts) (server-only): `getSessionUser()` reads
-  the cookie with `cookies()` and resolves it against `getUsers()`; null when
-  missing, unknown, or inactive.
+  the access cookie and calls `GET /auth/me/`; null when there is no cookie or
+  the API rejects it. Wrapped in React `cache()` so layout and page share one
+  call per request.
+- [proxy.ts](../proxy.ts): runs before every page and server action. When the
+  access cookie is missing or has under a minute left and a refresh cookie
+  exists, it posts to `/auth/refresh/`, then sets the new pair on the response
+  and on the forwarded request. Refresh tokens rotate and the old one is
+  blacklisted, so concurrent requests carrying the same old token share one
+  in-flight refresh (kept for a minute). A 401 from refresh clears both
+  cookies; a network failure leaves them.
+- [app/login/actions.ts](../app/login/actions.ts): `login(prev, formData)`
+  posts to `/auth/login/`, stores the cookies and `redirect("/overview")`;
+  errors map to one message under the form (`invalid` → the first field
+  message; `invalid_credentials`, `account_blocked`, `throttled` → the API's
+  message). `logout()` posts the refresh token to `/auth/logout/` (best
+  effort), clears the cookies and `redirect("/login")`.
 - [app/login/](../app/login/) sits outside the dashboard group (no shell). The
-  page passes slim `{ id, email, password, status }` rows; the form matches
-  email ignoring case and password exactly, shows "Email or password is wrong."
-  (one message for both, so it doesn't confirm which emails exist) or "That
-  account is inactive.", then sets the cookie and `router.push("/")` +
-  `router.refresh()`. A signed-in visitor to `/login` is redirected to `/`.
-- The **soft gate** is the dashboard layout
+  form uses `useActionState(login)` with controlled inputs (React resets
+  uncontrolled fields after an action, which would wipe them on a wrong
+  password); a field's own message (blank, not an email) shows under that
+  field via `Field`'s hint slot, an attempt-level one (wrong credentials,
+  blocked, throttled) under the form; the button reads "Signing in…" while
+  pending. "Forgot password?" is a placeholder link until the API has a reset
+  flow. A signed-in visitor to `/login` is redirected to `/overview`.
+- The **gate** is the dashboard layout
   ([app/(dashboard)/layout.tsx](../app/(dashboard)/layout.tsx)): no session →
-  `redirect("/login")`. Checked on the server so nothing flashes; no
-  middleware/proxy. Reading `cookies()` there makes every dashboard route
-  render per request, which a session needs anyway. The layout passes the
-  `SessionUser` to `AppShell` → `Navbar`, whose avatar menu shows name, email
-  and Sign out (clears the cookie, `router.push("/login")` + `refresh()`).
-- Non-goals for now: Supabase Auth, hashing, HttpOnly cookies, role-based
-  route or field permissions.
+  `redirect("/login")`. Checked on the server so nothing flashes. The layout
+  passes the `SessionUser` to `AppShell` → `Navbar`, whose avatar menu shows
+  name, email and Sign out (calls the `logout` action in a transition).
+- Not yet: change password UI, role-based route or field permissions, the
+  Users page reading `/users/`.
 
 ### Agency
 
