@@ -512,7 +512,9 @@ titled aside, e.g. `LicenseCards` or `StateChip`s), `UnsavedBanner`, then
 `<td>`s, with `StateChipCell` for a states column), `PasswordsPanel` (agent and
 carrier profiles; `page.tsx` resolves the other party into `partyName` /
 `partyHref`), and Notes as `HydratedNoteList`. `PROFILE_BUTTON_CLASS` is the
-soft-brand action button ("+ Add carrier"). The agent profile, top to bottom:
+soft-brand action button ("+ Add carrier"). The carrier and agency profiles
+stack their panels; the agent profile shows one section at a time behind a
+section list. The agent profile, top to bottom:
 
 - **Name row**: initials, name, status badge under it, and **Edit**, which opens
   the same `AgentDialog` as the Agents list's row Edit
@@ -521,24 +523,38 @@ soft-brand action button ("+ Add carrier"). The agent profile, top to bottom:
   `AGENT_FIELD_LABELS` lives there). The profile keeps the agent in state, so
   `page.tsx` keys it by agent ID, passes `npn` in `allAgents` for the uniqueness
   check, and passes **every** agent note (new note IDs need them all).
-- **Identity card** (no `ProfileHeader` here): one muted meta line — NPN
-  (mono) · email · phone · aliases, filled fields only, mailto/tel links kept.
-  From `lg` it shares its row 3/5 | 2/5 with the **attention column**; while
-  that column is empty the card takes the whole row.
-- **Personal contact row**: under the work cards, three more detail cards —
-  personal email, personal phone, address (`formatAddress` in `lib/address.ts`:
-  "street, city, ST zip"). Always all three; an empty one shows "—".
-- **Attention column**: the `role="status"` unsaved banner (agent edits and new
-  appointments both count; always mounted), then the **Pending strip**, only
-  when there is something pending (no empty state): one bordered list with the
-  warn left edge.
-- **Panels**, each with a padded body (`p-4 sm:p-5`) so its table or list sits
-  inset in its own `rounded-lg border border-line` box, on a 10-column grid
-  from `lg`: Carriers (a table: Carrier, Writing number, Writable states,
-  Status; writing number from the contract, or "No writing number";
-  "+ Add carrier" in its title row) beside `StateLicensesPanel`, 50/50; then
-  `PasswordsPanel` beside Notes, 70/30. Below `lg` they stack in that order. No
-  sticky rail, no tabs.
+- **Unsaved banner**: the `role="status"` region, always mounted; the banner
+  shows once agent edits or new appointments have been made (both count).
+- **Section list | panel**: a split under the banner. From `lg` the list is a
+  `13rem` column on the left and the panel takes the rest; below `lg` the list
+  is a wrapping row above the panel. The list is a `<nav>` of buttons —
+  Details, Pending, Carriers, State licences, Passwords, Notes — each with its current
+  count, styled with the app rail's `LINK_BASE` / `LINK_ACTIVE` / `LINK_IDLE`
+  (exported from `components/sidebar.tsx`), so the active mark, spacing and
+  type match the rail. Which section shows is React state on the page, not a
+  route, so the `AgentDialog` and `AppointmentDialog` stay mounted across a
+  switch. It opens on **Carriers** (what the profile is opened for). Only the
+  selected section renders, full width of the column; there is no
+  multi-column panel grid and no header card (no `ProfileHeader` here).
+- **Sections**, each a `Panel` with a padded body (`p-4 sm:p-5`) so its table
+  or list sits inset in its own `rounded-lg border border-line` box:
+  - **Details**: a two-column table (`<th scope="row">` label, value), no
+    headings and no paging — the four work fields first (NPN in mono, email
+    as mailto, phone as tel, aliases), then the three personal ones (personal
+    email, personal phone, address via `formatAddress` in `lib/address.ts`:
+    "street, city, ST zip"). Always all seven rows; an empty one shows "—".
+    Its count on the list is how many are filled.
+  - **Pending**: the derived `pendingItems` list (below). Always in the list,
+    count 0 included; empty, the panel says "Nothing is pending."
+  - **Carriers**: a table (Carrier, Writing number, Writable states, Status;
+    writing number from the contract, or "No writing number") with
+    "+ Add carrier" in its title row, which opens `AppointmentDialog` with
+    this agent locked.
+  - **State licences**: `StateLicensesPanel`, still edited through the
+    profile's Edit button, not from the panel.
+  - **Passwords**: `PasswordsPanel`, read-only here; its links go to the
+    Passwords page.
+  - **Notes**: `HydratedNoteList` with `AGENT_FIELD_LABELS`.
 - **Pending** is derived by `pendingItems`, not stored — there are no task
   records yet: no licences, licensed states with no licence number, an appointment with no writable states, licensed
   states no appointment covers, contracts with no writing number, carriers with no password (one line), a password with
@@ -658,7 +674,7 @@ street, city, two-letter state code, ZIP). The agency has none of them.
   and the address into its one-line text, so `diffValues` compares strings.
 - No table columns: the list searches them through the email, phone and name
   columns (`formatAddress`, `phoneDigits`), and `getSearchIndex` mirrors that.
-- The profile shows them as a second row of detail cards (see Profiles).
+- The profile shows them as the last three rows of its Details table (see Profiles).
 
 ### Agent state licences
 

@@ -64,10 +64,14 @@ export function currentNavLabel(items: NavItem[], pathname: string) {
   return undefined;
 }
 
-const LINK_BASE = "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium";
+/*
+ * The rail's link classes, exported so an in-page section list (the agent
+ * profile's) can look exactly like the rail rather than invent its own.
+ */
+export const LINK_BASE = "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium";
 /* Inset bar on the left edge marks the current page in the logo teal. */
-const LINK_ACTIVE = "bg-brand-soft text-brand-ink shadow-[inset_3px_0_0_var(--color-brand)]";
-const LINK_IDLE = "text-fg-muted hover:bg-brand-soft/60 hover:text-fg";
+export const LINK_ACTIVE = "bg-brand-soft text-brand-ink shadow-[inset_3px_0_0_var(--color-brand)]";
+export const LINK_IDLE = "text-fg-muted hover:bg-brand-soft/60 hover:text-fg";
 /** An ancestor of the current page: selected, but not the page itself. */
 const LINK_ANCESTOR = "text-brand-ink hover:bg-brand-soft/60";
 
