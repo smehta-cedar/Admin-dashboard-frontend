@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { HydratedNoteList } from "@/components/hydrated-note-list";
+import { CopyableNumber } from "@/components/license-number";
 import {
   Detail,
   PasswordsPanel,
@@ -171,10 +172,12 @@ export function CarrierProfile({
                       {agent.name}
                     </Link>
                   </td>
-                  <td className="min-w-0 truncate px-3 py-2.5 align-middle font-mono text-fg-muted">
-                    {agent.writingNumber || (
-                      <span className="font-sans text-xs text-fg-faint">No writing number</span>
-                    )}
+                  <td className="min-w-0 px-3 py-2.5 align-middle">
+                    <CopyableNumber
+                      value={agent.writingNumber}
+                      label="Writing number"
+                      empty="No writing number"
+                    />
                   </td>
                   <StateChipCell
                     codes={agent.writable}

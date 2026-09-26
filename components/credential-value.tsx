@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, type ComponentProps, type ReactNode } from "react";
+import { useState, type ComponentProps, type ReactNode } from "react";
+import { CopyButton, useCopy } from "@/components/license-number";
 
 /*
  * Username and password controls, shared by Passwords, Users, the sign-in
@@ -16,32 +17,6 @@ const MASK = "••••••••";
 
 const ICON_BUTTON_CLASS =
   "cursor-pointer rounded-md p-1 text-fg-subtle hover:bg-surface-hover hover:text-fg";
-
-type CopyStatus = "idle" | "copied" | "failed";
-
-/** Copies `value` exactly as given; the status resets to idle after 1.5 seconds. */
-function useCopy(value: string) {
-  const [status, setStatus] = useState<CopyStatus>("idle");
-
-  useEffect(() => {
-    if (status === "idle") return;
-    const timeout = setTimeout(() => setStatus("idle"), 1500);
-    return () => clearTimeout(timeout);
-  }, [status]);
-
-  const copy = async () => {
-    try {
-      // Missing outside secure contexts (e.g. plain http on a LAN address).
-      if (!navigator.clipboard) throw new Error("Clipboard unavailable");
-      await navigator.clipboard.writeText(value);
-      setStatus("copied");
-    } catch {
-      setStatus("failed");
-    }
-  };
-
-  return { status, copy };
-}
 
 type CredentialValueProps = {
   value: string;
@@ -94,25 +69,7 @@ export function CredentialValue({ value, label, secret = false }: CredentialValu
           {hidden ? <EyeIcon /> : <EyeOffIcon />}
         </button>
       ) : null}
-      <span className="relative inline-flex">
-        <button type="button" onClick={copy} aria-label={`Copy ${label}`} className={ICON_BUTTON_CLASS}>
-          {status === "copied" ? <CheckIcon /> : <CopyIcon />}
-        </button>
-        {/* Feedback floats above the icon so the cell never changes width. The
-            live region stays mounted; only the label inside it comes and goes. */}
-        <span
-          aria-live="polite"
-          className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 -translate-x-1/2 whitespace-nowrap"
-        >
-          {status !== "idle" ? (
-            <span
-              className={`rounded px-1.5 py-0.5 text-xs font-medium text-tooltip-fg ${status === "failed" ? "bg-danger-strong" : "bg-tooltip"}`}
-            >
-              {status === "copied" ? "Copied" : "Couldn't copy"}
-            </span>
-          ) : null}
-        </span>
-      </span>
+      <CopyButton label={label} status={status} onCopy={() => void copy()} />
     </div>
   );
 }
@@ -173,19 +130,3 @@ function EyeOffIcon() {
   );
 }
 
-function CopyIcon() {
-  return (
-    <Icon>
-      <rect x="7" y="7" width="10" height="10" rx="1.5" />
-      <path d="M13 7V4.5A1.5 1.5 0 0 0 11.5 3h-7A1.5 1.5 0 0 0 3 4.5v7A1.5 1.5 0 0 0 4.5 13H7" />
-    </Icon>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <Icon>
-      <path d="M4 10.5l4 4 8-9" />
-    </Icon>
-  );
-}

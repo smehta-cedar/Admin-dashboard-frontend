@@ -5,7 +5,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { PRIMARY_BUTTON_CLASS, ROW_BUTTON_CLASS, TOOLBAR_INPUT_CLASS } from "@/components/classes";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
-import { LicenseNumber } from "@/components/license-number";
+import { CopyableNumber, LicenseNumber } from "@/components/license-number";
 import { NoteList } from "@/components/note-list";
 import { PageHeader } from "@/components/page-header";
 import { MAP_BUCKETS, UsMap } from "@/components/us-map";
@@ -32,7 +32,8 @@ import { useAppointments } from "./use-appointments";
  * least one appointment there. Picking a state on the map slides a
  * panel in from the right, which lists the same appointments two ways: By
  * agent (each agent with the carriers that appoint them there) or By carrier
- * (each carrier with the agents it appoints there). The Appointments table
+ * (each carrier with the agents it appoints there). Each line shows that
+ * appointment's writing number. The Appointments table
  * lists every appointment, sorts and searches (agent, carrier, state code or
  * name), and expands to show its states and notes.
  *
@@ -126,13 +127,9 @@ const COLUMNS: DataTableColumn<AppointmentRow>[] = [
   {
     id: "writingNumber",
     header: "Writing number",
-    cell: ({ contract }) =>
-      contract.writingNumber ? (
-        contract.writingNumber
-      ) : (
-        <span className="text-fg-faint">No writing number</span>
-      ),
-    className: "font-mono text-fg-muted",
+    cell: ({ contract }) => (
+      <CopyableNumber value={contract.writingNumber} label="Writing number" empty="No writing number" />
+    ),
     sortValue: ({ contract }) => contract.writingNumber,
     searchText: ({ contract }) => contract.writingNumber,
   },
@@ -376,14 +373,12 @@ export function ContractsView({
           // This state's licence number, on the right of the agent name.
           licenseNumber: panelCode ? item.licenseNumbers[panelCode] : undefined,
           label: `Carriers appointing ${item.name}`,
-          chips: others.map(({ contract, carrier, states }) => ({
+          chips: others.map(({ contract, carrier }) => ({
             id: carrier.id,
             href: `/carriers/${carrier.id}`,
             name: carrier.name,
             inactive: carrier.status === "inactive",
             contract,
-            states,
-            editLabel: `Edit ${item.name} at ${carrier.name}`,
           })),
         }))
       : byCarrier.map(({ item, others }) => ({
@@ -400,14 +395,12 @@ export function ContractsView({
           ),
           licenseNumber: undefined as string | undefined,
           label: `Agents appointed with ${item.name}`,
-          chips: others.map(({ contract, agent, states }) => ({
+          chips: others.map(({ contract, agent }) => ({
             id: agent.id,
             href: `/agents/${agent.id}`,
             name: agent.name,
             inactive: agent.status === "inactive",
             contract,
-            states,
-            editLabel: `Edit ${agent.name} at ${item.name}`,
           })),
         }));
 
@@ -554,10 +547,7 @@ export function ContractsView({
                         {selectedName}
                       </h2>
                       <div className="mt-0.5 flex items-baseline text-xs text-fg-muted">
-                        <LicenseNumber
-                          value={panelCode ? agencyLicenseNumbers[panelCode] : undefined}
-                          className="text-xs text-fg-muted"
-                        />
+                        <LicenseNumber value={panelCode ? agencyLicenseNumbers[panelCode] : undefined} />
                       </div>
                     </div>
                     <button
@@ -615,34 +605,23 @@ export function ContractsView({
                       <ul className="mt-6 space-y-4 text-sm p-2  ">
                         {selectedGroups.map((group) => (
                           <li key={group.key} className="border-b border-line pb-4 ">
-                            <p className="flex items-baseline justify-between gap-3 font-semibold text-fg">
+                            <p className="flex items-center justify-between gap-3 font-semibold text-fg">
                               <span className="min-w-0">{group.title}</span>
                               {stateView === "agent" ? (
-                                <span
-                                  className={`shrink-0 font-mono text-sm font-normal tabular-nums ${
-                                    group.licenseNumber ? "text-fg-muted" : "text-fg-faint"
-                                  }`}
-                                  title={
-                                    group.licenseNumber
-                                      ? `Licence number ${group.licenseNumber}`
-                                      : "No licence number on file for this state"
-                                  }
-                                >
-                                  {group.licenseNumber ?? "No number yet"}
-                                </span>
+                                <LicenseNumber value={group.licenseNumber} className="shrink-0" />
                               ) : null}
                             </p>
                             <ul aria-label={group.label} className=" pl-4 list-disc" >
                               {group.chips.map((chip) => (
-                                // Clicking the line opens Edit; the name link goes to the
-                                // profile instead. The states button is the keyboard way in.
+                                // Clicking the line opens Edit. The name link goes to the
+                                // profile, and the number's copy control stays on the number.
                                 <li
                                   key={chip.id}
                                   onClick={() => setEditor({ mode: "edit", contract: chip.contract })}
                                   className="cursor-pointer rounded hover:bg-surface-hover"
                                 >
-                                  {/* Name stays whole; a long code list wraps on the right. */}
-                                  <div className="flex items-baseline justify-between gap-2">
+                                  {/* Name stays whole; the writing number sits on the right. */}
+                                  <div className="flex items-center justify-between gap-2">
                                     <span className="shrink-0">
                                       <Link
                                         href={chip.href}
@@ -655,18 +634,12 @@ export function ContractsView({
                                         <span className="text-xs text-fg-faint"> (inactive)</span>
                                       ) : null}
                                     </span>
-                                    <button
-                                      type="button"
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        setEditor({ mode: "edit", contract: chip.contract });
-                                      }}
-                                      title={chip.editLabel}
-                                      className="min-w-0 rounded px-1 text-right text-xs tabular-nums text-fg-faint hover:text-fg"
-                                    >
-                                      {stateSummary(chip.states)}
-                                      <span className="sr-only">. {chip.editLabel}</span>
-                                    </button>
+                                    <CopyableNumber
+                                      value={chip.contract.writingNumber}
+                                      label="Writing number"
+                                      empty="No writing number"
+                                      className="shrink-0"
+                                    />
                                   </div>
                                 </li>
                               ))}

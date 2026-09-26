@@ -175,7 +175,7 @@ export function LicenseCards({ codes, numbers, empty }: LicenseCardsProps) {
         <li
           key={code}
           title={US_STATE_NAMES[code]}
-          className="flex items-baseline justify-between rounded-lg bg-surface-muted px-3 py-2 ring-1 ring-inset ring-line"
+          className="flex items-center justify-between gap-2 rounded-lg bg-surface-muted px-3 py-2 ring-1 ring-inset ring-line"
         >
           <span className="font-mono text-sm font-bold text-fg">
             {code}

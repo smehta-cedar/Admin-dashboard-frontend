@@ -1,3 +1,4 @@
+import { LicenseNumber } from "@/components/license-number";
 import { Panel, PanelEmpty, ProfileTable } from "@/components/profile-shell";
 import { StatusBadge } from "@/components/status-badge";
 import { formatLicenceDate, type StateLicense } from "@/lib/state-licenses";
@@ -37,8 +38,8 @@ export function StateLicensesPanel({ licenses, className }: StateLicensesPanelPr
                   <span className="sr-only"> ({US_STATE_NAMES[license.state]})</span>
                 ) : null}
               </td>
-              <td className="min-w-0 truncate px-3 py-2.5 align-middle font-mono text-fg-muted">
-                {license.licenseNumber || <span className="text-fg-faint">No number yet</span>}
+              <td className="min-w-0 px-3 py-2.5 align-middle">
+                <LicenseNumber value={license.licenseNumber} />
               </td>
               <td className="px-3 py-2.5 align-middle">
                 <StatusBadge status={license.status} />
