@@ -10,7 +10,7 @@ import { LoginForm } from "./login-form";
  * Fake sign-in, outside the dashboard group so there is no sidebar or navbar.
  * The form matches what is typed against the users list in the browser and
  * sets a plain cookie; see lib/fake-session.ts for why that is only a
- * placeholder. Already signed in? Straight to the dashboard.
+ * placeholder. Already signed in? Straight to the CRM home at /overview.
  */
 
 export const metadata: Metadata = {
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 };
 
 export default async function LoginPage() {
-  if (await getSessionUser()) redirect("/");
+  if (await getSessionUser()) redirect("/overview");
 
   const users = await getUsers();
 

@@ -1,0 +1,15 @@
+[
+  {
+    "id": "7",
+    "type": "merch",
+    "status": "pending",
+    "createdAt": "2026-09-26T15:16:55.666Z",
+    "buyerName": "Shop Check",
+    "email": "shop-check@example.com",
+    "phone": "(555)010-9999",
+    "address": "1 Main St, Town, TX 00000",
+    "size": "M",
+    "color": "teal",
+    "quantity": 1
+  }
+]

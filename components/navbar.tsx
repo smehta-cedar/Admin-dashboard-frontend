@@ -71,7 +71,7 @@ export function Navbar({
           }`}
         >
           <Link
-            href="/"
+            href="/overview"
             className={`flex items-center gap-3 ${railCollapsed ? "" : "lg:min-w-0 lg:px-3"}`}
           >
             <span className="sm:hidden">

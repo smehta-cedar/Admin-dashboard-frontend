@@ -9,7 +9,8 @@ import { UnsavedBanner } from "@/components/unsaved-banner";
 import type { AgentStateLicenseRecord } from "@/lib/agent-state-licenses";
 import { yearMonthOf } from "@/lib/calendar";
 import { REQUEST_STATUSES, REQUEST_TYPE_LABELS } from "@/lib/request-options";
-import type { RequestRecord, RequestStatus } from "@/lib/requests";
+import type { MerchRequestRecord, RequestRecord, RequestStatus } from "@/lib/requests";
+import { TEE, colorLabel } from "@/lib/shop";
 import { formatLicenceDate } from "@/lib/state-licenses";
 import { US_STATE_NAMES } from "@/lib/us-states";
 import { HrCalendar, type DayOffMark, type ExpiryMark } from "./hr-calendar";
@@ -22,8 +23,11 @@ import { HrCalendar, type DayOffMark, type ExpiryMark } from "./hr-calendar";
  * is what the calendar draws a day off in. Licence expirations are the end
  * dates of the agents' state licence rows, passed in by page.tsx. Every
  * request is listed, whatever its type or status; contracts have no date so
- * the list is the only place they show. Status changes live in the store
- * until a refresh, like every other edit in the app.
+ * the list is the only place they show. Tee orders from the public shop
+ * (the merch type) list too, with the buyer in the Person column and the
+ * shipping and contact details in the row; only day-off requests reach the
+ * calendar. Status changes live in the store until a refresh, like every
+ * other edit in the app.
  */
 
 type HrViewProps = {
@@ -48,19 +52,26 @@ export function HrView({ licenses, today }: HrViewProps) {
   const [month, setMonth] = useState(() => yearMonthOf(today));
 
   const agentName = (id: string) => agents.find((agent) => agent.id === id)?.name ?? `Agent ${id}`;
+  /** Who the request is for: the agent, or the tee buyer for a merch order. */
+  const personOf = (request: RequestRecord) =>
+    request.type === "merch" ? request.buyerName : agentName(request.agentId);
   const carrierName = (id: string) => carriers.find((carrier) => carrier.id === id)?.name ?? `Carrier ${id}`;
 
   /** What a request asks for, as one line: the Details cell and its search text. */
   const detailOf = (request: RequestRecord): string => {
     switch (request.type) {
       case "licensing":
-        return `${request.state} · ${US_STATE_NAMES[request.state] ?? request.state}`;
       case "contract":
-        return carrierName(request.carrierId);
+        return `${request.state} · ${US_STATE_NAMES[request.state] ?? request.state} · ${carrierName(request.carrierId)}`;
       case "dayOff":
         return rangeText(request.startDate, request.endDate);
+      case "merch":
+        return `${TEE.name} · ${request.quantity} × ${request.size} · ${colorLabel(request.color)}`;
     }
   };
+
+  /** A merch order's second and third lines: where to ship, and how to reach the buyer. */
+  const merchContact = (request: MerchRequestRecord) => [request.address, `${request.email} · ${request.phone}`];
 
   const dayOffs: DayOffMark[] = requests.flatMap((request) =>
     request.type === "dayOff"
@@ -99,12 +110,13 @@ export function HrView({ licenses, today }: HrViewProps) {
         searchText: (request) => REQUEST_TYPE_LABELS[request.type],
       },
       {
-        id: "agent",
-        header: "Agent",
-        cell: (request) => agentName(request.agentId),
+        id: "person",
+        // The agent it is for, or the buyer of a tee order.
+        header: "Person",
+        cell: (request) => personOf(request),
         className: "whitespace-nowrap text-fg",
-        sortValue: (request) => agentName(request.agentId),
-        searchText: (request) => agentName(request.agentId),
+        sortValue: (request) => personOf(request),
+        searchText: (request) => personOf(request),
       },
       {
         id: "detail",
@@ -112,11 +124,29 @@ export function HrView({ licenses, today }: HrViewProps) {
         cell: (request) => (
           <>
             <span>{detailOf(request)}</span>
+            {request.type === "merch" ? (
+              /* Shipping address as typed (may span lines), then email and
+                 phone, so the office can reach the buyer from this row. */
+              <>
+                <p className="mt-0.5 whitespace-pre-line text-xs text-fg-subtle">{request.address}</p>
+                <p className="mt-0.5 text-xs text-fg-subtle">
+                  <a href={`mailto:${request.email}`} className="hover:text-fg hover:underline">
+                    {request.email}
+                  </a>
+                  {" · "}
+                  {request.phone}
+                </p>
+              </>
+            ) : null}
             {request.note ? <p className="mt-0.5 text-xs text-fg-subtle">{request.note}</p> : null}
           </>
         ),
         className: "text-fg-muted",
-        searchText: (request) => [detailOf(request), request.note ?? ""],
+        searchText: (request) => [
+          detailOf(request),
+          ...(request.type === "merch" ? merchContact(request) : []),
+          request.note ?? "",
+        ],
       },
       {
         id: "filed",
@@ -133,7 +163,7 @@ export function HrView({ licenses, today }: HrViewProps) {
           <select
             value={request.status}
             onChange={(event) => setStatus(request.id, event.target.value as RequestStatus)}
-            aria-label={`Status of ${agentName(request.agentId)}'s ${REQUEST_TYPE_LABELS[request.type].toLowerCase()} request`}
+            aria-label={`Status of ${personOf(request)}'s ${REQUEST_TYPE_LABELS[request.type].toLowerCase()} request`}
             className={`${TOOLBAR_INPUT_CLASS} py-1 text-xs font-medium capitalize ${STATUS_TEXT_CLASSES[request.status]}`}
           >
             {REQUEST_STATUSES.map((status) => (

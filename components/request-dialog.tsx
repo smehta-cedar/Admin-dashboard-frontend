@@ -11,13 +11,13 @@ import {
   type RequestError,
   type RequestValues,
 } from "@/lib/request-options";
-import type { RequestType } from "@/lib/requests";
+import type { AgentRequestType } from "@/lib/requests";
 import { US_STATES } from "@/lib/us-states";
 
 /*
  * The Create-a-request popup the navbar opens from any page: one dialog, the
- * type first, then the fields that type needs — a state for licensing, a
- * carrier for a contract, first and last day for a day off — plus the agent
+ * type first, then the fields that type needs — a state and a carrier for
+ * licensing or a contract, first and last day for a day off — plus the agent
  * it is for and an optional note. Saving files a pending request into the
  * requests store (components/requests-store.tsx), where the HR page picks it
  * up. Nothing reaches a server; a refresh brings back the JSON.
@@ -50,7 +50,7 @@ function readValues(form: HTMLFormElement): RequestValues {
   const text = (field: keyof RequestValues) => String(data.get(field) ?? "").trim();
   const type = text("type");
   return {
-    type: REQUEST_TYPES.includes(type as RequestType) ? (type as RequestType) : "licensing",
+    type: REQUEST_TYPES.includes(type as AgentRequestType) ? (type as AgentRequestType) : "licensing",
     agentId: text("agentId"),
     note: text("note"),
     state: text("state"),
@@ -76,7 +76,7 @@ function PartyOptions({ parties, placeholder }: { parties: RequestParty[]; place
 
 function RequestForm({ id, close }: { id: string; close: () => void }) {
   const { agents, carriers, addRequest } = useRequestsStore();
-  const [type, setType] = useState<RequestType>("licensing");
+  const [type, setType] = useState<AgentRequestType>("licensing");
   const [error, setError] = useState<RequestError | null>(null);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -123,7 +123,7 @@ function RequestForm({ id, close }: { id: string; close: () => void }) {
             name="type"
             value={type}
             onChange={(event) => {
-              setType(event.target.value as RequestType);
+              setType(event.target.value as AgentRequestType);
               setError(null);
             }}
             className={INPUT_CLASS}
@@ -148,39 +148,38 @@ function RequestForm({ id, close }: { id: string; close: () => void }) {
           </select>
         </Field>
 
-        {type === "licensing" ? (
-          <Field label="State" htmlFor={`${id}-state`} className="sm:col-span-2" {...stateError.field}>
-            <select
-              id={`${id}-state`}
-              name="state"
-              required
-              defaultValue=""
-              className={INPUT_CLASS}
-              {...stateError.input}
-            >
-              <option value="">Choose a state</option>
-              {US_STATES.map((state) => (
-                <option key={state.code} value={state.code}>
-                  {state.name} ({state.code})
-                </option>
-              ))}
-            </select>
-          </Field>
-        ) : null}
-
-        {type === "contract" ? (
-          <Field label="Carrier" htmlFor={`${id}-carrier`} className="sm:col-span-2" {...carrierError.field}>
-            <select
-              id={`${id}-carrier`}
-              name="carrierId"
-              required
-              defaultValue=""
-              className={INPUT_CLASS}
-              {...carrierError.input}
-            >
-              <PartyOptions parties={carriers} placeholder="Choose a carrier" />
-            </select>
-          </Field>
+        {type === "licensing" || type === "contract" ? (
+          <>
+            <Field label="State" htmlFor={`${id}-state`} {...stateError.field}>
+              <select
+                id={`${id}-state`}
+                name="state"
+                required
+                defaultValue=""
+                className={INPUT_CLASS}
+                {...stateError.input}
+              >
+                <option value="">Choose a state</option>
+                {US_STATES.map((state) => (
+                  <option key={state.code} value={state.code}>
+                    {state.name} ({state.code})
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Carrier" htmlFor={`${id}-carrier`} {...carrierError.field}>
+              <select
+                id={`${id}-carrier`}
+                name="carrierId"
+                required
+                defaultValue=""
+                className={INPUT_CLASS}
+                {...carrierError.input}
+              >
+                <PartyOptions parties={carriers} placeholder="Choose a carrier" />
+              </select>
+            </Field>
+          </>
         ) : null}
 
         {type === "dayOff" ? (

@@ -46,7 +46,7 @@ export function LoginForm({ users }: LoginFormProps) {
     setSessionCookie(user.id);
     // The dashboard layout reads the cookie on the server; refresh so no
     // cached signed-out render is reused.
-    router.push("/");
+    router.push("/overview");
     router.refresh();
   };
 

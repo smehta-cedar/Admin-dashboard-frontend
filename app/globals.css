@@ -28,6 +28,11 @@
   --color-brand-ink: #17664f;
   /* Tinted surface for active / selected states. */
   --color-brand-soft: #e9f6f1;
+  /* Text on the brand gradient (bg-brand-gradient). The gradient is the same
+     in both themes and too light for white text, so this stays dark in dark
+     mode too: 9:1 on the teal end, 8:1 on the green. */
+  --color-gradient-ink: #0b1f19;
+  --color-gradient-ink-muted: #1f3a32;
 
   /* ---- Surfaces ------------------------------------------------------- */
   /* The page behind everything. */

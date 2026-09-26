@@ -41,7 +41,7 @@ type SidebarProps = {
   collapsed?: boolean;
 };
 
-/** "/" matches only itself; other items also match their nested routes. */
+/** "/" matches only itself (kept for any future root link); other items also match their nested routes. */
 function isActive(pathname: string, href: string, activePrefix?: string, activeExcept: string[] = []) {
   if (activePrefix) return pathname.startsWith(activePrefix) && !activeExcept.includes(pathname);
   if (href === "/") return pathname === "/";

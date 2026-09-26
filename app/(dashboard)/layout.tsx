@@ -11,7 +11,7 @@ import { getSessionUser } from "@/lib/session";
 import { byName } from "@/lib/text";
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/", label: "Overview", icon: "overview" },
+  { href: "/overview", label: "Overview", icon: "overview" },
   {
     href: "/agents",
     label: "Agents",

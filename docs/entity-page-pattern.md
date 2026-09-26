@@ -588,16 +588,28 @@ pure `newRequest`), [data/requests.json](../data/requests.json),
 [components/request-dialog.tsx](../components/request-dialog.tsx).
 
 A request is one agent asking for one thing. `RequestRecord` is a union on
-`type`: `licensing` carries a `state` code, `contract` a `carrierId`, `dayOff`
-an inclusive `startDate` / `endDate` (`YYYY-MM-DD`). Every request has `id`,
+`type`: `licensing` and `contract` each carry a `state` code and a `carrierId`,
+`dayOff` an inclusive `startDate` / `endDate` (`YYYY-MM-DD`). Every request has `id`,
 `agentId`, `status` (`pending | approved | denied`, pending when filed),
 `createdAt` and an optional `note`. A missing or unknown status loads as
 pending with a `console.warn`.
 
+The one exception is `merch`: a Cedar Grove tee order from the public shop
+([app/shop/](../app/shop/), copy and options in [lib/shop.ts](../lib/shop.ts)).
+It has no `agentId`; it carries `buyerName`, `email`, `phone`, `address`,
+`size`, `color` and `quantity`. The shop's server action
+(`app/shop/actions.ts`) appends it as pending to
+[data/merch-requests.json](../data/merch-requests.json), which
+[lib/merch-requests.ts](../lib/merch-requests.ts) reads with fs at request
+time and `getRequests()` merges with `requests.json` (IDs run across both).
+`REQUEST_TYPES` leaves merch out, so the dialog never offers it;
+`REQUEST_TYPE_LABELS` has it for the HR Type column.
+
 - **Filed from anywhere.** The navbar's "+" (`CreateRequestButton`, just
   left of the theme toggle, label "Create a request") opens `RequestDialog`
-  in the existing `ModalDialog`: type first, then that type's fields, the
-  agent, an optional note. `newRequest` checks the agent, the type's field
+  in the existing `ModalDialog`: type first, then that type's fields (state
+  and carrier for licensing and contract), the
+  agent, an optional note. `newRequest` checks the agent, the type's fields
   and that a day off ends on or after it starts, and returns a
   `RequestError` shown under the field.
 - **Held above every page.** Because the button is global, the list lives in
@@ -624,8 +636,10 @@ the view takes requests and names from the store.
   each Sunday it runs into. A licence's `endDate` draws one chip that day
   ("TX expires · Maria Alva"). Contracts have no date and stay on the list.
   The month starts on the server's today (a prop) so the first render agrees.
-- **List**: a `DataTable` of every request — Type, Agent, Details (state
-  with its name, carrier name, or the date range, with the note under it),
+- **List**: a `DataTable` of every request — Type, Person (the agent, or a
+  tee order's buyer), Details (state with its name and the carrier name, the
+  date range, or for merch the tee with quantity, size and color over the
+  shipping address and the buyer's email and phone; the note under it),
   Filed (the UTC date of `createdAt`, formatted from the string), Status as
   a `<select>` of pending / approved / denied that calls `setStatus`. HR is
   not a `searchable` nav item, so the table has no search of its own.

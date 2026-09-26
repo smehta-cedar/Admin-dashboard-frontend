@@ -5,21 +5,24 @@
  */
 
 import { nextId } from "@/lib/change-notes";
-import type { RequestRecord, RequestStatus, RequestType } from "@/lib/requests";
+import type { AgentRequestType, RequestRecord, RequestStatus, RequestType } from "@/lib/requests";
 
-export const REQUEST_TYPES: readonly RequestType[] = ["licensing", "contract", "dayOff"];
+/** What the Create-a-request dialog offers. Merch is filed by the shop, never here. */
+export const REQUEST_TYPES: readonly AgentRequestType[] = ["licensing", "contract", "dayOff"];
 
+/** Every type, for the HR table's Type column. */
 export const REQUEST_TYPE_LABELS: Record<RequestType, string> = {
   licensing: "Licensing",
   contract: "Contract",
   dayOff: "Day off",
+  merch: "Merch",
 };
 
 export const REQUEST_STATUSES: readonly RequestStatus[] = ["pending", "approved", "denied"];
 
-/** What the dialog hands over: the type's own field is read for that type only. */
+/** What the dialog hands over: licensing and contract read state and carrier; a day off reads its dates. */
 export type RequestValues = {
-  type: RequestType;
+  type: AgentRequestType;
   agentId: string;
   note: string;
   state: string;
@@ -54,13 +57,16 @@ export function newRequest(values: RequestValues, existing: RequestRecord[], now
 
   switch (values.type) {
     case "licensing":
+    case "contract": {
       if (!values.state) return { error: { field: "state", message: "Choose a state." }, request: null };
-      return { error: null, request: { ...base, type: "licensing", state: values.state } };
-    case "contract":
       if (!values.carrierId) {
         return { error: { field: "carrierId", message: "Choose a carrier." }, request: null };
       }
-      return { error: null, request: { ...base, type: "contract", carrierId: values.carrierId } };
+      return {
+        error: null,
+        request: { ...base, type: values.type, state: values.state, carrierId: values.carrierId },
+      };
+    }
     case "dayOff":
       if (!values.startDate) {
         return { error: { field: "startDate", message: "Enter the first day off." }, request: null };
