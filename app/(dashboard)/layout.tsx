@@ -38,6 +38,8 @@ const NAV_ITEMS: NavItem[] = [
       { href: "/carriers/profile", label: "Carrier profile", activePrefix: "/carriers/" },
     ],
   },
+  // The catalog of policy kinds; policies and certifications will point at it.
+  { href: "/policy-types", label: "Policy types", icon: "policy-types" },
   { href: "/rulebook", label: "Rulebook", icon: "rulebook" },
   { href: "/passwords", label: "Passwords", icon: "passwords", searchable: true },
   {
@@ -59,6 +61,9 @@ const NAV_ITEMS: NavItem[] = [
   },
   { href: "/users", label: "Users", icon: "users", searchable: true },
 ];
+
+/** Shown after Users to superusers only: the roles page manages what everyone else may do. */
+const ROLES_ITEM: NavItem = { href: "/roles", label: "Roles", icon: "roles", searchable: true };
 
 /** Pinned to the bottom of the rail: the one org record for this shop. */
 const FOOTER_ITEMS: NavItem[] = [{ href: "/agency", label: "Agency", icon: "agency" }];
@@ -99,7 +104,7 @@ export default async function DashboardLayout({
       carriers={carriers.map(party).sort(byName)}
     >
       <AppShell
-        navItems={NAV_ITEMS}
+        navItems={user.isSuperuser ? [...NAV_ITEMS, ROLES_ITEM] : NAV_ITEMS}
         footerItems={FOOTER_ITEMS}
         user={user}
         searchIndex={searchIndex}

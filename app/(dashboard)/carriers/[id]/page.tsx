@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getAgents } from "@/lib/agents";
 import { getCarrierContracts } from "@/lib/carrier-contracts";
+import { getCarrierPolicies } from "@/lib/carrier-policies";
 import { getCarrier, getCarrierNotes, getCarriers } from "@/lib/carriers";
 import { getPasswords } from "@/lib/passwords";
+import { getPolicyTypes } from "@/lib/policy-types";
 import { rowNumbers } from "@/lib/row-numbers";
 import { byName } from "@/lib/text";
 import { CarrierProfile } from "./carrier-profile";
@@ -19,12 +21,14 @@ export default async function CarrierProfilePage(props: PageProps<"/carriers/[id
   const carrier = await getCarrier(id);
   if (!carrier) notFound();
 
-  const [carriers, notes, carrierContracts, passwords, agents] = await Promise.all([
+  const [carriers, notes, carrierContracts, passwords, agents, policies, policyTypes] = await Promise.all([
     getCarriers(),
     getCarrierNotes(id),
     getCarrierContracts(),
     getPasswords(),
     getAgents(),
+    getCarrierPolicies(id),
+    getPolicyTypes(),
   ]);
   // The number the Carriers list shows: its place among every carrier, by name.
   const number = rowNumbers(carriers).get(id) ?? 0;
@@ -66,6 +70,9 @@ export default async function CarrierProfilePage(props: PageProps<"/carriers/[id
           partyHref: `/agents/${record.agentId}`,
         }))
         .sort((a, b) => a.partyName.localeCompare(b.partyName))}
+      // The policies live on this carrier; the dialog picks their type from the catalog.
+      initialPolicies={policies}
+      policyTypes={policyTypes}
       notes={notes}
     />
   );

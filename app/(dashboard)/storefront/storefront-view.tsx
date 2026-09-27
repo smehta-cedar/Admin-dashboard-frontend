@@ -44,6 +44,20 @@ export function StorefrontView({ initialProducts, notes }: StorefrontViewProps) 
   const columns = useMemo<DataTableColumn<ProductRecord>[]>(
     () => [
       {
+        id: "actions",
+        header: "Action",
+        cell: (product) => (
+          <button
+            type="button"
+            onClick={() => setEditor({ mode: "edit", product })}
+            className={`inline-flex items-center gap-1.5 ${ROW_BUTTON_CLASS}`}
+          >
+            <EditIcon className="size-3.5 shrink-0" />
+            <span className="sr-only"> {product.name}</span>
+          </button>
+        ),
+      },
+      {
         id: "picture",
         header: "Picture",
         srOnlyHeader: true,
@@ -160,22 +174,6 @@ export function StorefrontView({ initialProducts, notes }: StorefrontViewProps) 
         cell: (product) => <StatusBadge status={product.status} />,
         sortValue: (product) => statusRank(product.status),
         searchText: (product) => product.status,
-      },
-      {
-        id: "actions",
-        header: "Actions",
-        srOnlyHeader: true,
-        cell: (product) => (
-          <button
-            type="button"
-            onClick={() => setEditor({ mode: "edit", product })}
-            className={`inline-flex items-center gap-1.5 ${ROW_BUTTON_CLASS}`}
-          >
-            <EditIcon className="size-3.5 shrink-0" />
-            Edit<span className="sr-only"> {product.name}</span>
-          </button>
-        ),
-        className: "text-right",
       },
     ],
     [],

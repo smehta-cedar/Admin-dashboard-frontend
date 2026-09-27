@@ -130,9 +130,10 @@ export async function getUsers(): Promise<UserRecord[]> {
   return users.map(toUserRecord);
 }
 
-/** The roles a user can be given, by name. */
+/** The active roles a user can be given, by name. The full records live on the Roles page (lib/roles.ts). */
 export async function getRoles(): Promise<RoleOption[]> {
-  return apiGet<RoleOption[]>("/roles/");
+  const roles = await apiGet<RoleOption[]>("/roles/", { is_active: true });
+  return roles.map(({ id, name }) => ({ id, name }));
 }
 
 /** Every live user's change notes, newest first (the Users page's expandable rows). */

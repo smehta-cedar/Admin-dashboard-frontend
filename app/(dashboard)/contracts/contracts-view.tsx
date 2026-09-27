@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { PRIMARY_BUTTON_CLASS, ROW_BUTTON_CLASS, TOOLBAR_INPUT_CLASS } from "@/components/classes";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
+import { EditIcon } from "@/components/edit-icon";
 import { EmptyState } from "@/components/empty-state";
 import { CopyableNumber, LicenseNumber } from "@/components/license-number";
 import { NoteList } from "@/components/note-list";
@@ -314,26 +315,24 @@ export function ContractsView({
 
   const columns = useMemo<DataTableColumn<AppointmentRow>[]>(
     () => [
-      ...COLUMNS,
       {
         id: "actions",
-        header: "Actions",
-        srOnlyHeader: true,
+        header: "Action",
         cell: ({ contract, agent, carrier }) => (
           <button
             type="button"
             onClick={() => setEditor({ mode: "edit", contract })}
-            className={ROW_BUTTON_CLASS}
+            className={`inline-flex items-center gap-1.5 ${ROW_BUTTON_CLASS}`}
           >
-            Edit
+            <EditIcon className="size-3.5 shrink-0" />
             <span className="sr-only">
               {" "}
               {agent.name} at {carrier.name}
             </span>
           </button>
         ),
-        className: "text-right",
       },
+      ...COLUMNS,
     ],
     [],
   );

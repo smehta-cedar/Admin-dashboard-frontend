@@ -49,9 +49,9 @@ export function StateLicensesPanel({ licenses, showLines = false, action, onEdit
                     onClick={() => onEdit(license)}
                     aria-label={`Edit the ${US_STATE_NAMES[license.state] ?? license.state} licence`}
                     title="Edit"
-                    className={`inline-flex items-center ${ROW_BUTTON_CLASS}`}
+                    className={`inline-flex items-center gap-1.5 ${ROW_BUTTON_CLASS}`}
                   >
-                    <EditIcon className="size-4 shrink-0" />
+                    <EditIcon className="size-3.5 shrink-0" />
                   </button>
                 </td>
               ) : null}

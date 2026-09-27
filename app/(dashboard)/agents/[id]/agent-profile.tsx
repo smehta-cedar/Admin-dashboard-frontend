@@ -21,11 +21,21 @@ import { StateLicensesPanel } from "@/components/state-licenses-panel";
 import { StatusBadge } from "@/components/status-badge";
 import type { AgentStateLicenseRecord } from "@/lib/agent-state-licenses";
 import type { AgentNote, AgentRecord } from "@/lib/agents";
+import type { CertificationRecord } from "@/lib/certifications";
 import type { CarrierContractRecord } from "@/lib/carrier-contracts";
 import type { CarrierRecord } from "@/lib/carriers";
 import { formatAddress } from "@/lib/address";
 import { writableStates } from "@/lib/us-states";
 import { byName } from "@/lib/text";
+import { saveCertification } from "../../certifications/actions";
+import {
+  CertificationDialog,
+  type CertificationEditor,
+  type CertificationError,
+  type CertificationOption,
+  type CertificationValues,
+} from "../../certifications/certification-dialog";
+import { CertificationsTable } from "../../certifications/certifications-table";
 import { AppointmentDialog } from "../../contracts/appointment-dialog";
 import { useAppointments } from "../../contracts/use-appointments";
 import { saveAgent } from "../actions";
@@ -50,9 +60,10 @@ import {
  *
  *   name row        — initials, name, status, Edit; not in a card
  *   section list | panel (`13rem` | the rest from `lg`)
- *                   — the list names the six sections, each with its
+ *                   — the list names the sections, each with its
  *                     current count: Details, Pending, Carriers, State
- *                     licences, Passwords, Notes. Picking one swaps the
+ *                     licences, Certifications (only for a role that can
+ *                     see them), Passwords, Notes. Picking one swaps the
  *                     panel beside it; only that section renders, full width
  *                     of the column. The choice is React state on this page
  *                     (`section`), not a route, so the Edit and Add carrier
@@ -112,6 +123,10 @@ type AgentProfileProps = {
   initialContracts: CarrierContractRecord[];
   /** This agent's licence rows, in state-code order. */
   initialLicenses: AgentStateLicenseRecord[];
+  /** This agent's certifications, by policy type name; null when the role can't see certifications. */
+  initialCertifications: CertificationRecord[] | null;
+  /** Every policy type, for the certification dialog's select. */
+  policyTypes: CertificationOption[];
   /** This agent's passwords, the carrier as the party, sorted by carrier name. */
   passwords: ProfilePassword[];
   /** This agent's notes, newest first. */
@@ -275,7 +290,7 @@ function pendingItems({ agent, agentCarriers, passwords }: PendingInput): Pendin
   return items;
 }
 
-type SectionKey = "details" | "pending" | "carriers" | "licences" | "passwords" | "notes";
+type SectionKey = "details" | "pending" | "carriers" | "licences" | "certifications" | "passwords" | "notes";
 
 /** One item of the section list: its label and the count its panel shows. */
 type Section = { key: SectionKey; label: string; count: number };
@@ -285,11 +300,15 @@ export function AgentProfile({
   carriers,
   initialContracts,
   initialLicenses,
+  initialCertifications,
+  policyTypes,
   passwords,
   notes,
 }: AgentProfileProps) {
   const [agent, setAgent] = useState(initialAgent);
   const [licenses, setLicenses] = useState(initialLicenses);
+  const [certifications, setCertifications] = useState(initialCertifications);
+  const [certificationEditor, setCertificationEditor] = useState<CertificationEditor | null>(null);
   const [agentEditor, setAgentEditor] = useState<AgentEditor | null>(null);
   // Which section the panel shows. Carriers first: it is what the page is opened for.
   const [section, setSection] = useState<SectionKey>("carriers");
@@ -410,6 +429,10 @@ export function AgentProfile({
     { key: "pending", label: "Pending", count: pending.length },
     { key: "carriers", label: "Carriers", count: agentCarriers.length },
     { key: "licences", label: "State licences", count: licenses.length },
+    // Hidden for a role without certifications view (the list came back as a 403).
+    ...(certifications
+      ? [{ key: "certifications" as const, label: "Certifications", count: certifications.length }]
+      : []),
     { key: "passwords", label: "Passwords", count: passwords.length },
     { key: "notes", label: "Notes", count: notes.length },
   ];
@@ -421,6 +444,19 @@ export function AgentProfile({
     setAgent(result.agent);
     setLicenses(result.licenses);
     return null;
+  };
+
+  /** Adds or edits one of this agent's certifications through the API. Resolves with the dialog's errors, if any. */
+  const saveAgentCertification = async (values: CertificationValues): Promise<CertificationError[]> => {
+    const editingId = certificationEditor?.mode === "edit" ? certificationEditor.certification.id : undefined;
+    const result = await saveCertification(values, "agent", editingId);
+    if (!result.ok) return result.errors;
+    setCertifications((current) =>
+      [...(current ?? []).filter((row) => row.id !== result.certification.id), result.certification].sort(
+        (a, b) => a.policyTypeName.localeCompare(b.policyTypeName),
+      ),
+    );
+    return [];
   };
 
   return (
@@ -541,6 +577,31 @@ export function AgentProfile({
             </Panel>
           ) : section === "licences" ? (
             <StateLicensesPanel licenses={licenses} showLines />
+          ) : section === "certifications" && certifications ? (
+            <Panel
+              title="Certifications"
+              count={certifications.length}
+              action={
+                <button
+                  type="button"
+                  onClick={() => setCertificationEditor({ mode: "add" })}
+                  className={PROFILE_BUTTON_CLASS}
+                >
+                  <span aria-hidden="true">+ </span>Add certification
+                  <span className="sr-only"> for {agent.name}</span>
+                </button>
+              }
+            >
+              {certifications.length === 0 ? (
+                <PanelEmpty>No certifications recorded.</PanelEmpty>
+              ) : (
+                <CertificationsTable
+                  certifications={certifications}
+                  leading="policyType"
+                  onEdit={(certification) => setCertificationEditor({ mode: "edit", certification })}
+                />
+              )}
+            </Panel>
           ) : section === "passwords" ? (
             <PasswordsPanel passwords={passwords} partyHeading="Carrier" />
           ) : (
@@ -555,6 +616,15 @@ export function AgentProfile({
       </div>
 
       <AgentDialog editor={agentEditor} onSave={saveAgentEdit} onClose={() => setAgentEditor(null)} />
+
+      {/* Agent fixed to this profile; the form picks the policy type. */}
+      <CertificationDialog
+        editor={certificationEditor}
+        fixed={{ kind: "agent", agent: { id: agent.id, name: agent.name } }}
+        options={policyTypes}
+        onSave={saveAgentCertification}
+        onClose={() => setCertificationEditor(null)}
+      />
 
       {/* Agent locked to this profile: the only option, already chosen. */}
       <AppointmentDialog

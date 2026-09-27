@@ -8,6 +8,7 @@ import {
   ROW_BUTTON_CLASS,
   TOOLBAR_INPUT_CLASS,
 } from "@/components/classes";
+import { EditIcon } from "@/components/edit-icon";
 import { Field } from "@/components/field";
 import { StateSelect } from "@/components/state-select";
 import { formatPhone } from "@/lib/phone";
@@ -577,6 +578,9 @@ export function ProducerForm<E extends object = Record<never, never>>({
           <thead className="bg-surface-hover text-xs text-fg-muted">
             <tr>
               <th scope="col" className="px-3 py-2 font-medium">
+                Action
+              </th>
+              <th scope="col" className="px-3 py-2 font-medium">
                 State
               </th>
               <th scope="col" className="px-3 py-2 font-medium">
@@ -597,14 +601,29 @@ export function ProducerForm<E extends object = Record<never, never>>({
                   Lines
                 </th>
               ) : null}
-              <th scope="col" className="px-3 py-2">
-                <span className="sr-only">Actions</span>
-              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
             {licenceList.map((entry) => (
               <tr key={entry.state} className="text-fg">
+                <td className="px-3 py-1 whitespace-nowrap">
+                  <button
+                    type="button"
+                    onClick={() => editLicence(entry.state)}
+                    className={`inline-flex items-center gap-1.5 ${ROW_BUTTON_CLASS}`}
+                  >
+                    <EditIcon className="size-3.5 shrink-0" />
+                    <span className="sr-only"> {US_STATE_NAMES[entry.state] ?? entry.state}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeLicence(entry.state)}
+                    aria-label={`Remove the ${US_STATE_NAMES[entry.state] ?? entry.state} licence`}
+                    className={`${ROW_BUTTON_CLASS} hover:text-danger`}
+                  >
+                    Remove
+                  </button>
+                </td>
                 <td className="px-3 py-2">
                   <span className="font-mono text-xs font-medium text-fg-muted">{entry.state}</span>{" "}
                   {US_STATE_NAMES[entry.state] ?? ""}
@@ -617,24 +636,6 @@ export function ProducerForm<E extends object = Record<never, never>>({
                   </>
                 ) : null}
                 {lines ? <td className="px-3 py-2">{linesText(entry)}</td> : null}
-                <td className="px-3 py-1 text-right whitespace-nowrap">
-                  <button
-                    type="button"
-                    onClick={() => editLicence(entry.state)}
-                    aria-label={`Edit the ${US_STATE_NAMES[entry.state] ?? entry.state} licence`}
-                    className={ROW_BUTTON_CLASS}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => removeLicence(entry.state)}
-                    aria-label={`Remove the ${US_STATE_NAMES[entry.state] ?? entry.state} licence`}
-                    className={`${ROW_BUTTON_CLASS} hover:text-danger`}
-                  >
-                    Remove
-                  </button>
-                </td>
               </tr>
             ))}
           </tbody>

@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getAgent, getAgentNotes, getAgentWithLicenses } from "@/lib/agents";
+import { allowForbidden } from "@/lib/api-server";
 import { getCarrierContracts } from "@/lib/carrier-contracts";
 import { getCarriers } from "@/lib/carriers";
+import { getCertifications } from "@/lib/certifications";
 import { getPasswords } from "@/lib/passwords";
+import { getPolicyTypes } from "@/lib/policy-types";
 import { byName } from "@/lib/text";
 import { AgentProfile } from "./agent-profile";
 
@@ -19,11 +22,14 @@ export default async function AgentProfilePage(props: PageProps<"/agents/[id]">)
   if (!loaded) notFound();
   const { agent, licenses } = loaded;
 
-  const [notes, carrierContracts, passwords, carriers] = await Promise.all([
+  const [notes, carrierContracts, passwords, carriers, certifications, policyTypes] = await Promise.all([
     getAgentNotes(id),
     getCarrierContracts(),
     getPasswords(),
     getCarriers(),
+    // Null for a role without certifications view: the profile then hides the section.
+    allowForbidden(getCertifications({ agentId: id })),
+    allowForbidden(getPolicyTypes()),
   ]);
 
   return (
@@ -40,6 +46,8 @@ export default async function AgentProfilePage(props: PageProps<"/agents/[id]">)
         .sort(byName)}
       initialContracts={carrierContracts}
       initialLicenses={licenses}
+      initialCertifications={certifications}
+      policyTypes={(policyTypes ?? []).map(({ id, name, status }) => ({ id, name, status }))}
       passwords={passwords
         .filter((record) => record.agentId === id)
         .map((record) => ({

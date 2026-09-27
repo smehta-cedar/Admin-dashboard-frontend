@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { EditIcon } from "@/components/edit-icon";
 import { HydratedNoteList } from "@/components/hydrated-note-list";
 import { CopyableNumber } from "@/components/license-number";
 import {
@@ -9,6 +10,7 @@ import {
   PasswordsPanel,
   Panel,
   PanelEmpty,
+  PROFILE_BUTTON_CLASS,
   PROFILE_LINK_CLASS,
   ProfileHeader,
   ProfileNameRow,
@@ -17,9 +19,13 @@ import {
   StateChipCell,
   type ProfilePassword,
 } from "@/components/profile-shell";
+import { ROW_BUTTON_CLASS } from "@/components/classes";
 import { StatusBadge } from "@/components/status-badge";
 import type { AgentStatus } from "@/lib/agents";
+import type { CarrierPolicyRecord } from "@/lib/carrier-policies";
 import type { CarrierNote, CarrierRecord } from "@/lib/carriers";
+import type { PolicyTypeRecord } from "@/lib/policy-types";
+import { byName } from "@/lib/text";
 import { writableStates } from "@/lib/us-states";
 import { saveCarrier } from "../actions";
 import {
@@ -29,26 +35,39 @@ import {
   type CarrierError,
   type CarrierValues,
 } from "../carrier-dialog";
+import { saveCarrierPolicy } from "../policy-actions";
+import {
+  CarrierPolicyDialog,
+  type CarrierPolicyEditor,
+  type CarrierPolicyError,
+  type CarrierPolicyValues,
+} from "./carrier-policy-dialog";
 
 /*
  * Profile for one carrier: identity (including the states it is available in,
  * one ceiling on its appointments), then everything linked to it — contracted
- * agents, passwords, and change notes. An agent row shows the states they
- * can actually write here: their appointment narrowed to their own licences
- * (Agents) and this carrier's footprint. Edit opens the same CarrierDialog as
- * the Carriers list and saves through the same server action. Agent names
- * link to their profiles.
+ * agents, its policies, passwords, and change notes. An agent row shows the
+ * states they can actually write here: their appointment narrowed to their
+ * own licences (Agents) and this carrier's footprint. Edit opens the same
+ * CarrierDialog as the Carriers list and saves through the same server
+ * action. Agent names link to their profiles.
+ *
+ * Policies live here and nowhere else: the Policies panel lists the carrier's
+ * named policies (name, policy type, available states, status) and opens the
+ * CarrierPolicyDialog from Add policy and a row's Edit; saves go through the
+ * saveCarrierPolicy server action. A policy's states are offered only from
+ * this carrier's live footprint.
  *
  * Same layout as the agent profile, built from the shared pieces in
  * components/profile-shell.tsx: the name row (initials, name, status, Edit)
  * over one header card holding the carrier's details beside its available
- * states, then panels: Agents beside Notes, and Passwords full width
- * under them.
+ * states, then panels: Agents beside Notes, and Policies and Passwords full
+ * width under them.
  *
- * The carrier is kept in state so an edit shows at once; the notes come
- * from the server (the API writes them), and the action's revalidation
- * brings the new one in. page.tsx keys this component by carrier ID, so
- * switching carriers starts that state again.
+ * The carrier and its policies are kept in state so an edit shows at once;
+ * the notes come from the server (the API writes them), and the action's
+ * revalidation brings the new one in. page.tsx keys this component by
+ * carrier ID, so switching carriers starts that state again.
  */
 
 type AgentRow = {
@@ -67,6 +86,10 @@ type CarrierProfileProps = {
   number: number;
   /** Contracted agents, sorted by name. */
   agents: AgentRow[];
+  /** This carrier's policies, sorted by name. */
+  initialPolicies: CarrierPolicyRecord[];
+  /** Every policy type, for the policy dialog's select. */
+  policyTypes: PolicyTypeRecord[];
   /** This carrier's passwords, the agent as the party, sorted by agent name. */
   passwords: ProfilePassword[];
   /** This carrier's notes, newest first. */
@@ -74,10 +97,21 @@ type CarrierProfileProps = {
 };
 
 const AGENT_COLUMNS = ["Agent", "Writing number", "Writable states", "Status"];
+const POLICY_COLUMNS = ["Action", "Name", "Policy type", "Available states", "Status"];
 
-export function CarrierProfile({ initialCarrier, number, agents, passwords, notes }: CarrierProfileProps) {
+export function CarrierProfile({
+  initialCarrier,
+  number,
+  agents,
+  initialPolicies,
+  policyTypes,
+  passwords,
+  notes,
+}: CarrierProfileProps) {
   const [carrier, setCarrier] = useState(initialCarrier);
   const [editor, setEditor] = useState<CarrierEditor | null>(null);
+  const [policies, setPolicies] = useState(initialPolicies);
+  const [policyEditor, setPolicyEditor] = useState<CarrierPolicyEditor | null>(null);
 
   // Writable is what the appointment actually buys them: its states within
   // this agent's licences and this carrier's live footprint.
@@ -91,6 +125,17 @@ export function CarrierProfile({ initialCarrier, number, agents, passwords, note
     const result = await saveCarrier(values, carrier.id);
     if (!result.ok) return result.errors;
     setCarrier(result.carrier);
+    return [];
+  };
+
+  /** Adds or edits one of this carrier's policies through the API. Resolves with the dialog's errors, if any. */
+  const savePolicy = async (values: CarrierPolicyValues): Promise<CarrierPolicyError[]> => {
+    const editingId = policyEditor?.mode === "edit" ? policyEditor.policy.id : undefined;
+    const result = await saveCarrierPolicy(carrier.id, values, editingId);
+    if (!result.ok) return result.errors;
+    setPolicies((current) =>
+      [...current.filter((policy) => policy.id !== result.policy.id), result.policy].sort(byName),
+    );
     return [];
   };
 
@@ -183,10 +228,70 @@ export function CarrierProfile({ initialCarrier, number, agents, passwords, note
           </div>
         </Panel>
 
+        <Panel
+          title="Policies"
+          count={policies.length}
+          className="xl:col-span-2"
+          action={
+            <button
+              type="button"
+              onClick={() => setPolicyEditor({ mode: "add" })}
+              className={PROFILE_BUTTON_CLASS}
+            >
+              <span aria-hidden="true">+ </span>Add policy
+              <span className="sr-only"> for {carrier.name}</span>
+            </button>
+          }
+        >
+          {policies.length === 0 ? (
+            <PanelEmpty>No policies recorded.</PanelEmpty>
+          ) : (
+            <ProfileTable columns={POLICY_COLUMNS} rows={policies} rowKey={(policy) => policy.id}>
+              {(policy) => (
+                <>
+                  <td className="px-3 py-1.5 align-middle whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={() => setPolicyEditor({ mode: "edit", policy })}
+                      className={`inline-flex items-center gap-1.5 ${ROW_BUTTON_CLASS}`}
+                    >
+                      <EditIcon className="size-3.5 shrink-0" />
+                      <span className="sr-only"> {policy.name}</span>
+                    </button>
+                  </td>
+                  <td className="min-w-0 truncate px-3 py-2.5 align-middle font-medium text-fg sm:whitespace-nowrap">
+                    {policy.name}
+                  </td>
+                  <td className="min-w-0 truncate px-3 py-2.5 align-middle text-fg-muted">
+                    {policy.policyTypeName}
+                  </td>
+                  <StateChipCell
+                    codes={policy.availableStates}
+                    label={`States ${policy.name} can be sold in`}
+                    empty="No states yet"
+                  />
+                  <td className="px-3 py-2.5 align-middle">
+                    <StatusBadge status={policy.status} />
+                  </td>
+                </>
+              )}
+            </ProfileTable>
+          )}
+        </Panel>
+
         <PasswordsPanel passwords={passwords} partyHeading="Agent" className="xl:col-span-2" />
       </div>
 
       <CarrierDialog editor={editor} onSave={saveCarrierEdit} onClose={() => setEditor(null)} />
+
+      <CarrierPolicyDialog
+        editor={policyEditor}
+        carrierName={carrier.name}
+        carrierStates={carrier.availableStates}
+        policyTypes={policyTypes}
+        onSave={savePolicy}
+        onClose={() => setPolicyEditor(null)}
+      />
     </div>
   );
 }

@@ -181,9 +181,11 @@ A column: `{ id, header, cell(row, ctx), className?, sortValue?, searchText?, sr
   `EmptyState` is still used by the view when the list itself is empty.
 - **Filters that live in the URL** (Passwords' carrier) stay in the view and
   narrow `rows` before they reach `DataTable`; `TOOLBAR_INPUT_CLASS` styles them.
-- Actions column: `{ id: "actions", header: "Actions", srOnlyHeader: true, className: "text-right" }`.
-  When it needs `setEditor`, build `columns` with `useMemo` in the view
-  (spread a module-level `COLUMNS` for the rest if it helps).
+- Action column is first: `{ id: "actions", header: "Action" }`. The cell is an
+  icon-only edit button (`EditIcon`, `inline-flex items-center gap-1.5` plus
+  `ROW_BUTTON_CLASS`) with the row name in an `sr-only` span. No
+  `srOnlyHeader`, no `text-right`. When it needs `setEditor`, build `columns`
+  with `useMemo` in the view (spread a module-level `COLUMNS` after it).
 - Out of scope for now: server-side pagination/filtering, in-cell editing, CSV export.
 
 Styling (inside `DataTable`):
@@ -192,7 +194,7 @@ Styling (inside `DataTable`):
   table `min-w-full text-left text-sm`.
 - Head: `bg-surface-muted`; `th scope="col"`, `whitespace-nowrap px-4 py-2.5 font-medium text-fg-muted`.
 - Body: `divide-y divide-line border-t border-line`; cells `px-4 py-2.5` + column `className`.
-- Column order used on Agents: **ID, NPN, Name, Status, Email, Phone, [actions]**
+- Column order used on Agents: **Action, ID, NPN, Name, Status, Email, Phone**
   (no states column; licences are read on the profile).
 - IDs and codes: `font-mono text-fg-muted`. Secondary text: `text-fg-muted`.
   Primary name: `text-fg`, `whitespace-nowrap`.
@@ -201,8 +203,8 @@ Styling (inside `DataTable`):
   (and `pending: bg-warn-soft text-warn-ink` for Passwords; `review` and `applied:
   bg-info-soft text-info-ink`, `expired: bg-danger-soft text-danger-ink` and an
   outlined neutral `cancelled` / `jit` for state licences).
-- Row action: text button `Edit` with sr-only entity name
-  (`Edit<span className="sr-only"> {name}</span>`), right-aligned.
+- Row action: the first column, heading **Action**, icon-only edit button
+  with the entity name in an `sr-only` span.
 - Secondary/list data (aliases, notes) does **not** go in the main row — see §7.
 
 Profile pages' related tables use `ProfileTable`, which shares the same
@@ -541,6 +543,23 @@ Same pattern as Carriers; the differences:
   then sits in the grid too. `imageUrl` shows in the shop's
   preview and cards and as a thumbnail on the Storefront table; blank draws
   the tee.
+
+### Policy types on the API
+
+- **Policy types** ([lib/policy-types.ts](../lib/policy-types.ts),
+  `/api/v1/policy-types/`, `backend/apps/policies`, route `/policy-types`):
+  the catalog of policy kinds, an entity of its own that is not a carrier's
+  line of business. `PolicyTypeRecord` is `{ id, name, certificationRequired,
+  status }`; the API's `certification_required` is the board's "certification
+  required" flag and `is_active` maps to `status`. The table shows name,
+  certification required (Yes / No) and status; the dialog is name (required),
+  status and a "Certification required" checkbox. `savePolicyType`
+  (`policy-types/actions.ts`) posts or patches and maps a 400's
+  `name` (a duplicate, ignoring case) under the name field, everything else
+  under the form. Notes are written by the API (`getPolicyTypeNotes`), the
+  flag recorded as "yes" / "no"; there is no profile page yet. Policies,
+  state and county availability, agency contracts and agent certifications
+  are not built; they will point at this catalog.
 
 ### Contracts
 
@@ -948,7 +967,7 @@ Passwords-only. The Agent and Carrier status types are unchanged
 
 **Table.**
 
-- Columns: **Agent, Carrier, Portal username, Password, Status, [actions]**.
+- Columns: **Action, Agent, Carrier, Portal username, Password, Status**.
   No ID column; agent and carrier show names.
 - Default sort: agent name, then carrier name. Rows are rebuilt from state on
   every render, so an add or edit lands in its sorted place at once.
@@ -1066,8 +1085,8 @@ sign-in path) rather than half-wired here.
 | `status` | yes | `"active" \| "inactive"` | Inactive users can't sign in (and are signed out on their next request). |
 | `password` | yes | string | Dummy only, like Passwords; never trimmed; redacted in notes. |
 
-- Columns: **Name (expands to Notes), Email, Password (masked `CredentialValue`,
-  never sortable or searchable), Role, Status, [actions]**. ID order.
+- Columns: **Action, Name (expands to Notes), Email, Password (masked `CredentialValue`,
+  never sortable or searchable), Role, Status**. ID order.
 - Loading: an unknown `role` reads as `"staff"`, an unknown `status` as
   `"active"`, each with a `console.warn` naming the user. `data/users.json`
   is kept clean of both, so a warning in dev means a real data problem.

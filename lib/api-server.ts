@@ -86,3 +86,18 @@ export async function apiGetAll<T>(path: string, params?: ApiFetchOptions["param
     page = meta.page + 1;
   }
 }
+
+/**
+ * The list, or null when the role can't see that module (a 403). For a
+ * related list on another entity's page (certifications on an agent
+ * profile), where the page should hide the section rather than fail. Any
+ * other failure still throws.
+ */
+export async function allowForbidden<T>(request: Promise<T>): Promise<T | null> {
+  try {
+    return await request;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 403) return null;
+    throw error;
+  }
+}

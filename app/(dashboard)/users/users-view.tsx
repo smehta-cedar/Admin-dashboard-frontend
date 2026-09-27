@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { PRIMARY_BUTTON_CLASS, ROW_BUTTON_CLASS } from "@/components/classes";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
+import { EditIcon } from "@/components/edit-icon";
 import { EmptyState } from "@/components/empty-state";
 import { NoteList } from "@/components/note-list";
 import { PageHeader } from "@/components/page-header";
@@ -110,22 +111,21 @@ export function UsersView({ initialUsers, notes, roles }: UsersViewProps) {
 
   const columns = useMemo<DataTableColumn<UserRow>[]>(
     () => [
-      ...COLUMNS,
       {
         id: "actions",
-        header: "Actions",
-        srOnlyHeader: true,
+        header: "Action",
         cell: ({ user }) => (
           <button
             type="button"
             onClick={() => setEditor({ mode: "edit", user })}
-            className={ROW_BUTTON_CLASS}
+            className={`inline-flex items-center gap-1.5 ${ROW_BUTTON_CLASS}`}
           >
-            Edit<span className="sr-only"> {user.name}</span>
+            <EditIcon className="size-3.5 shrink-0" />
+            <span className="sr-only"> {user.name}</span>
           </button>
         ),
-        className: "text-right",
       },
+      ...COLUMNS,
     ],
     [],
   );
