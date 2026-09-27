@@ -140,6 +140,12 @@ export async function getCarrierPolicies(carrierId: string): Promise<CarrierPoli
   return policies.map(toCarrierPolicyRecord);
 }
 
+/** Every carrier's policies, active and inactive, for pickers that span carriers. */
+export async function getAllCarrierPolicies(): Promise<CarrierPolicyRecord[]> {
+  const policies = await apiGetAll<ApiCarrierPolicy>("/carrier-policies/");
+  return policies.map(toCarrierPolicyRecord);
+}
+
 /** One policy's change notes, newest first. */
 export async function getCarrierPolicyNotes(policyId: string): Promise<CarrierPolicyNote[]> {
   const notes = await apiGet<ApiCarrierPolicyNote[]>(`/carrier-policies/${encodeURIComponent(policyId)}/notes/`);

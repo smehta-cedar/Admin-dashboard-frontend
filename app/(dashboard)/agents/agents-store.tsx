@@ -4,7 +4,7 @@ import { createContext, useContext, useState, type ReactNode } from "react";
 import type { AgentStateLicenseRecord } from "@/lib/agent-state-licenses";
 import type { AgentRecord } from "@/lib/agents";
 import { byName } from "@/lib/text";
-import { saveAgent } from "./actions";
+import { saveAgent, type SaveAgentResult } from "./actions";
 import type { AgentError, AgentValues } from "./agent-dialog";
 
 /*
@@ -28,6 +28,13 @@ type AgentsStore = {
    * licence rows update at once. Resolves with the form error, if any.
    */
   save: (values: AgentValues, editing?: AgentRecord) => Promise<AgentError | null>;
+  /**
+   * The same save, returning the saved agent. The Add agent page uses it so
+   * it can create certifications for that agent before leaving the page.
+   */
+  commit: (values: AgentValues, editingId?: string) => Promise<SaveAgentResult>;
+  /** Puts a saved agent and their licence rows into the lists, replacing that agent if they are already there. */
+  apply: (agent: AgentRecord, licenses: AgentStateLicenseRecord[]) => void;
 };
 
 const AgentsContext = createContext<AgentsStore | null>(null);
@@ -43,26 +50,34 @@ export function AgentsProvider({ initialAgents, initialLicenses, children }: Age
   const [agents, setAgents] = useState(initialAgents);
   const [licenses, setLicenses] = useState(initialLicenses);
 
-  const save: AgentsStore["save"] = async (values, editing) => {
-    const result = await saveAgent(values, editing?.id);
-    if (!result.ok) return result.error;
-
-    const saved = result.agent;
-    setAgents((current) =>
-      (editing
-        ? current.map((agent) => (agent.id === saved.id ? saved : agent))
-        : [...current, saved]
-      ).sort(byName),
-    );
+  const record = (saved: AgentRecord, savedLicenses: AgentStateLicenseRecord[]) => {
+    setAgents((current) => {
+      const exists = current.some((agent) => agent.id === saved.id);
+      return (exists ? current.map((agent) => (agent.id === saved.id ? saved : agent)) : [...current, saved]).sort(
+        byName,
+      );
+    });
     // This agent's rows are replaced by what the API now holds; the rest stay.
     setLicenses((current) => [
       ...current.filter((license) => license.agentId !== saved.id),
-      ...result.licenses,
+      ...savedLicenses,
     ]);
-    return null;
   };
 
-  return <AgentsContext.Provider value={{ agents, licenses, save }}>{children}</AgentsContext.Provider>;
+  const commit: AgentsStore["commit"] = async (values, editingId) => {
+    const result = await saveAgent(values, editingId);
+    if (result.ok) record(result.agent, result.licenses);
+    return result;
+  };
+
+  const save: AgentsStore["save"] = async (values, editing) => {
+    const result = await commit(values, editing?.id);
+    return result.ok ? null : result.error;
+  };
+
+  return (
+    <AgentsContext.Provider value={{ agents, licenses, save, commit, apply: record }}>{children}</AgentsContext.Provider>
+  );
 }
 
 /** The section's agents state. Only under the agents layout. */

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { PRIMARY_BUTTON_CLASS, ROW_BUTTON_CLASS } from "@/components/classes";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { EditIcon } from "@/components/edit-icon";
@@ -12,28 +12,23 @@ import { formatAddress } from "@/lib/address";
 import type { AgentRecord } from "@/lib/agents";
 import { phoneDigits } from "@/lib/phone";
 import { rowNumbers } from "@/lib/row-numbers";
-import { AgentDialog, type AgentEditor } from "./agent-dialog";
 import { useAgentsStore } from "./agents-store";
 
 /*
- * Agents table. A row's Edit opens the shared AgentDialog
- * (./agent-dialog.tsx), which an agent's profile opens too; Add agent is a
- * link to the /agents/new page, which renders the same form. Saves go to the
- * API through the section store; the API records a note of what changed,
- * read on the profile. The table sorts by header and filters by search.
- * A name links to the agent's profile, which shows their aliases, notes and
- * state licences; rows don't expand and the list has no states column, so
- * search doesn't cover states either. Personal email, personal phone and
- * address have no column but are searchable through the work email and phone
- * columns and the name column. The dialog's licensed states and
- * numbers are the agent's licence rows, which the API keeps in step. Agents
- * and licence rows live in the section's store (./agents-store.tsx), shared
- * with the Add agent page.
+ * Agents table. A row's Edit goes to /agents/[id]/edit, the same page layout
+ * as Add agent (/agents/new), and comes back here. Saves go to the API; the
+ * API records a note of what changed, read on the profile. The table sorts
+ * by header and filters by search. A name links to the agent's profile,
+ * which shows their aliases, notes and state licences; rows don't expand
+ * and the list has no states column, so search doesn't cover states either.
+ * Personal email, personal phone and address have no column but are
+ * searchable through the work email and phone columns and the name column.
+ * Agents and licence rows live in the section's store (./agents-store.tsx),
+ * shared with the Add and Edit pages.
  */
 
 export function AgentsView() {
-  const { agents, save } = useAgentsStore();
-  const [editor, setEditor] = useState<AgentEditor | null>(null);
+  const { agents } = useAgentsStore();
 
   // The ID shown is the agent's place in the name-sorted list, 1…n, not the
   // API's UUID (that only appears in the profile URL). A row number, not a key.
@@ -47,17 +42,14 @@ export function AgentsView() {
         id: "actions",
         header: "Action",
         cell: (agent) => (
-          <button
-            type="button"
-            onClick={() => setEditor({ mode: "edit", agent })}
+          <Link
+            href={`/agents/${agent.id}/edit?from=list`}
+            aria-label={`Edit ${agent.name}`}
             className={`inline-flex items-center gap-1.5 ${ROW_BUTTON_CLASS}`}
           >
             <EditIcon className="size-3.5 shrink-0" />
-            <span className="sr-only"> {agent.name}</span>
-          </button>
+          </Link>
         ),
-        
-        
       },
       {
         id: "number",
@@ -146,12 +138,6 @@ export function AgentsView() {
           unit={["agent", "agents"]}
         />
       )}
-
-      <AgentDialog
-        editor={editor}
-        onSave={(values) => save(values, editor?.mode === "edit" ? editor.agent : undefined)}
-        onClose={() => setEditor(null)}
-      />
     </>
   );
 }

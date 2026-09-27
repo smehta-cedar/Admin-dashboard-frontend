@@ -44,6 +44,18 @@ const ERROR_FIELDS: Record<string, ProducerError["field"]> = {
   licenses: "licenseNumbers",
 };
 
+/** The licence list as the API replaces it. A blank date is left to the API. */
+function licenseBody(values: Pick<AgentValues, "licensedStates" | "licenseNumbers" | "licenseLines" | "licenseDates">) {
+  return values.licensedStates.map((state) => ({
+    state,
+    license_number: values.licenseNumbers[state] ?? "",
+    life: values.licenseLines[state]?.life ?? false,
+    health: values.licenseLines[state]?.health ?? false,
+    start_date: values.licenseDates[state]?.startDate || null,
+    end_date: values.licenseDates[state]?.endDate || null,
+  }));
+}
+
 /** Adds an agent, or edits the one with `editingId`. Resolves with the saved agent and their licence rows. */
 export async function saveAgent(values: AgentValues, editingId?: string): Promise<SaveAgentResult> {
   const body = {
@@ -56,15 +68,7 @@ export async function saveAgent(values: AgentValues, editingId?: string): Promis
     personal_phone: values.personalPhone ?? "",
     address: values.address ?? null,
     is_active: values.status === "active",
-    licenses: values.licensedStates.map((state) => ({
-      state,
-      license_number: values.licenseNumbers[state] ?? "",
-      life: values.licenseLines[state]?.life ?? false,
-      health: values.licenseLines[state]?.health ?? false,
-      // A blank date is left to the API: today / two years on for a new row, unchanged for a kept one.
-      start_date: values.licenseDates[state]?.startDate || null,
-      end_date: values.licenseDates[state]?.endDate || null,
-    })),
+    licenses: licenseBody(values),
   };
   const result = editingId
     ? await apiFetch<ApiAgent>(`/agents/${encodeURIComponent(editingId)}/`, { method: "PATCH", body })
@@ -84,6 +88,32 @@ export async function saveAgent(values: AgentValues, editingId?: string): Promis
   }
 
   // Every dashboard page reads agents (the navbar search and request dialog), so revalidate the lot.
+  revalidatePath("/", "layout");
+  return { ok: true, agent: toAgentRecord(result.data), licenses: toLicenseRecords(result.data) };
+}
+
+/**
+ * Replaces this agent's licences and leaves every other field alone. Used when
+ * a licence is deleted on the edit page, so the row is gone before Save.
+ */
+export async function saveAgentLicenses(
+  agentId: string,
+  values: Pick<AgentValues, "licensedStates" | "licenseNumbers" | "licenseLines" | "licenseDates">,
+): Promise<SaveAgentResult> {
+  const result = await apiFetch<ApiAgent>(`/agents/${encodeURIComponent(agentId)}/`, {
+    method: "PATCH",
+    body: { licenses: licenseBody(values) },
+  });
+
+  if (!result.ok) {
+    if (result.status === 401) redirect("/login");
+    if (result.code === "invalid" && result.errors) {
+      const [, messages] = Object.entries(result.errors)[0] ?? ["", [result.message]];
+      return { ok: false, error: { field: "licenseNumbers", message: messages[0] } };
+    }
+    return { ok: false, error: { field: "licenseNumbers", message: result.message } };
+  }
+
   revalidatePath("/", "layout");
   return { ok: true, agent: toAgentRecord(result.data), licenses: toLicenseRecords(result.data) };
 }

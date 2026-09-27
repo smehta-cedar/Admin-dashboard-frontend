@@ -11,7 +11,10 @@ import "server-only";
  * One row is one agent certified for one policy type (lib/policy-types.ts).
  * The same rows are added from the agent profile (agent fixed, type chosen)
  * and from the policy types table (type fixed, agent chosen); there is no
- * Certifications page. Dates are optional. Carrier-policy certificates,
+ * Certifications page. Dates are optional. A row may carry one PDF, kept
+ * privately by the API and downloaded through the route handler at
+ * /certifications/{id}/file (app/(dashboard)/certifications/[id]/file);
+ * is_verified is set by hand. Carrier-policy certificates,
  * agency contracts, commissions and any rule that blocks a sale are not
  * modelled here.
  *
@@ -39,6 +42,10 @@ export type CertificationRecord = {
   startDate: string;
   /** "YYYY-MM-DD", or "" when unset. On or after startDate when both are set. */
   endDate: string;
+  /** Set by hand; uploading a PDF does not set it. */
+  isVerified: boolean;
+  /** The uploaded PDF's name, or null when there is none. */
+  fileName: string | null;
   /** The API's is_active. Defaults to "active" when adding. */
   status: CertificationStatus;
 };
@@ -49,17 +56,29 @@ export type CertificationValues = {
   policyTypeId: string;
   startDate: string;
   endDate: string;
+  /** Left out by forms without the box (the agent form's certificate rows), so the stored flag stays. */
+  isVerified?: boolean;
+  /** A new PDF to store (replacing any current one); null or left out keeps what is there. */
+  file?: File | null;
   status: CertificationStatus;
 };
 
 /** Fields the form has, for an error to sit under; `form` is for errors about the attempt itself. */
-export type CertificationErrorField = "agent" | "policyType" | "startDate" | "endDate" | "status" | "form";
+export type CertificationErrorField =
+  | "agent"
+  | "policyType"
+  | "startDate"
+  | "endDate"
+  | "isVerified"
+  | "file"
+  | "status"
+  | "form";
 
 /** A save error, shown under the field it names, or under the form for `form`. */
 export type CertificationError = { field: CertificationErrorField; message: string };
 
 /** Certification fields a note can record, in the order a note lists them. */
-export type CertificationField = "agent" | "policyType" | "startDate" | "endDate" | "status";
+export type CertificationField = "agent" | "policyType" | "startDate" | "endDate" | "isVerified" | "status" | "file";
 
 export type CertificationChange = FieldChange<CertificationField>;
 
@@ -75,7 +94,10 @@ export type CertificationNote = {
   createdAt: string;
   /** Full name of who made the change, or null when unknown. */
   createdBy: string | null;
-  /** Only the fields that changed: agent and type by name, dates as YYYY-MM-DD or blank. */
+  /**
+   * Only the fields that changed: agent and type by name, dates as YYYY-MM-DD
+   * or blank, verified as "yes" / "no", the PDF by file name (blank before the first).
+   */
   changes: CertificationChange[];
 };
 
@@ -86,6 +108,8 @@ export type ApiCertification = {
   policy_type: { id: string; name: string; is_active: boolean };
   start_date: string | null;
   end_date: string | null;
+  is_verified: boolean;
+  file_name: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -107,7 +131,9 @@ const NOTE_FIELDS: Record<string, CertificationField> = {
   policy_type: "policyType",
   start_date: "startDate",
   end_date: "endDate",
+  is_verified: "isVerified",
   status: "status",
+  file: "file",
 };
 
 /** An API certification as the app holds it. */
@@ -122,6 +148,8 @@ export function toCertificationRecord(certification: ApiCertification): Certific
     policyTypeStatus: certification.policy_type.is_active ? "active" : "inactive",
     startDate: certification.start_date ?? "",
     endDate: certification.end_date ?? "",
+    isVerified: certification.is_verified,
+    fileName: certification.file_name,
     status: certification.is_active ? "active" : "inactive",
   };
 }

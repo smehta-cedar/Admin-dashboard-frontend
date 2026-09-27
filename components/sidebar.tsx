@@ -43,7 +43,8 @@ type SidebarProps = {
 
 /** "/" matches only itself (kept for any future root link); other items also match their nested routes. */
 function isActive(pathname: string, href: string, activePrefix?: string, activeExcept: string[] = []) {
-  if (activePrefix) return pathname.startsWith(activePrefix) && !activeExcept.includes(pathname);
+  const excepted = activeExcept.some((path) => pathname === path || pathname.endsWith(path));
+  if (activePrefix) return pathname.startsWith(activePrefix) && !excepted;
   if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);
 }

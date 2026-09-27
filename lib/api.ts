@@ -39,7 +39,7 @@ export type ApiResult<T> = ApiOk<T> | ApiFailure;
 
 type ApiRequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
-  /** JSON-encoded into the request. */
+  /** JSON-encoded into the request; FormData is sent as multipart as it is (a file upload). */
   body?: unknown;
   /** Bearer access token for endpoints that need a signed-in user. */
   token?: string | null;
@@ -51,7 +51,9 @@ export type TokenPair = { access: string; refresh: string };
 export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<ApiResult<T>> {
   const { method = "GET", body, token } = options;
   const headers: Record<string, string> = { Accept: "application/json" };
-  if (body !== undefined) headers["Content-Type"] = "application/json";
+  const multipart = body instanceof FormData;
+  // fetch sets the multipart Content-Type itself, with the boundary.
+  if (body !== undefined && !multipart) headers["Content-Type"] = "application/json";
   if (token) headers.Authorization = `Bearer ${token}`;
 
   let response: Response;
@@ -59,7 +61,7 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
     response = await fetch(`${API_URL}${path}`, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : multipart ? body : JSON.stringify(body),
       // Auth-bound responses are per user and per moment; never reuse one.
       cache: "no-store",
     });

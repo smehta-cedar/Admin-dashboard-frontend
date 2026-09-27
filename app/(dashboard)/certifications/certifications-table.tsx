@@ -11,7 +11,9 @@ import { formatLicenceDate } from "@/lib/state-licenses";
 /*
  * The rows of one side's certifications: an agent's (leading column the
  * policy type) or a policy type's (leading column the agent, linked to their
- * profile), then Start, End and Status. Every row starts with an Edit button.
+ * profile), then Start, End, Document (the PDF's name, linking to its
+ * download through ./[id]/file), Verified and Status. Every row starts with an
+ * Edit button.
  * Dates are formatted from the stored string, never through Date, so the
  * server and the browser agree. The caller wraps it in a Panel or a table's
  * details row and shows its own empty state.
@@ -33,8 +35,24 @@ function DateCell({ date }: { date: string }) {
   );
 }
 
+/** The PDF's name linking to its download, or "—" when there is none. */
+function DocumentCell({ certification }: { certification: CertificationRecord }) {
+  return (
+    <td className="min-w-0 truncate px-3 py-2.5 align-middle sm:whitespace-nowrap">
+      {certification.fileName ? (
+        // A plain link, not <Link>: it is a file download, not a page.
+        <a href={`/certifications/${encodeURIComponent(certification.id)}/file`} className={PROFILE_LINK_CLASS}>
+          {certification.fileName}
+        </a>
+      ) : (
+        <span className="text-fg-subtle">—</span>
+      )}
+    </td>
+  );
+}
+
 export function CertificationsTable({ certifications, leading, onEdit }: CertificationsTableProps) {
-  const columns = ["Action", leading === "agent" ? "Agent" : "Policy type", "Start", "End", "Status"];
+  const columns = ["Action", leading === "agent" ? "Agent" : "Policy type", "Start", "End", "Document", "Verified", "Status"];
 
   return (
     <ProfileTable columns={columns} rows={certifications} rowKey={(certification) => certification.id}>
@@ -62,6 +80,10 @@ export function CertificationsTable({ certifications, leading, onEdit }: Certifi
           </td>
           <DateCell date={certification.startDate} />
           <DateCell date={certification.endDate} />
+          <DocumentCell certification={certification} />
+          <td className="whitespace-nowrap px-3 py-2.5 align-middle text-fg-muted">
+            {certification.isVerified ? "Yes" : "No"}
+          </td>
           <td className="px-3 py-2.5 align-middle">
             <StatusBadge status={certification.status} />
           </td>

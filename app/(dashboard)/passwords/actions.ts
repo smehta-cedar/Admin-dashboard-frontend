@@ -36,6 +36,8 @@ export type SavePasswordResult =
 const ERROR_FIELDS: Record<string, PasswordError["field"]> = {
   agent_id: "agentId",
   carrier_id: "carrierId",
+  // "Add a contract number before an agent can use this carrier."
+  carrier: "carrierId",
   username: "username",
   portal_password: "portalPassword",
   status: "status",

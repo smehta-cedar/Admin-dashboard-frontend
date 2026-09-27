@@ -19,12 +19,12 @@ const NAV_ITEMS: NavItem[] = [
     searchable: true,
     children: [
       // Opens the first agent; stays highlighted on every /agents/<id>, but
-      // not on the Add agent page, which is the section's own.
+      // not on Add agent or Edit agent, which belong to the section.
       {
         href: "/agents/profile",
         label: "Agent profile",
         activePrefix: "/agents/",
-        activeExcept: ["/agents/new"],
+        activeExcept: ["/agents/new", "/edit"],
       },
     ],
   },

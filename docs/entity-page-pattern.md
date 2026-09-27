@@ -844,14 +844,53 @@ the view takes requests and names from the store.
   a `<select>` of pending / approved / denied that calls `setStatus`. HR is
   not a `searchable` nav item, so the table has no search of its own.
 
+### Add page format (Add agent)
+
+How `app/(dashboard)/agents/new` is laid out. To reuse it, say: **format this
+page like Add agent** (`docs/entity-page-pattern.md`, Add page format). Copy
+the arrangement; keep the other page's own fields and save.
+
+Reference: `agents/new/page.tsx`, `agents/new/new-agent-view.tsx`,
+`agents/new/certificate-section.tsx`, and `components/producer-form.tsx`
+(`layout="page"`, `licenceEntry="button"`). Edit agent
+(`/agents/[id]/edit`) uses this same page. `?from=list` returns to the
+agents list; `?from=profile` returns to the profile. It is not a dialog.
+
+- **Page, not a dialog.** `PageHeader` (the navbar already shows the name) and
+  the form in `layout="page"`. Cancel and a successful save return to the list.
+- **One card per section**, in a single column capped at the 2xl breakpoint
+  (`mx-auto grid max-w-(--breakpoint-2xl) gap-5`). A card is
+  `rounded-lg border border-line bg-surface p-5 shadow-sm`. Identity, then
+  Contact, then each related list. Contact fields spread over four columns
+  from `xl`.
+- **Sticky button bar** at the bottom of the viewport: Cancel, then the submit
+  button, errors on the left. It spans the main area's inset.
+- **A related list stays closed until its button.** The card title is on the
+  left. On the right, `PROFILE_BUTTON_CLASS` reads `+ Add licence` or
+  `+ Add certification`. Nothing else is in the card until that click. The
+  button hides while the entry form is open.
+- **Added rows on top, the next entry underneath.** Adding puts the row in the
+  list and hides the form. The list is what submits; an open entry row is not,
+  until Add. Edit pulls that row back into the form below the list; Cancel
+  closes the form and puts an edited row back. A little extra space separates
+  the list from the form (`mt-4` on the form, on top of the section's `gap-4`).
+- **Licence entry is two rows.** First: State, Licence number, Start date, End
+  date (`grid-cols-4`). Second: Health and Life on the left, Cancel and
+  Add (Update while editing) on the right.
+- **Another list is another card**, same button and list-then-form arrangement.
+  Certifications is that card after Licences: Policy type, Start date, End
+  date, Status, then Cancel and Add. It is queued on the page and saved after
+  the agent exists. A role that cannot see policy types does not get the card.
+
 ### Agents: Add agent page and section store
 
 Add agent is a route, not a dialog: `app/(dashboard)/agents/new/page.tsx`
 (metadata "Add agent") renders `new-agent-view.tsx` — `PageHeader` plus the
-same `AgentForm` the dialog wraps (`agent-dialog.tsx` exports both), in a
-`max-w-3xl` card. Cancel and a successful save both `router.push("/agents")`.
+same `AgentForm` the dialog wraps (`agent-dialog.tsx` exports both), in the
+add-page format above. Cancel and a successful save both `router.push("/agents")`.
 The static `new` segment wins over `[id]` beside it. Row Edit on the list and
-Edit on the profile still open `AgentDialog`.
+Edit on the profile go to `/agents/[id]/edit`, the same page format, and
+return to the list or the profile.
 
 So that the new agent is in the list on the way back, the section's state
 lives above both pages: `agents/layout.tsx` (server) loads agents, notes and

@@ -52,7 +52,7 @@ import { useAppointments } from "./use-appointments";
  */
 
 type AgentOption = Pick<AgentRecord, "id" | "name" | "status" | "licensedStates" | "licenseNumbers">;
-type CarrierOption = Pick<CarrierRecord, "id" | "name" | "status" | "availableStates">;
+type CarrierOption = Pick<CarrierRecord, "id" | "name" | "status" | "availableStates" | "agentAccessible">;
 
 type ContractsViewProps = {
   initialContracts: CarrierContractRecord[];
@@ -198,6 +198,7 @@ export function ContractsView({
           name: `Carrier ${contract.carrierId}`,
           status: "active" as const,
           availableStates: [],
+          agentAccessible: false,
         };
         return [
           {

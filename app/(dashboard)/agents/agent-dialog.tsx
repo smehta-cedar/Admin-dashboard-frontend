@@ -1,9 +1,10 @@
 "use client";
 
-import { useId } from "react";
+import { useId, type ReactNode } from "react";
 import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
 import {
   ProducerForm,
+  type LicenceEntryMode,
   type ProducerError,
   type ProducerFormLayout,
   type ProducerLabels,
@@ -19,10 +20,9 @@ import { agentContactExtra, incompleteAddressError, type AgentContact } from "./
  * last two of which the agency's copy doesn't have — plus the agent-only
  * personal contact section
  * (./agent-contact-fields.tsx: personal email, personal phone, address),
- * which the agency's copy of the form doesn't have. The Agents page opens it
- * from a row's Edit and the Add agent page renders the same form; an
- * agent's profile opens it in edit mode from its own Edit button, so every
- * place edits an agent with exactly the same form and the same checks.
+ * which the agency's copy of the form doesn't have. Add agent
+ * (/agents/new) and Edit agent (/agents/[id]/edit) render this form as a
+ * page, so every place uses the same form and the same checks.
  *
  * Each place passes `onSave`, which calls the saveAgent server action
  * (./actions.ts) and updates its own state from the saved agent and licence
@@ -91,14 +91,37 @@ type AgentFormProps = {
   close: () => void;
   /** Stacked for a dialog (the default), or spread across a page. */
   layout?: ProducerFormLayout;
+  /** See LicenceEntryMode. The Add agent page hides the row until Add licence. */
+  licenceEntry?: LicenceEntryMode;
+  /** A card after Licences, page layout only (certifications on Add agent). */
+  pageExtra?: ReactNode;
+  /** See ProducerForm. Set on Edit so a deleted licence is removed on the server. */
+  onLicencesChange?: (
+    licences: Pick<
+      AgentValues,
+      "licensedStates" | "licenseNumbers" | "licenseLines" | "licenseDates"
+    >,
+  ) => Promise<string | null>;
 };
 
 /** The agent form itself: the producer form with agent wording and the personal contact section. */
-export function AgentForm({ id, editing, onSave, close, layout }: AgentFormProps) {
+export function AgentForm({
+  id,
+  editing,
+  onSave,
+  close,
+  layout,
+  licenceEntry,
+  pageExtra,
+  onLicencesChange,
+}: AgentFormProps) {
   return (
     <ProducerForm<AgentContact>
       id={id}
       layout={layout}
+      licenceEntry={licenceEntry}
+      pageExtra={pageExtra}
+      onLicencesChange={onLicencesChange}
       title={editing ? `Edit ${editing.name}` : "Add agent"}
       description={
         editing

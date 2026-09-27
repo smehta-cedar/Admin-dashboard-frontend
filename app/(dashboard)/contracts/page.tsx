@@ -32,11 +32,12 @@ export default async function ContractsPage() {
         licensedStates,
         licenseNumbers,
       }))}
-      carriers={carriers.map(({ id, name, status, availableStates }) => ({
+      carriers={carriers.map(({ id, name, status, availableStates, agentAccessible }) => ({
         id,
         name,
         status,
         availableStates,
+        agentAccessible,
       }))}
       agencyLicenseNumbers={agency?.licenseNumbers ?? {}}
     />

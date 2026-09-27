@@ -18,7 +18,9 @@ import type {
  *   agent profile      — the agent is fixed; the form picks the policy type
  *   policy types table — the policy type is fixed; the form picks the agent
  *
- * The other fields are the same: start date, end date, status. The select
+ * The other fields are the same: start date, end date, status, a PDF and
+ * the Verified box. The file input is empty on every open; leaving it empty
+ * keeps the stored file, whose name the edit dialog shows. The select
  * offers the active options plus the edited row's own choice when that is
  * inactive (or gone), so an edit never silently moves the row.
  *
@@ -26,7 +28,9 @@ import type {
  * (./actions.ts) and updates its own state from the saved record. The API
  * keeps one live row per agent and policy type and checks the dates; a
  * duplicate comes back as the API's message under the field the user chose,
- * an end before the start under the end date. While the save is in flight
+ * an end before the start under the end date, a file that is not a PDF or
+ * is over 10 MB under the file (checked here first, then by the API, so a
+ * large file is not sent at all). While the save is in flight
  * the buttons are disabled.
  */
 
@@ -41,8 +45,20 @@ export const CERTIFICATION_FIELD_LABELS: Record<CertificationField, string> = {
   policyType: "Policy type",
   startDate: "Start date",
   endDate: "End date",
+  isVerified: "Verified",
   status: "Status",
+  file: "Document",
 };
+
+/** The API's limit for a certification's PDF. */
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
+
+/** Why `file` can't be sent, or null when it can. The API runs the same checks. */
+export function certificationFileProblem(file: File): string | null {
+  if (!file.name.toLowerCase().endsWith(".pdf")) return "The file must be a PDF.";
+  if (file.size > MAX_FILE_BYTES) return "The file must be 10 MB or smaller.";
+  return null;
+}
 
 /** One choice for the select: an agent or a policy type. */
 export type CertificationOption = { id: string; name: string; status: "active" | "inactive" };
@@ -114,18 +130,29 @@ function CertificationForm({ id, editor, fixed, options, onSave, close }: Certif
   const pickError = messageFor(picking);
   const startError = messageFor("startDate");
   const endError = messageFor("endDate");
-  const formError = messageFor("form") ?? messageFor("status");
+  const fileError = messageFor("file");
+  const formError = messageFor("form") ?? messageFor("status") ?? messageFor("isVerified");
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (saving) return;
     const data = new FormData(event.currentTarget);
     const picked = String(data.get("picked") ?? "").trim();
+    // An empty file input still submits an empty File; that means "keep the current one".
+    const chosen = data.get("file");
+    const file = chosen instanceof File && chosen.size > 0 ? chosen : null;
+    const problem = file ? certificationFileProblem(file) : null;
+    if (problem) {
+      setErrors([{ field: "file", message: problem }]);
+      return;
+    }
     const values: CertificationValues = {
       agentId: fixed.kind === "agent" ? fixed.agent.id : picked,
       policyTypeId: fixed.kind === "policyType" ? fixed.policyType.id : picked,
       startDate,
       endDate,
+      isVerified: data.get("isVerified") === "yes",
+      file,
       status: String(data.get("status")) === "inactive" ? "inactive" : "active",
     };
     setSaving(true);
@@ -154,7 +181,7 @@ function CertificationForm({ id, editor, fixed, options, onSave, close }: Certif
         {title}
       </h2>
 
-      {/* The pick and status share the first row; the two dates the second. */}
+      {/* The pick and status share the first row, the two dates the second, the PDF and Verified the third. */}
       <div className="mt-5 grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto]">
         <Field
           label={picking === "agent" ? "Agent" : "Policy type"}
@@ -237,6 +264,39 @@ function CertificationForm({ id, editor, fixed, options, onSave, close }: Certif
             className={INPUT_CLASS}
           />
         </Field>
+        <Field
+          label="Document"
+          htmlFor={`${id}-file`}
+          hint={fileError ?? undefined}
+          hintId={`${id}-file-error`}
+          error
+        >
+          <input
+            id={`${id}-file`}
+            type="file"
+            name="file"
+            accept=".pdf,application/pdf"
+            aria-invalid={fileError ? true : undefined}
+            aria-describedby={fileError ? `${id}-file-error` : undefined}
+            onChange={() => clear("file")}
+            className={INPUT_CLASS}
+          />
+          {editing?.fileName ? (
+            <p className="mt-1 truncate text-xs text-fg-muted">Current: {editing.fileName}</p>
+          ) : null}
+        </Field>
+        <div className="flex min-w-0 flex-col justify-end sm:w-40">
+          <label className="flex items-center gap-2 py-2 text-sm text-fg">
+            <input
+              type="checkbox"
+              name="isVerified"
+              value="yes"
+              defaultChecked={editing?.isVerified ?? false}
+              className="size-4 accent-brand-strong"
+            />
+            Verified
+          </label>
+        </div>
       </div>
 
       {/* Errors about the attempt itself (no permission, API down), not one field. */}

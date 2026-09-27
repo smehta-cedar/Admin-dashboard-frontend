@@ -51,13 +51,20 @@ export type CarrierRecord = {
   availableStates: string[];
   /** The API's is_active. Defaults to "active" when adding. */
   status: CarrierStatus;
+  /**
+   * The API's agent_accessible: true only when the agency's live contract with
+   * the carrier has a contract number (lib/agency-contracts.ts). The dropdowns
+   * that give an agent a carrier (appointments, portal passwords) offer only
+   * these. Derived by the API, never edited on the carrier.
+   */
+  agentAccessible: boolean;
 };
 
 /** Carrier fields a note can record. The ID never changes. */
-export type CarrierField = Exclude<keyof CarrierRecord, "id">;
+export type CarrierField = Exclude<keyof CarrierRecord, "id" | "agentAccessible">;
 
-/** What the add / edit form submits: every field but the ID. */
-export type CarrierValues = Omit<CarrierRecord, "id">;
+/** What the add / edit form submits: every field but the ID and the derived flag. */
+export type CarrierValues = Omit<CarrierRecord, "id" | "agentAccessible">;
 
 /** A save error, shown under the field it names, or under the form for `form`. */
 export type CarrierError = { field: CarrierField | "form"; message: string };
@@ -87,6 +94,7 @@ export type ApiCarrier = {
   aliases: string[];
   lines_of_business: string[];
   available_states: string[];
+  agent_accessible: boolean;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -126,6 +134,7 @@ export function toCarrierRecord(carrier: ApiCarrier): CarrierRecord {
     linesOfBusiness: LINES_OF_BUSINESS.filter((line) => carrier.lines_of_business.includes(line)),
     availableStates: [...new Set(carrier.available_states)].sort(),
     status: carrier.is_active ? "active" : "inactive",
+    agentAccessible: carrier.agent_accessible,
   };
 }
 

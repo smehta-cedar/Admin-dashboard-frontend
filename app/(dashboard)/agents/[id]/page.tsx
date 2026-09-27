@@ -34,15 +34,21 @@ export default async function AgentProfilePage(props: PageProps<"/agents/[id]">)
 
   return (
     <AgentProfile
-      // The profile keeps the agent in state (it can be edited there), so a
-      // switch to another agent has to start that state again.
+      // A switch to another agent starts the profile's state again. Edit is
+      // a separate page, so a saved agent comes back through this load.
       key={agent.id}
       initialAgent={agent}
       // Every carrier, so Add carrier can appoint this agent to any of them. The
       // profile picks out this agent's contracts; states come only from those
       // appointments, as there are no carrier-less licenses.
       carriers={carriers
-        .map(({ id, name, status, availableStates }) => ({ id, name, status, availableStates }))
+        .map(({ id, name, status, availableStates, agentAccessible }) => ({
+          id,
+          name,
+          status,
+          availableStates,
+          agentAccessible,
+        }))
         .sort(byName)}
       initialContracts={carrierContracts}
       initialLicenses={licenses}

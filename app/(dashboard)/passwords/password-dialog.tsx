@@ -21,6 +21,10 @@ import { byName } from "@/lib/text";
  * keeps one password per agent at each carrier and records the change note;
  * the form only checks what it can see at once (a blank password). While
  * the save is in flight the buttons are disabled.
+ *
+ * The carrier select offers only carriers open to agents (agentAccessible:
+ * the agency's contract with them has a contract number), plus an edited
+ * password's own carrier so it stays the current choice.
  */
 
 /** Which dialog is open. Add may start on a carrier; edit holds the record as it was. */
@@ -31,7 +35,7 @@ export type PasswordEditor =
 export type { PasswordError, PasswordValues } from "@/lib/passwords";
 
 export type AgentOption = Pick<AgentRecord, "id" | "name" | "status">;
-export type CarrierOption = Pick<CarrierRecord, "id" | "name" | "status">;
+export type CarrierOption = Pick<CarrierRecord, "id" | "name" | "status" | "agentAccessible">;
 
 /** Also the order changes are listed in on a note. */
 export const PASSWORD_FIELD_LABELS: Record<PasswordField, string> = {
@@ -98,6 +102,12 @@ function PasswordForm({
   const editing = editor.mode === "edit" ? editor.password : undefined;
   const [errors, setErrors] = useState<PasswordError[]>([]);
   const [saving, setSaving] = useState(false);
+  const carrierOptions = [...carriers]
+    .filter((carrier) => carrier.agentAccessible || carrier.id === editing?.carrierId)
+    .sort(byName);
+  // A preset carrier (Add from a filtered list) that isn't open starts the select empty.
+  const presetCarrierId = editing ? editing.carrierId : editor.mode === "add" ? (editor.carrierId ?? "") : "";
+  const defaultCarrierId = carrierOptions.some((carrier) => carrier.id === presetCarrierId) ? presetCarrierId : "";
 
   const messageFor = (field: PasswordError["field"]) =>
     errors.find((error) => error.field === field)?.message ?? null;
@@ -191,16 +201,14 @@ function PasswordForm({
             id={`${id}-carrier`}
             name="carrierId"
             required
-            defaultValue={
-              editor.mode === "edit" ? editor.password.carrierId : (editor.carrierId ?? "")
-            }
+            defaultValue={defaultCarrierId}
             aria-invalid={carrierError ? true : undefined}
             aria-describedby={carrierError ? `${id}-carrier-error` : undefined}
             onChange={() => clear("carrierId")}
             className={INPUT_CLASS}
           >
             <option value="">Choose a carrier</option>
-            {[...carriers].sort(byName).map((carrier) => (
+            {carrierOptions.map((carrier) => (
               <option key={carrier.id} value={carrier.id}>
                 {carrier.name}
                 {carrier.status === "inactive" ? " (inactive)" : ""}

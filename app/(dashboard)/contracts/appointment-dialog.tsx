@@ -31,6 +31,11 @@ import { byName } from "@/lib/text";
  * all skips them and they never submit. Editing a contract whose states fall
  * outside that ceiling warns, then saving strips them.
  *
+ * The carrier select offers only carriers open to agents (agentAccessible:
+ * the agency's contract with them has a contract number), plus an edited
+ * contract's own carrier so it stays the current choice. A preset carrier
+ * that isn't open starts the select empty.
+ *
  * Each view passes `onSave` (usually the hook's saveContract, which calls the
  * saveAppointment server action). The API checks one contract per agent per
  * carrier, a writing number unique within that carrier, and every state
@@ -39,7 +44,7 @@ import { byName } from "@/lib/text";
  */
 
 type AgentOption = Pick<AgentRecord, "id" | "name" | "status" | "licensedStates">;
-type CarrierOption = Pick<CarrierRecord, "id" | "name" | "status" | "availableStates">;
+type CarrierOption = Pick<CarrierRecord, "id" | "name" | "status" | "availableStates" | "agentAccessible">;
 
 /** Which dialog is open. Add may start on an agent or carrier; edit holds the contract as it was. */
 export type AppointmentEditor =
@@ -103,13 +108,17 @@ function AppointmentForm({ id, editor, agents, carriers, onSave, close }: Appoin
   const editing = editor.mode === "edit" ? editor.contract : undefined;
   const [error, setError] = useState<AppointmentError | null>(null);
   const [saving, setSaving] = useState(false);
+  const carrierOptions = [...carriers]
+    .filter((option) => option.agentAccessible || option.id === editing?.carrierId)
+    .sort(byName);
   // Both controlled, so the state grid follows whichever of the two changes.
   const [agentId, setAgentId] = useState(
     editing?.agentId ?? (editor.mode === "add" ? editor.agentId : undefined) ?? "",
   );
-  const [carrierId, setCarrierId] = useState(
-    editing?.carrierId ?? (editor.mode === "add" ? editor.carrierId : undefined) ?? "",
-  );
+  const [carrierId, setCarrierId] = useState(() => {
+    const preset = editing?.carrierId ?? (editor.mode === "add" ? editor.carrierId : undefined) ?? "";
+    return carrierOptions.some((option) => option.id === preset) ? preset : "";
+  });
 
   const agent = agents.find((option) => option.id === agentId);
   const carrier = carriers.find((option) => option.id === carrierId);
@@ -235,7 +244,7 @@ function AppointmentForm({ id, editor, agents, carriers, onSave, close }: Appoin
             className={INPUT_CLASS}
           >
             <option value="">Choose a carrier</option>
-            {[...carriers].sort(byName).map((option) => (
+            {carrierOptions.map((option) => (
               <option key={option.id} value={option.id}>
                 {option.name}
                 {option.status === "inactive" ? " (inactive)" : ""}

@@ -50,7 +50,7 @@ import { AgentsPerCarrierChart } from "./agents-per-carrier-chart";
 type AgentOption = Pick<AgentRecord, "id" | "name" | "status" | "licensedStates">;
 type CarrierOption = Pick<
   CarrierRecord,
-  "id" | "name" | "linesOfBusiness" | "status" | "availableStates"
+  "id" | "name" | "linesOfBusiness" | "status" | "availableStates" | "agentAccessible"
 >;
 
 type CarrierContractsViewProps = {

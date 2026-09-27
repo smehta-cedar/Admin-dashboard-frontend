@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { HydratedNoteList } from "@/components/hydrated-note-list";
 import { CopyableNumber } from "@/components/license-number";
@@ -38,21 +39,14 @@ import {
 import { CertificationsTable } from "../../certifications/certifications-table";
 import { AppointmentDialog } from "../../contracts/appointment-dialog";
 import { useAppointments } from "../../contracts/use-appointments";
-import { saveAgent } from "../actions";
-import {
-  AGENT_FIELD_LABELS,
-  AgentDialog,
-  type AgentEditor,
-  type AgentError,
-  type AgentValues,
-} from "../agent-dialog";
+import { AGENT_FIELD_LABELS } from "../agent-dialog";
 
 /*
  * Profile for one agent: identity, then everything linked to them — the states
  * they can write in, contracted carriers, what is still pending, passwords,
  * and change notes. Passwords are still edited on their page. Two things
- * are editable here: the agent's own fields (Edit opens the same AgentDialog as
- * the Agents list) and appointing this agent to a carrier.
+ * are editable here: the agent's own fields (Edit opens /agents/[id]/edit, the
+ * same page as Add agent, and returns here) and appointing this agent to a carrier.
  *
  * Layout, from the shared pieces in components/profile-shell.tsx. The page is
  * capped at the 2xl breakpoint, wider than the list pages. A header that is
@@ -105,15 +99,13 @@ import {
  * agent, not their status, on every page (the Contracts pages just leave them
  * out of the counts).
  *
- * The agent and their licence rows are kept in state so an edit shows at
- * once; the edit goes to the API through the saveAgent server action, which
- * writes the note (the notes come from the server and the action's
- * revalidation brings the new one in). Appointments save the same way through
+ * The agent and their licence rows are kept in state. Editing them happens on
+ * /agents/[id]/edit; coming back loads the saved agent. Appointments save through
  * the appointments hook. page.tsx keys this component by agent ID, so
  * switching agents starts that state again.
  */
 
-type CarrierOption = Pick<CarrierRecord, "id" | "name" | "status" | "availableStates">;
+type CarrierOption = Pick<CarrierRecord, "id" | "name" | "status" | "availableStates" | "agentAccessible">;
 
 type AgentProfileProps = {
   initialAgent: AgentRecord;
@@ -305,15 +297,14 @@ export function AgentProfile({
   passwords,
   notes,
 }: AgentProfileProps) {
-  const [agent, setAgent] = useState(initialAgent);
-  const [licenses, setLicenses] = useState(initialLicenses);
+  const agent = initialAgent;
+  const licenses = initialLicenses;
   const [certifications, setCertifications] = useState(initialCertifications);
+  const router = useRouter();
   const [certificationEditor, setCertificationEditor] = useState<CertificationEditor | null>(null);
-  const [agentEditor, setAgentEditor] = useState<AgentEditor | null>(null);
   // Which section the panel shows. Carriers first: it is what the page is opened for.
   const [section, setSection] = useState<SectionKey>("carriers");
-  // The dialog locks the agent to this profile, so the live agent is the only
-  // lookup it needs; an edited name or licence list is read at save time.
+  // Appointments added here are for this agent only.
   const { contracts, editor, setEditor, saveContract } = useAppointments({
     initialContracts,
     agents: [agent],
@@ -437,15 +428,6 @@ export function AgentProfile({
     { key: "notes", label: "Notes", count: notes.length },
   ];
 
-  /** Edits this agent through the API. Resolves with the dialog's error, if any. */
-  const saveAgentEdit = async (values: AgentValues): Promise<AgentError | null> => {
-    const result = await saveAgent(values, agent.id);
-    if (!result.ok) return result.error;
-    setAgent(result.agent);
-    setLicenses(result.licenses);
-    return null;
-  };
-
   /** Adds or edits one of this agent's certifications through the API. Resolves with the dialog's errors, if any. */
   const saveAgentCertification = async (values: CertificationValues): Promise<CertificationError[]> => {
     const editingId = certificationEditor?.mode === "edit" ? certificationEditor.certification.id : undefined;
@@ -464,7 +446,7 @@ export function AgentProfile({
       <ProfileNameRow
         name={agent.name}
         status={agent.status}
-        onEdit={() => setAgentEditor({ mode: "edit", agent })}
+        onEdit={() => router.push(`/agents/${agent.id}/edit?from=profile`)}
       />
 
       {/*
@@ -614,8 +596,6 @@ export function AgentProfile({
           )}
         </div>
       </div>
-
-      <AgentDialog editor={agentEditor} onSave={saveAgentEdit} onClose={() => setAgentEditor(null)} />
 
       {/* Agent fixed to this profile; the form picks the policy type. */}
       <CertificationDialog

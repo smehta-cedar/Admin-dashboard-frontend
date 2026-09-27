@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, type ComponentProps } from "react";
+import { ROW_BUTTON_CLASS } from "@/components/classes";
+import { EditIcon } from "@/components/edit-icon";
 import { HydratedNoteList } from "@/components/hydrated-note-list";
 import {
   LicenseCards,
@@ -18,9 +20,17 @@ import {
 import { StateLicensesPanel } from "@/components/state-licenses-panel";
 import { StatusBadge } from "@/components/status-badge";
 import type { AgencyNote, AgencyRecord } from "@/lib/agency";
+import type { AgencyContractRecord } from "@/lib/agency-contracts";
 import type { AgencyStateLicenseRecord } from "@/lib/agency-state-licenses";
 import type { AgentRecord } from "@/lib/agents";
 import { removeAgencyLicense, saveAgency, saveAgencyLicense } from "./actions";
+import {
+  AgencyContractDialog,
+  type AgencyContractEditor,
+  type AgencyContractError,
+  type AgencyContractValues,
+} from "./agency-contract-dialog";
+import { saveAgencyContract } from "./contract-actions";
 import { AGENCY_FIELD_LABELS, AgencyDialog, type AgencyError, type AgencyValues } from "./agency-dialog";
 import { AgencyLicenseDialog, type AgencyLicenseEditor, type AgencyLicenseValues } from "./license-dialog";
 
@@ -47,6 +57,14 @@ import { AgencyLicenseDialog, type AgencyLicenseEditor, type AgencyLicenseValues
  * from the server (the API writes them; the action's revalidation brings
  * the new one in). No back link or switcher: there is one agency and no
  * list of them.
+ *
+ * A full-width Contracts panel, under State licences, lists the agency's
+ * contract with each carrier (carrier, contract number, policies, status)
+ * and opens AgencyContractDialog from Add contract and a row's Edit, saved
+ * through saveAgencyContract. A carrier whose contract has no number yet
+ * shows "No number yet": agents can't be given that carrier until it has
+ * one. The panel is left out when the role can't see agency contracts (the
+ * page passes null).
  */
 
 type AgentRow = Pick<AgentRecord, "id" | "name" | "status" | "licensedStates">;
@@ -59,13 +77,30 @@ type AgencyProfileProps = {
   initialLicenses: AgencyStateLicenseRecord[];
   /** Every agent, sorted by name. */
   agents: AgentRow[];
+  /** The agency's carrier contracts, by carrier name; null hides the panel (no permission). */
+  initialContracts: AgencyContractRecord[] | null;
+  /** Every carrier, for the contract dialog's select. */
+  carriers: ComponentProps<typeof AgencyContractDialog>["carriers"];
+  /** Every carrier's policies, for the contract dialog's boxes. */
+  policies: ComponentProps<typeof AgencyContractDialog>["policies"];
 };
 
 const AGENT_COLUMNS = ["Agent", "Licensed states", "Status"];
+const CONTRACT_COLUMNS = ["Action", "Carrier", "Contract number", "Policies", "Status"];
 
-export function AgencyProfile({ initialAgency, notes, initialLicenses, agents }: AgencyProfileProps) {
+export function AgencyProfile({
+  initialAgency,
+  notes,
+  initialLicenses,
+  agents,
+  initialContracts,
+  carriers,
+  policies,
+}: AgencyProfileProps) {
   const [agency, setAgency] = useState(initialAgency);
   const [licenses, setLicenses] = useState(initialLicenses);
+  const [contracts, setContracts] = useState(initialContracts);
+  const [contractEditor, setContractEditor] = useState<AgencyContractEditor | null>(null);
   const [editing, setEditing] = useState<AgencyRecord | null>(null);
   const [licenseEditor, setLicenseEditor] = useState<AgencyLicenseEditor | null>(null);
 
@@ -93,6 +128,19 @@ export function AgencyProfile({ initialAgency, notes, initialLicenses, agents }:
     setAgency(result.agency);
     setLicenses(result.licenses);
     return null;
+  };
+
+  /** Adds or edits one of the agency's contracts through the API. Resolves with the dialog's errors, if any. */
+  const saveContract = async (values: AgencyContractValues): Promise<AgencyContractError[]> => {
+    const editingId = contractEditor?.mode === "edit" ? contractEditor.contract.id : undefined;
+    const result = await saveAgencyContract(agency.id, values, editingId);
+    if (!result.ok) return result.errors;
+    setContracts((current) =>
+      [...(current ?? []).filter((contract) => contract.id !== result.contract.id), result.contract].sort((a, b) =>
+        a.carrierName.localeCompare(b.carrierName),
+      ),
+    );
+    return [];
   };
 
   const addLicenseButton = (
@@ -138,6 +186,66 @@ export function AgencyProfile({ initialAgency, notes, initialLicenses, agents }:
           action={addLicenseButton}
           onEdit={(license) => setLicenseEditor({ mode: "edit", license })}
         />
+
+        {contracts ? (
+          <Panel
+            title="Contracts"
+            count={contracts.length}
+            className="xl:col-span-2"
+            action={
+              <button
+                type="button"
+                onClick={() => setContractEditor({ mode: "add" })}
+                className={PROFILE_BUTTON_CLASS}
+              >
+                <span aria-hidden="true">+ </span>Add contract
+              </button>
+            }
+          >
+            {contracts.length === 0 ? (
+              <PanelEmpty>No carrier contracts recorded.</PanelEmpty>
+            ) : (
+              <ProfileTable columns={CONTRACT_COLUMNS} rows={contracts} rowKey={(contract) => contract.id}>
+                {(contract) => (
+                  <>
+                    <td className="px-3 py-1.5 align-middle whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={() => setContractEditor({ mode: "edit", contract })}
+                        className={`inline-flex items-center gap-1.5 ${ROW_BUTTON_CLASS}`}
+                      >
+                        <EditIcon className="size-3.5 shrink-0" />
+                        <span className="sr-only"> {contract.carrierName} contract</span>
+                      </button>
+                    </td>
+                    <td className="min-w-0 truncate px-3 py-2.5 align-middle font-medium sm:whitespace-nowrap">
+                      <Link href={`/carriers/${contract.carrierId}`} className={PROFILE_LINK_CLASS}>
+                        {contract.carrierName}
+                      </Link>
+                    </td>
+                    <td className="min-w-0 truncate px-3 py-2.5 align-middle">
+                      {contract.contractNumber ? (
+                        <span className="font-mono text-fg">{contract.contractNumber}</span>
+                      ) : (
+                        <span className="text-fg-subtle">No number yet</span>
+                      )}
+                    </td>
+                    <td className="min-w-0 px-3 py-2.5 align-middle text-fg-muted">
+                      {contract.policies.length > 0 ? (
+                        contract.policies.map((policy) => policy.name).join(", ")
+                      ) : (
+                        <span className="text-fg-subtle">None</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 align-middle">
+                      <StatusBadge status={contract.status} />
+                    </td>
+                  </>
+                )}
+              </ProfileTable>
+            )}
+          </Panel>
+        ) : null}
 
         <Panel
           title="Agents"
@@ -189,6 +297,16 @@ export function AgencyProfile({ initialAgency, notes, initialLicenses, agents }:
         onRemove={removeLicense}
         onClose={() => setLicenseEditor(null)}
       />
+      {contracts ? (
+        <AgencyContractDialog
+          editor={contractEditor}
+          carriers={carriers}
+          contractedCarrierIds={contracts.map((contract) => contract.carrierId)}
+          policies={policies}
+          onSave={saveContract}
+          onClose={() => setContractEditor(null)}
+        />
+      ) : null}
     </div>
   );
 }

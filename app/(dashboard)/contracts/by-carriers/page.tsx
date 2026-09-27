@@ -26,12 +26,13 @@ export default async function ContractsByCarrierPage() {
         status,
         licensedStates,
       }))}
-      carriers={carriers.map(({ id, name, linesOfBusiness, status, availableStates }) => ({
+      carriers={carriers.map(({ id, name, linesOfBusiness, status, availableStates, agentAccessible }) => ({
         id,
         name,
         linesOfBusiness,
         status,
         availableStates,
+        agentAccessible,
       }))}
     />
   );

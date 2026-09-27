@@ -13,6 +13,11 @@
  * both are sent and the API names policy_type. Either way the message lands
  * on the one field the form lets the user choose.
  *
+ * When the form picked a PDF the body goes as multipart form data with the
+ * file alongside the other fields; otherwise it is JSON and the stored file
+ * is left alone. The API takes PDFs of up to 10 MB and names anything else
+ * under file.
+ *
  * What the API answers, and what the dialog shows for it:
  *
  *   400 invalid             a field's message under that field
@@ -52,8 +57,20 @@ function errorFields(fixed: CertificationFixed): Record<string, CertificationErr
     policy_type: chosen,
     start_date: "startDate",
     end_date: "endDate",
+    is_verified: "isVerified",
+    file: "file",
     is_active: "status",
   };
+}
+
+/** `fields` as multipart form data with `file` alongside; a null date goes as "" (cleared). */
+function toFormData(fields: Record<string, string | boolean | null | undefined>, file: File): FormData {
+  const data = new FormData();
+  for (const [name, value] of Object.entries(fields)) {
+    if (value !== undefined) data.set(name, value === null ? "" : String(value));
+  }
+  data.set("file", file);
+  return data;
 }
 
 /** Adds a certification, or edits the one with `editingId`. */
@@ -62,21 +79,23 @@ export async function saveCertification(
   fixed: CertificationFixed,
   editingId?: string,
 ): Promise<SaveCertificationResult> {
-  const dates = {
+  const details = {
     start_date: values.startDate || null,
     end_date: values.endDate || null,
+    // Undefined keys drop out of the JSON body and are skipped in the multipart one.
+    is_verified: values.isVerified,
     is_active: values.status === "active",
   };
+  const fields = editingId
+    ? // Only the side the form lets the user change.
+      fixed === "agent"
+      ? { policy_type: values.policyTypeId, ...details }
+      : { agent: values.agentId, ...details }
+    : { agent: values.agentId, policy_type: values.policyTypeId, ...details };
+  const body = values.file ? toFormData(fields, values.file) : fields;
   const result = editingId
-    ? await apiFetch<ApiCertification>(`/certifications/${encodeURIComponent(editingId)}/`, {
-        method: "PATCH",
-        // Only the side the form lets the user change.
-        body: fixed === "agent" ? { policy_type: values.policyTypeId, ...dates } : { agent: values.agentId, ...dates },
-      })
-    : await apiFetch<ApiCertification>("/certifications/create/", {
-        method: "POST",
-        body: { agent: values.agentId, policy_type: values.policyTypeId, ...dates },
-      });
+    ? await apiFetch<ApiCertification>(`/certifications/${encodeURIComponent(editingId)}/`, { method: "PATCH", body })
+    : await apiFetch<ApiCertification>("/certifications/create/", { method: "POST", body });
 
   if (!result.ok) {
     // The session is gone (revoked, blocked); the dashboard gate would bounce the next page anyway.
@@ -98,4 +117,16 @@ export async function saveCertification(
   revalidatePath("/agents/[id]", "page");
   revalidatePath("/policy-types");
   return { ok: true, certification: toCertificationRecord(result.data) };
+}
+
+/** Removes a certification. The API soft-deletes it, so the pair can be added again. */
+export async function deleteCertification(id: string): Promise<{ ok: true } | { ok: false; message: string }> {
+  const result = await apiFetch<null>(`/certifications/${encodeURIComponent(id)}/`, { method: "DELETE" });
+  if (!result.ok) {
+    if (result.status === 401) redirect("/login");
+    return { ok: false, message: result.message };
+  }
+  revalidatePath("/agents/[id]", "page");
+  revalidatePath("/policy-types");
+  return { ok: true };
 }

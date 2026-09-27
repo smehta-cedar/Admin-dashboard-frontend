@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Figtree } from "next/font/google";
+import { InlineScript } from "@/components/inline-script";
 import { THEME_SCRIPT, ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
@@ -26,7 +27,7 @@ export default function RootLayout({
       <head>
         {/* Runs while <head> is parsed — the saved theme is on <html> before
             the first paint, so there is no flash of the wrong theme. */}
-        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+        <InlineScript html={THEME_SCRIPT} />
       </head>
       {/* Browser extensions add attributes to <body> before React hydrates
           (ColorZilla's `cz-shortcut-listen`); this covers <body>'s own

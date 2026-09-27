@@ -22,7 +22,7 @@ export default async function PasswordsPage() {
     <PasswordsView
       initialPasswords={passwords}
       agents={agents.map(({ id, name, status }) => ({ id, name, status }))}
-      carriers={carriers.map(({ id, name, status }) => ({ id, name, status }))}
+      carriers={carriers.map(({ id, name, status, agentAccessible }) => ({ id, name, status, agentAccessible }))}
     />
   );
 }
