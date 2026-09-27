@@ -8,12 +8,11 @@ import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge, statusRank } from "@/components/status-badge";
-import { UnsavedBanner } from "@/components/unsaved-banner";
-import type { PasswordNote, PasswordRecord } from "@/lib/passwords";
+import type { PasswordRecord } from "@/lib/passwords";
 import { byName } from "@/lib/text";
+import { savePassword } from "./actions";
 import {
   PasswordDialog,
-  savePassword,
   type AgentOption,
   type CarrierOption,
   type PasswordEditor,
@@ -22,20 +21,18 @@ import {
 } from "./password-dialog";
 
 /*
- * Passwords table with dummy add and edit. Each password is one
- * agent at one carrier. Add password and a row's Edit open the shared
- * PasswordDialog (./password-dialog.tsx: `PasswordDialog` + pure
- * `savePassword`, the same shape as the other entity dialogs); every add
- * or edit records a note listing what changed (agent and carrier by name),
- * notes stay in state for the change log but rows don't expand. A carrier
- * dropdown filters the list (?carrier=<id>); within it, the table sorts by
- * header and narrows by search. Passwords and notes live in component state
- * only: nothing reaches a server, and a refresh brings back the JSON.
+ * Passwords table. Each password is one agent at one carrier. Add password
+ * and a row's Edit open the shared PasswordDialog (./password-dialog.tsx);
+ * saves go to the API through the savePassword server action, and the API
+ * records a note of what changed (agent and carrier by name, the password
+ * only as set/changed). Rows don't expand. A carrier dropdown filters the
+ * list (?carrier=<id>); within it, the table sorts by header and narrows by
+ * search. The list is server-loaded and kept in state so a save shows at
+ * once; the action also revalidates the page, so the next render agrees.
  */
 
 type PasswordsViewProps = {
   initialPasswords: PasswordRecord[];
-  initialNotes: PasswordNote[];
   agents: AgentOption[];
   carriers: CarrierOption[];
 };
@@ -96,15 +93,8 @@ const COLUMNS: DataTableColumn<PasswordRow>[] = [
   },
 ];
 
-export function PasswordsView({
-  initialPasswords,
-  initialNotes,
-  agents,
-  carriers,
-}: PasswordsViewProps) {
+export function PasswordsView({ initialPasswords, agents, carriers }: PasswordsViewProps) {
   const [passwords, setPasswords] = useState(initialPasswords);
-  const [notes, setNotes] = useState(initialNotes);
-  const [unsavedCount, setUnsavedCount] = useState(0);
   const [editor, setEditor] = useState<PasswordEditor | null>(null);
   // Shown when Add saves a password the carrier filter hides. Each add
   // sets a new object, so a second hidden add restarts the timer even with
@@ -120,8 +110,6 @@ export function PasswordsView({
     return carriers.some((carrier) => carrier.id === carrierId) ? carrierId : "";
   });
 
-  const agentName = (agentId: string) =>
-    agents.find((agent) => agent.id === agentId)?.name ?? `Agent ${agentId}`;
   const carrierName = (carrierId: string) =>
     carriers.find((carrier) => carrier.id === carrierId)?.name ?? `Carrier ${carrierId}`;
 
@@ -148,18 +136,15 @@ export function PasswordsView({
   // (the order a cleared header sort returns to). Rebuilt when passwords
   // change, so an add or edit lands in place right away, or drops out if it
   // no longer matches the filter.
-  const rows = useMemo<PasswordRow[]>(() => {
-    const agentNames = new Map(agents.map((agent) => [agent.id, agent.name]));
-    const carrierNames = new Map(carriers.map((carrier) => [carrier.id, carrier.name]));
-    return passwords
-      .filter((record) => !carrierFilter || record.carrierId === carrierFilter)
-      .map((password) => ({
-        password,
-        agent: agentNames.get(password.agentId) ?? `Agent ${password.agentId}`,
-        carrier: carrierNames.get(password.carrierId) ?? `Carrier ${password.carrierId}`,
-      }))
-      .sort((a, b) => a.agent.localeCompare(b.agent) || a.carrier.localeCompare(b.carrier));
-  }, [passwords, carrierFilter, agents, carriers]);
+  // Names come with each record from the API, as of its read.
+  const rows = useMemo<PasswordRow[]>(
+    () =>
+      passwords
+        .filter((record) => !carrierFilter || record.carrierId === carrierFilter)
+        .map((password) => ({ password, agent: password.agentName, carrier: password.carrierName }))
+        .sort((a, b) => a.agent.localeCompare(b.agent) || a.carrier.localeCompare(b.carrier)),
+    [passwords, carrierFilter],
+  );
 
   const columns = useMemo<DataTableColumn<PasswordRow>[]>(
     () => [
@@ -187,25 +172,15 @@ export function PasswordsView({
     [],
   );
 
-  /** Adds or edits through savePassword, then flags a record the filter hides. */
-  const save = (
-    values: PasswordValues,
-    editing?: PasswordRecord,
-  ): PasswordError[] => {
-    const result = savePassword({
-      passwords,
-      notes,
-      values,
-      editing,
-      agentName,
-      carrierName,
-    });
-    if (result.password === null) return result.errors;
-    if (!result.changed) return [];
+  /** Adds or edits through the API, then flags a record the filter hides. Resolves with the dialog's errors. */
+  const save = async (values: PasswordValues, editing?: PasswordRecord): Promise<PasswordError[]> => {
+    const result = await savePassword(values, editing?.id);
+    if (!result.ok) return result.errors;
 
-    setPasswords(result.passwords);
-    setNotes(result.notes);
-    setUnsavedCount((count) => count + 1);
+    const saved = result.password;
+    setPasswords((current) =>
+      editing ? current.map((record) => (record.id === saved.id ? saved : record)) : [...current, saved],
+    );
     if (!editing && carrierFilter && values.carrierId !== carrierFilter) {
       setHiddenNotice({
         message: `Password added for ${carrierName(values.carrierId)}. It's hidden by the current filter.`,
@@ -253,7 +228,6 @@ export function PasswordsView({
         }
       />
 
-      <UnsavedBanner count={unsavedCount} />
       <div role="status">
         {hiddenNotice ? (
           <p className="mb-4 rounded-md bg-surface-muted px-3 py-2 text-sm text-fg-muted">

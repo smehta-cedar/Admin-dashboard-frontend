@@ -8,45 +8,48 @@ import { EditIcon } from "@/components/edit-icon";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge, statusRank } from "@/components/status-badge";
-import { UnsavedBanner } from "@/components/unsaved-banner";
 import { formatAddress } from "@/lib/address";
 import type { AgentRecord } from "@/lib/agents";
 import { phoneDigits } from "@/lib/phone";
+import { rowNumbers } from "@/lib/row-numbers";
 import { AgentDialog, type AgentEditor } from "./agent-dialog";
 import { useAgentsStore } from "./agents-store";
 
 /*
- * Agents table with dummy add and edit. A row's Edit opens the shared
- * AgentDialog (./agent-dialog.tsx), which an agent's profile opens too; Add
- * agent is a link to the /agents/new page, which renders the same form. Every
- * add or edit records a note listing what changed. The table sorts by header
- * and filters by search.
+ * Agents table. A row's Edit opens the shared AgentDialog
+ * (./agent-dialog.tsx), which an agent's profile opens too; Add agent is a
+ * link to the /agents/new page, which renders the same form. Saves go to the
+ * API through the section store; the API records a note of what changed,
+ * read on the profile. The table sorts by header and filters by search.
  * A name links to the agent's profile, which shows their aliases, notes and
  * state licences; rows don't expand and the list has no states column, so
  * search doesn't cover states either. Personal email, personal phone and
  * address have no column but are searchable through the work email and phone
  * columns and the name column. The dialog's licensed states and
- * numbers are the agent's licence rows, which saveAgent edits. Agents,
- * licence rows, notes and the unsaved count live in the section's store
- * (./agents-store.tsx), shared with the Add agent page: nothing reaches a
- * server, and a refresh brings back the JSON.
+ * numbers are the agent's licence rows, which the API keeps in step. Agents
+ * and licence rows live in the section's store (./agents-store.tsx), shared
+ * with the Add agent page.
  */
 
 export function AgentsView() {
-  const { agents, unsavedCount, save } = useAgentsStore();
+  const { agents, save } = useAgentsStore();
   const [editor, setEditor] = useState<AgentEditor | null>(null);
+
+  // The ID shown is the agent's place in the name-sorted list, 1…n, not the
+  // API's UUID (that only appears in the profile URL). A row number, not a key.
+  const numbers = useMemo(() => rowNumbers(agents), [agents]);
 
   // Sort and search run in DataTable. Search covers aliases too, so an agent can
   // be found by any name they appear under on statements.
   const columns = useMemo<DataTableColumn<AgentRecord>[]>(
     () => [
       {
-        id: "id",
+        id: "number",
         header: "ID",
-        cell: (agent) => agent.id,
+        cell: (agent) => numbers.get(agent.id),
         className: "font-mono text-fg-muted",
-        sortValue: (agent) => Number(agent.id),
-        searchText: (agent) => agent.id,
+        sortValue: (agent) => numbers.get(agent.id) ?? 0,
+        searchText: (agent) => String(numbers.get(agent.id) ?? ""),
       },
       {
         id: "npn",
@@ -116,7 +119,7 @@ export function AgentsView() {
         className: "text-right",
       },
     ],
-    [],
+    [numbers],
   );
 
   const addLink = (
@@ -128,8 +131,6 @@ export function AgentsView() {
   return (
     <>
       <PageHeader title="Agents" actions={addLink} />
-
-      <UnsavedBanner count={unsavedCount} />
 
       {agents.length === 0 ? (
         <EmptyState

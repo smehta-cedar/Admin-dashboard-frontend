@@ -35,8 +35,15 @@ export type ProducerValues = {
   licenseNumbers: Record<string, string>;
 };
 
-/** A save error, shown under the field it names. "address" is the agent-only section's. */
-export type ProducerError = { field: "npn" | "licenseNumbers" | "address"; message: string };
+/**
+ * A save error, shown under the field it names. "address" is the agent-only
+ * section's; "form" is about the attempt itself (no permission, API down)
+ * and shows under the form.
+ */
+export type ProducerError = {
+  field: "name" | "npn" | "licenseNumbers" | "address" | "form";
+  message: string;
+};
 
 /**
  * A producer-specific section of the form. `render` draws its fields inside
@@ -74,8 +81,11 @@ type ProducerFormProps<E extends object> = {
   initial?: ProducerValues & Partial<E>;
   /** Fields only this producer has; see ProducerExtra. */
   extra?: ProducerExtra<E>;
-  /** Saves the values; returns the error to show instead of closing. */
-  onSave: (values: ProducerValues & E) => ProducerError | null;
+  /**
+   * Saves the values; returns (or resolves with) the error to show instead
+   * of closing. While a promise is pending the buttons are disabled.
+   */
+  onSave: (values: ProducerValues & E) => ProducerError | null | Promise<ProducerError | null>;
   close: () => void;
 };
 
@@ -139,24 +149,43 @@ export function ProducerForm<E extends object = Record<never, never>>({
   onSave,
   close,
 }: ProducerFormProps<E>) {
+  const [nameError, setNameError] = useState<string | null>(null);
   const [npnError, setNpnError] = useState<string | null>(null);
   const [numbersError, setNumbersError] = useState<string | null>(null);
   const [addressError, setAddressError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   // Follows the checkboxes, so each checked state gets a licence number input.
   const [licensedCodes, setLicensedCodes] = useState(initial?.licensedStates ?? []);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (saving) return;
     const form = event.currentTarget;
     const extraValues = extra ? extra.read(new FormData(form)) : ({} as E);
-    const error = onSave({ ...readValues(form), ...extraValues });
-    if (error) {
-      if (error.field === "npn") setNpnError(error.message);
-      else if (error.field === "address") setAddressError(error.message);
-      else setNumbersError(error.message);
+    // The checks a save can't pass without: a number for every checked state.
+    const values = { ...readValues(form), ...extraValues };
+    const unnumbered = unnumberedStatesError(values);
+    if (unnumbered) {
+      setNumbersError(unnumbered.message);
       return;
     }
-    close();
+    setSaving(true);
+    setFormError(null);
+    try {
+      const error = await onSave(values);
+      if (error) {
+        if (error.field === "name") setNameError(error.message);
+        else if (error.field === "npn") setNpnError(error.message);
+        else if (error.field === "address") setAddressError(error.message);
+        else if (error.field === "form") setFormError(error.message);
+        else setNumbersError(error.message);
+        return;
+      }
+      close();
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -167,7 +196,14 @@ export function ProducerForm<E extends object = Record<never, never>>({
       <p className="mt-1 text-sm text-fg-muted">{description}</p>
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
-        <Field label={labels.name} htmlFor={`${id}-name`} className="sm:col-span-2">
+        <Field
+          label={labels.name}
+          htmlFor={`${id}-name`}
+          hint={nameError ?? undefined}
+          hintId={`${id}-name-error`}
+          error
+          className="sm:col-span-2"
+        >
           <input
             id={`${id}-name`}
             name="name"
@@ -176,6 +212,9 @@ export function ProducerForm<E extends object = Record<never, never>>({
             pattern=".*\S.*"
             autoComplete="off"
             defaultValue={initial?.name}
+            aria-invalid={nameError ? true : undefined}
+            aria-describedby={nameError ? `${id}-name-error` : undefined}
+            onChange={() => setNameError(null)}
             className={INPUT_CLASS}
           />
         </Field>
@@ -315,12 +354,17 @@ export function ProducerForm<E extends object = Record<never, never>>({
         ) : null}
       </div>
 
-      <div className="mt-6 flex justify-end gap-2">
-        <button type="button" onClick={close} className={GHOST_BUTTON_CLASS}>
+      {/* Errors about the attempt itself (no permission, API down), not one field. */}
+      <div role="alert" className="mt-4">
+        {formError ? <p className="text-sm text-danger">{formError}</p> : null}
+      </div>
+
+      <div className="mt-4 flex justify-end gap-2">
+        <button type="button" onClick={close} disabled={saving} className={GHOST_BUTTON_CLASS}>
           Cancel
         </button>
-        <button type="submit" className={PRIMARY_BUTTON_CLASS}>
-          {submitLabel}
+        <button type="submit" disabled={saving} className={`${PRIMARY_BUTTON_CLASS} disabled:opacity-60`}>
+          {saving ? "Saving…" : submitLabel}
         </button>
       </div>
     </form>

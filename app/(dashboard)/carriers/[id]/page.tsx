@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getAgents } from "@/lib/agents";
 import { getCarrierContracts } from "@/lib/carrier-contracts";
-import { carrierNumbers } from "@/lib/carrier-numbers";
 import { getCarrier, getCarrierNotes, getCarriers } from "@/lib/carriers";
 import { getPasswords } from "@/lib/passwords";
+import { rowNumbers } from "@/lib/row-numbers";
 import { byName } from "@/lib/text";
 import { CarrierProfile } from "./carrier-profile";
 
@@ -27,10 +27,9 @@ export default async function CarrierProfilePage(props: PageProps<"/carriers/[id
     getAgents(),
   ]);
   // The number the Carriers list shows: its place among every carrier, by name.
-  const number = carrierNumbers(carriers).get(id) ?? 0;
+  const number = rowNumbers(carriers).get(id) ?? 0;
 
   const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
-  const agentName = (agentId: string) => agentsById.get(agentId)?.name ?? `Agent ${agentId}`;
 
   return (
     <CarrierProfile
@@ -63,7 +62,7 @@ export default async function CarrierProfilePage(props: PageProps<"/carriers/[id
         .filter((record) => record.carrierId === id)
         .map((record) => ({
           ...record,
-          partyName: agentName(record.agentId),
+          partyName: record.agentName,
           partyHref: `/agents/${record.agentId}`,
         }))
         .sort((a, b) => a.partyName.localeCompare(b.partyName))}

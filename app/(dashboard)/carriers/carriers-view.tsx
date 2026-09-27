@@ -8,7 +8,8 @@ import { EditIcon } from "@/components/edit-icon";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge, statusRank } from "@/components/status-badge";
-import { carrierNumbers, type CarrierRecord } from "@/lib/carrier-numbers";
+import type { CarrierRecord } from "@/lib/carriers";
+import { rowNumbers } from "@/lib/row-numbers";
 import { byName } from "@/lib/text";
 import { US_STATE_NAMES, stateSummary } from "@/lib/us-states";
 import { saveCarrier } from "./actions";
@@ -44,7 +45,7 @@ export function CarriersView({ initialCarriers }: CarriersViewProps) {
   // The ID shown is the carrier's place in the name-sorted list, 1…n, not the
   // API's UUID (that only appears in the profile URL). It moves when a name
   // sorts elsewhere, so it is a row number, not a key.
-  const numbers = useMemo(() => carrierNumbers(carriers), [carriers]);
+  const numbers = useMemo(() => rowNumbers(carriers), [carriers]);
 
   // Sort and search run in DataTable. Search covers aliases, so a carrier can be
   // found by any name it appears under on statements.

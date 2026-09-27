@@ -1,10 +1,11 @@
 import "server-only";
 
 /*
- * Data boundary for agents. Today it reads fake agents and notes from
- * data/agents.json and data/agent-notes.json; later it queries Supabase. The
- * JSON is trusted as-is, not validated, except that phones load in the one
- * display format (lib/phone.ts).
+ * Data boundary for agents: reads the Django API (backend/apps/agents,
+ * `/api/v1/agents/`) as the signed-in user. Adds and edits go through the
+ * server actions in app/(dashboard)/agents/actions.ts, which post to the
+ * same API; the API records a change note on every add and every edit that
+ * changed something. Phones load in the one display format (lib/phone.ts).
  *
  * licensedStates is the agent's own resident/non-resident licences: where they
  * may write at all, whoever the carrier. It is one of the two ceilings on an
@@ -15,11 +16,11 @@ import "server-only";
  * licenseNumbers holds the licence number the state issued, per licensed state.
  *
  * Neither is stored on the agent. Both are derived here from the agent's
- * state licence rows (lib/agent-state-licenses.ts, one row per state with
+ * licence rows, which the API returns with each agent (one row per state with
  * its number, status and dates): every row lists its state, and a row whose
  * number is still blank (a pending licence) shows "No number yet". The agent
- * dialog edits those rows, then derives the two fields again the same way
- * (lib/state-licenses.ts).
+ * form edits those rows through the API (`licenses` on save), which derives
+ * the two fields the same way.
  *
  * Email and phone are the agent's work contact. personalEmail, personalPhone
  * and address are their own contact details, all optional and agent-only (the
@@ -32,30 +33,38 @@ import "server-only";
  *
  * The commission matrix still uses the slim `Agent` ({ id, name }) from
  * commissions.ts. Don't widen that; use AgentRecord here for agent detail.
+ *
+ * data/agents.json and data/agent-state-licenses.json are no longer read
+ * here; they are the seed files for `python manage.py seed_agents`.
  */
 
-import agentsJson from "@/data/agents.json";
-import notesJson from "@/data/agent-notes.json";
 import type { Address } from "@/lib/address";
-import { getAgentStateLicenses, type AgentStateLicenseRecord } from "@/lib/agent-state-licenses";
+import type { AgentStateLicenseRecord } from "@/lib/agent-state-licenses";
+import { apiFetch, apiGet, apiGetAll, ApiError } from "@/lib/api-server";
+import type { FieldChange } from "@/lib/change-notes";
 import { formatPhone } from "@/lib/phone";
-import { licenseNumbersOf, licensedStatesOf } from "@/lib/state-licenses";
+import {
+  STATE_LICENSE_STATUSES,
+  licenseNumbersOf,
+  licensedStatesOf,
+  type StateLicenseStatus,
+} from "@/lib/state-licenses";
 
 export type AgentStatus = "active" | "inactive";
 
 export type AgentRecord = {
-  /** Internal ID, numbered 1, 2, 3, … for now. Not the NPN or a writing number. */
+  /** The API's UUID. Not the NPN or a writing number. */
   id: string;
   /** Legal / full name. */
   name: string;
   /** Other names seen on statements (DBA, nickname, maiden). Empty when none. */
   aliases: string[];
-  /** Defaults to "active" when adding. */
+  /** The API's is_active. Defaults to "active" when adding. */
   status: AgentStatus;
   /**
    * US state codes from lib/us-states.ts the agent holds a licence in, unique
    * and in code order. Empty when licensed nowhere yet (not "all states").
-   * Derived from the agent's state licence rows, never stored.
+   * Derived from the agent's licence rows, never stored.
    */
   licensedStates: string[];
   /**
@@ -79,15 +88,13 @@ export type AgentRecord = {
 /** Agent fields a note can record. The ID never changes. */
 export type AgentField = Exclude<keyof AgentRecord, "id">;
 
-export type AgentChange = {
-  field: AgentField;
-  /** Value before, as shown in the UI (aliases joined with ", "). Empty for a new agent. */
-  from: string;
-  to: string;
-};
+/** What the add / edit form submits: every field but the ID. */
+export type AgentValues = Omit<AgentRecord, "id">;
+
+export type AgentChange = FieldChange<AgentField>;
 
 /**
- * Change-log entry, written automatically whenever an agent is added or edited.
+ * Change-log entry the API writes whenever an agent is added or edited.
  * Append-only: notes are never edited or deleted.
  */
 export type AgentNote = {
@@ -96,46 +103,152 @@ export type AgentNote = {
   kind: "added" | "edited";
   /** ISO 8601 timestamp in UTC, e.g. "2026-09-02T14:05:00.000Z". */
   createdAt: string;
+  /** Full name of who made the change, or null when unknown. */
+  createdBy: string | null;
   /** Only the fields that changed, in form order. */
   changes: AgentChange[];
 };
 
-/** An agent as the JSON holds it: without the two fields derived from licence rows. */
-type StoredAgent = Omit<AgentRecord, "licensedStates" | "licenseNumbers">;
+/** A licence row as the API serialises it, nested on an agent. */
+export type ApiAgentLicense = {
+  id: string;
+  state: string;
+  license_number: string;
+  status: string;
+  start_date: string | null;
+  end_date: string | null;
+};
 
-/**
- * A stored agent with the phone in the display format and licensedStates /
- * licenseNumbers derived from their licence rows (`licenses` may hold every
- * agent's; only this agent's are read).
- */
-function toRecord(agent: StoredAgent, licenses: AgentStateLicenseRecord[]): AgentRecord {
-  const own = licenses.filter((license) => license.agentId === agent.id);
+/** An agent as the API serialises it (AgentSerializer). */
+export type ApiAgent = {
+  id: string;
+  name: string;
+  aliases: string[];
+  npn: string;
+  email: string;
+  phone: string;
+  personal_email: string;
+  personal_phone: string;
+  address: Address | null;
+  licenses: ApiAgentLicense[];
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+/** A note as the API serialises it (AgentNoteSerializer). */
+type ApiAgentNote = {
+  id: string;
+  agent_id: string;
+  kind: "added" | "edited";
+  changes: { field: string; from: string; to: string }[];
+  created_by: string | null;
+  created_at: string;
+};
+
+/** API field name -> AgentRecord field, for a note's changes. */
+const NOTE_FIELDS: Record<string, AgentField> = {
+  name: "name",
+  aliases: "aliases",
+  status: "status",
+  npn: "npn",
+  email: "email",
+  phone: "phone",
+  personal_email: "personalEmail",
+  personal_phone: "personalPhone",
+  address: "address",
+  licensed_states: "licensedStates",
+  license_numbers: "licenseNumbers",
+};
+
+/** An API agent's licence rows as the app holds them. An unknown status reads as "active" with a console warning. */
+export function toLicenseRecords(agent: ApiAgent): AgentStateLicenseRecord[] {
+  return agent.licenses.map((row) => {
+    const knownStatus = STATE_LICENSE_STATUSES.includes(row.status);
+    if (!knownStatus) {
+      console.warn(`State licence ${row.id} has status ${JSON.stringify(row.status)}; treating it as "active".`);
+    }
+    return {
+      id: row.id,
+      agentId: agent.id,
+      state: row.state,
+      licenseNumber: row.license_number,
+      status: knownStatus ? (row.status as StateLicenseStatus) : "active",
+      startDate: row.start_date ?? "",
+      endDate: row.end_date ?? "",
+    };
+  });
+}
+
+/** An API agent as the app holds it: phones formatted, the licence fields derived from the rows. */
+export function toAgentRecord(agent: ApiAgent): AgentRecord {
+  const licenses = toLicenseRecords(agent);
   return {
-    ...agent,
+    id: agent.id,
+    name: agent.name,
+    aliases: agent.aliases,
+    status: agent.is_active ? "active" : "inactive",
+    licensedStates: licensedStatesOf(licenses),
+    licenseNumbers: licenseNumbersOf(licenses),
+    npn: agent.npn,
+    email: agent.email,
     phone: formatPhone(agent.phone),
-    ...(agent.personalPhone ? { personalPhone: formatPhone(agent.personalPhone) } : {}),
-    licensedStates: licensedStatesOf(own),
-    licenseNumbers: licenseNumbersOf(own),
+    ...(agent.personal_email ? { personalEmail: agent.personal_email } : {}),
+    ...(agent.personal_phone ? { personalPhone: formatPhone(agent.personal_phone) } : {}),
+    ...(agent.address ? { address: agent.address } : {}),
   };
 }
 
-/** Every agent, active and inactive, in ID order (1, 2, 3, …). */
+function toAgentNote(note: ApiAgentNote): AgentNote {
+  return {
+    id: note.id,
+    agentId: note.agent_id,
+    kind: note.kind,
+    createdAt: note.created_at,
+    createdBy: note.created_by,
+    changes: note.changes.flatMap((change) => {
+      const field = NOTE_FIELDS[change.field];
+      return field ? [{ field, from: change.from, to: change.to }] : [];
+    }),
+  };
+}
+
+/** Every agent, active and inactive, sorted by name, with every licence row. One API read. */
+export async function getAgentsWithLicenses(): Promise<{
+  agents: AgentRecord[];
+  licenses: AgentStateLicenseRecord[];
+}> {
+  const agents = await apiGetAll<ApiAgent>("/agents/");
+  return {
+    agents: agents.map(toAgentRecord),
+    licenses: agents.flatMap(toLicenseRecords),
+  };
+}
+
+/** Every agent, active and inactive, sorted by name. */
 export async function getAgents(): Promise<AgentRecord[]> {
-  const licenses = await getAgentStateLicenses();
-  return (agentsJson as StoredAgent[])
-    .map((agent) => toRecord(agent, licenses))
-    .sort((a, b) => Number(a.id) - Number(b.id));
+  return (await getAgentsWithLicenses()).agents;
 }
 
-/** One agent by internal ID, or null when there is none. */
+/** One agent by ID with their licence rows, or null when there is none (or the ID isn't one). */
+export async function getAgentWithLicenses(
+  id: string,
+): Promise<{ agent: AgentRecord; licenses: AgentStateLicenseRecord[] } | null> {
+  const result = await apiFetch<ApiAgent>(`/agents/${encodeURIComponent(id)}/`);
+  if (!result.ok) {
+    if (result.status === 404) return null;
+    throw new ApiError(`/agents/${id}/`, result);
+  }
+  return { agent: toAgentRecord(result.data), licenses: toLicenseRecords(result.data) };
+}
+
+/** One agent by ID, or null when there is none. */
 export async function getAgent(id: string): Promise<AgentRecord | null> {
-  const agent = (agentsJson as StoredAgent[]).find((stored) => stored.id === id);
-  return agent ? toRecord(agent, await getAgentStateLicenses()) : null;
+  return (await getAgentWithLicenses(id))?.agent ?? null;
 }
 
-/** Every agent note, newest first. */
-export async function getAgentNotes(): Promise<AgentNote[]> {
-  return (notesJson as AgentNote[])
-    .slice()
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+/** One agent's change notes, newest first. */
+export async function getAgentNotes(agentId: string): Promise<AgentNote[]> {
+  const notes = await apiGet<ApiAgentNote[]>(`/agents/${encodeURIComponent(agentId)}/notes/`);
+  return notes.map(toAgentNote);
 }

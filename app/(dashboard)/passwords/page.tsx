@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { connection } from "next/server";
 import { getAgents } from "@/lib/agents";
 import { getCarriers } from "@/lib/carriers";
-import { getPasswordNotes, getPasswords } from "@/lib/passwords";
+import { getPasswords } from "@/lib/passwords";
 import { PasswordsView } from "./passwords-view";
 
 export const metadata: Metadata = {
@@ -16,17 +16,11 @@ export default async function PasswordsPage() {
   // on the client instead.
   await connection();
 
-  const [passwords, notes, agents, carriers] = await Promise.all([
-    getPasswords(),
-    getPasswordNotes(),
-    getAgents(),
-    getCarriers(),
-  ]);
+  const [passwords, agents, carriers] = await Promise.all([getPasswords(), getAgents(), getCarriers()]);
 
   return (
     <PasswordsView
       initialPasswords={passwords}
-      initialNotes={notes}
       agents={agents.map(({ id, name, status }) => ({ id, name, status }))}
       carriers={carriers.map(({ id, name, status }) => ({ id, name, status }))}
     />

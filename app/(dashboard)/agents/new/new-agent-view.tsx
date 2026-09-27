@@ -9,9 +9,8 @@ import { useAgentsStore } from "../agents-store";
 /*
  * The Add agent page: the same AgentForm the row and profile Edit dialogs
  * render, laid out in a card instead of a <dialog>. Saving goes through the
- * section store, then Cancel and a successful save both return to the list,
- * where the new agent already is. Nothing is saved anywhere; a refresh drops
- * it, and the agent has no profile page until it exists in the JSON.
+ * section store to the API, then Cancel and a successful save both return to
+ * the list, where the new agent already is.
  */
 export function NewAgentView() {
   const router = useRouter();
@@ -22,7 +21,7 @@ export function NewAgentView() {
     <>
       <PageHeader
         title="Add agent"
-        description="Not saved anywhere yet. The agent stays in the list until you refresh, and has no profile until then."
+        description="Fill in the agent's details and licences. Saving adds them for everyone and opens the list."
       />
 
       {/* The form owns its inset (p-6), the same as inside the dialog. */}

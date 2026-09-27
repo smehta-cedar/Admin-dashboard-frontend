@@ -2,77 +2,67 @@
 
 import { createContext, useContext, useState, type ReactNode } from "react";
 import type { AgentStateLicenseRecord } from "@/lib/agent-state-licenses";
-import type { AgentNote, AgentRecord } from "@/lib/agents";
-import { saveAgent, type AgentError, type AgentValues } from "./agent-dialog";
+import type { AgentRecord } from "@/lib/agents";
+import { byName } from "@/lib/text";
+import { saveAgent } from "./actions";
+import type { AgentError, AgentValues } from "./agent-dialog";
 
 /*
- * The Agents section's dummy state: every agent, every agent note and every
- * licence row, plus how many changes were made on this visit. Mounted by
- * app/(dashboard)/agents/layout.tsx, which loads the JSON once, so the list
- * (/agents) and the Add agent page (/agents/new) read and write the same
- * lists — an agent added on the page is in the list when it comes back. Like
- * every other page, nothing reaches a server and a refresh brings back the
- * JSON.
+ * The Agents section's state: every agent and every licence row, loaded once
+ * by app/(dashboard)/agents/layout.tsx from the API and shared by the list
+ * (/agents) and the Add agent page (/agents/new), so an agent added on the
+ * page is in the list when it comes back. Saves go through the saveAgent
+ * server action; the API writes the notes, read on the profile. The action
+ * revalidates the section too, so the next server render agrees with what
+ * is set here.
  *
  * The agent profile (/agents/[id]) sits under the same layout but keeps its
- * own state from its own server load: a brand-new agent has no profile until
- * it exists in the JSON.
+ * own state from its own server load.
  */
 
 type AgentsStore = {
   agents: AgentRecord[];
-  notes: AgentNote[];
   licenses: AgentStateLicenseRecord[];
-  /** Adds and edits made since the page loaded, for the unsaved banner. */
-  unsavedCount: number;
   /**
-   * Adds an agent, or edits `editing`, through `saveAgent`: the list, notes
-   * and licence rows all update at once. Returns the form error, if any.
+   * Adds an agent, or edits `editing`, through the API: the list and the
+   * licence rows update at once. Resolves with the form error, if any.
    */
-  save: (values: AgentValues, editing?: AgentRecord) => AgentError | null;
+  save: (values: AgentValues, editing?: AgentRecord) => Promise<AgentError | null>;
 };
 
 const AgentsContext = createContext<AgentsStore | null>(null);
 
 type AgentsProviderProps = {
   initialAgents: AgentRecord[];
-  initialNotes: AgentNote[];
-  /** Every agent's licence rows: the form edits them and new row IDs need them all. */
+  /** Every agent's licence rows. */
   initialLicenses: AgentStateLicenseRecord[];
   children: ReactNode;
 };
 
-export function AgentsProvider({
-  initialAgents,
-  initialNotes,
-  initialLicenses,
-  children,
-}: AgentsProviderProps) {
+export function AgentsProvider({ initialAgents, initialLicenses, children }: AgentsProviderProps) {
   const [agents, setAgents] = useState(initialAgents);
-  const [notes, setNotes] = useState(initialNotes);
   const [licenses, setLicenses] = useState(initialLicenses);
-  const [unsavedCount, setUnsavedCount] = useState(0);
 
-  const save: AgentsStore["save"] = (values, editing) => {
-    const result = saveAgent({ agents, notes, licenses, values, editing });
-    if (result.error !== null) return result.error;
-    if (!result.changed) return null;
+  const save: AgentsStore["save"] = async (values, editing) => {
+    const result = await saveAgent(values, editing?.id);
+    if (!result.ok) return result.error;
 
     const saved = result.agent;
     setAgents((current) =>
-      editing ? current.map((agent) => (agent.id === saved.id ? saved : agent)) : [...current, saved],
+      (editing
+        ? current.map((agent) => (agent.id === saved.id ? saved : agent))
+        : [...current, saved]
+      ).sort(byName),
     );
-    setLicenses(result.licenses);
-    setNotes(result.notes);
-    setUnsavedCount((count) => count + 1);
+    // This agent's rows are replaced by what the API now holds; the rest stay.
+    setLicenses((current) => [
+      ...current.filter((license) => license.agentId !== saved.id),
+      ...result.licenses,
+    ]);
     return null;
   };
 
-  return (
-    <AgentsContext.Provider value={{ agents, notes, licenses, unsavedCount, save }}>
-      {children}
-    </AgentsContext.Provider>
-  );
+  return <AgentsContext.Provider value={{ agents, licenses, save }}>{children}</AgentsContext.Provider>;
 }
 
 /** The section's agents state. Only under the agents layout. */

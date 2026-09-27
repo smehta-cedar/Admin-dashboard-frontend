@@ -7,19 +7,20 @@ import { Field } from "@/components/field";
 import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
 import type { AgentRecord } from "@/lib/agents";
 import type { CarrierRecord } from "@/lib/carriers";
-import { diffValues, nextId } from "@/lib/change-notes";
-import type { PasswordField, PasswordNote, PasswordRecord } from "@/lib/passwords";
+import type { PasswordError, PasswordField, PasswordRecord, PasswordValues } from "@/lib/passwords";
 import { byName } from "@/lib/text";
 
 /*
  * The one Add / Edit password dialog: agent, carrier, portal username and
- * password, status. Writing numbers live on carrier contracts. The Name
+ * password, status. Writing numbers live on carrier contracts. The
  * Passwords page opens it from Add password (the carrier pre-picked from
  * its filter) and a row's Edit.
  *
- * The view owns its passwords and notes state and passes `onSave`, which
- * calls `savePassword` below and sets that state. Adds and edits are
- * dummy: nothing reaches a server, and a refresh brings back the JSON.
+ * The view passes `onSave`, which calls the savePassword server action
+ * (./actions.ts) and updates its own state from the saved record. The API
+ * keeps one password per agent at each carrier and records the change note;
+ * the form only checks what it can see at once (a blank password). While
+ * the save is in flight the buttons are disabled.
  */
 
 /** Which dialog is open. Add may start on a carrier; edit holds the record as it was. */
@@ -27,15 +28,12 @@ export type PasswordEditor =
   | { mode: "add"; carrierId?: string }
   | { mode: "edit"; password: PasswordRecord };
 
-export type PasswordValues = Omit<PasswordRecord, "id">;
-
-/** A save error, shown under the field it names. Several can fail at once. */
-export type PasswordError = { field: "carrierId" | "portalPassword"; message: string };
+export type { PasswordError, PasswordValues } from "@/lib/passwords";
 
 export type AgentOption = Pick<AgentRecord, "id" | "name" | "status">;
 export type CarrierOption = Pick<CarrierRecord, "id" | "name" | "status">;
 
-/** Also the order changes are compared and listed in. */
+/** Also the order changes are listed in on a note. */
 export const PASSWORD_FIELD_LABELS: Record<PasswordField, string> = {
   agentId: "Agent",
   carrierId: "Carrier",
@@ -44,114 +42,13 @@ export const PASSWORD_FIELD_LABELS: Record<PasswordField, string> = {
   status: "Status",
 };
 
-const FIELDS = Object.keys(PASSWORD_FIELD_LABELS) as PasswordField[];
-
-const EMPTY_VALUES = { agentId: "", carrierId: "", username: "", portalPassword: "" };
-
-/** Recorded in notes only as "Password changed", never with its value. */
-const REDACTED_FIELDS: PasswordField[] = ["portalPassword"];
-
-type SaveInput = {
-  passwords: PasswordRecord[];
-  /** Every password note, so the new note's ID is unique. */
-  notes: PasswordNote[];
-  values: PasswordValues;
-  /** The record being edited; leave out when adding. */
-  editing?: PasswordRecord;
-  agentName: (agentId: string) => string;
-  carrierName: (carrierId: string) => string;
-};
-
-type SaveResult =
-  | { errors: PasswordError[]; password: null }
-  | {
-      errors: [];
-      /** The record as saved; on an edit that changed nothing, the record as it was. */
-      password: PasswordRecord;
-      /** False when an edit changed nothing: no new passwords or note. */
-      changed: boolean;
-      passwords: PasswordRecord[];
-      notes: PasswordNote[];
-    };
-
-/**
- * Adds or edits a password, pure. Returns the next passwords and
- * notes (a note only when something changed), or every error to show: a second
- * password for the same agent at the same carrier, and a blank password.
- */
-export function savePassword({
-  passwords,
-  notes,
-  values,
-  editing,
-  agentName,
-  carrierName,
-}: SaveInput): SaveResult {
-  const others = passwords.filter((record) => record.id !== editing?.id);
-  const pairOwner = others.find(
-    (record) => record.agentId === values.agentId && record.carrierId === values.carrierId,
-  );
-
-  // Messages name agents and carriers, never IDs.
-  const errors: PasswordError[] = [];
-  if (pairOwner) {
-    errors.push({
-      field: "carrierId",
-      message: `${agentName(values.agentId)} already has a password at ${carrierName(values.carrierId)}.`,
-    });
-  }
-  // Required, and spaces alone don't count. A valid password is still saved as typed.
-  if (values.portalPassword.trim() === "") {
-    errors.push({ field: "portalPassword", message: "Password can't be blank." });
-  }
-  if (errors.length > 0) return { errors, password: null };
-
-  /** Values as notes show them: agent and carrier by name. */
-  const shown = (from: PasswordValues) => ({
-    ...from,
-    agentId: agentName(from.agentId),
-    carrierId: carrierName(from.carrierId),
-  });
-  const passwordId = editing?.id ?? nextId(passwords);
-  const saved = { id: passwordId, ...values };
-  const changes = diffValues(
-    FIELDS,
-    editing ? shown(editing) : EMPTY_VALUES,
-    shown(values),
-    REDACTED_FIELDS,
-  );
-  // Saving an edit with nothing changed just closes, without a note.
-  if (changes.length === 0) {
-    return { errors: [], password: saved, changed: false, passwords, notes };
-  }
-
-  return {
-    errors: [],
-    password: saved,
-    changed: true,
-    passwords: editing
-      ? passwords.map((record) => (record.id === passwordId ? saved : record))
-      : [...passwords, saved],
-    notes: [
-      {
-        id: nextId(notes),
-        passwordId,
-        kind: editing ? "edited" : "added",
-        createdAt: new Date().toISOString(),
-        changes,
-      },
-      ...notes,
-    ],
-  };
-}
-
 type PasswordDialogProps = {
   /** Null keeps the dialog closed. */
   editor: PasswordEditor | null;
   agents: AgentOption[];
   carriers: CarrierOption[];
-  /** Saves the values; returns the errors to show instead of closing. */
-  onSave: (values: PasswordValues, editing?: PasswordRecord) => PasswordError[];
+  /** Saves the values; resolves with the errors to show instead of closing. */
+  onSave: (values: PasswordValues, editing?: PasswordRecord) => Promise<PasswordError[]>;
   /** Runs for every close: Cancel, Escape, backdrop click, or a save. */
   onClose: () => void;
 };
@@ -200,64 +97,78 @@ function PasswordForm({
 }: PasswordFormProps) {
   const editing = editor.mode === "edit" ? editor.password : undefined;
   const [errors, setErrors] = useState<PasswordError[]>([]);
+  const [saving, setSaving] = useState(false);
 
   const messageFor = (field: PasswordError["field"]) =>
     errors.find((error) => error.field === field)?.message ?? null;
   const clear = (...fields: PasswordError["field"][]) =>
     setErrors((current) => current.filter((error) => !fields.includes(error.field)));
 
-  const agentName = (agentId: string) =>
-    agents.find((agent) => agent.id === agentId)?.name ?? `Agent ${agentId}`;
-  const carrierName = (carrierId: string) =>
-    carriers.find((carrier) => carrier.id === carrierId)?.name ?? `Carrier ${carrierId}`;
-
+  const agentError = messageFor("agentId");
   const carrierError = messageFor("carrierId");
+  const usernameError = messageFor("username");
   const passwordError = messageFor("portalPassword");
+  const formError = messageFor("form") ?? messageFor("status");
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (saving) return;
     const data = new FormData(event.currentTarget);
     const text = (field: PasswordField) => String(data.get(field) ?? "").trim();
     const status = text("status");
-    const saveErrors = onSave(
-      {
-        agentId: text("agentId"),
-        carrierId: text("carrierId"),
-        username: text("username"),
-        // Not trimmed or lowercased: spaces and case can matter in a password.
-        portalPassword: String(data.get("portalPassword") ?? ""),
-        status: status === "pending" || status === "inactive" ? status : "active",
-      },
-      editing,
-    );
-    if (saveErrors.length > 0) {
-      setErrors(saveErrors);
+    const values: PasswordValues = {
+      agentId: text("agentId"),
+      carrierId: text("carrierId"),
+      username: text("username"),
+      // Not trimmed or lowercased: spaces and case can matter in a password.
+      portalPassword: String(data.get("portalPassword") ?? ""),
+      status: status === "pending" || status === "inactive" ? status : "active",
+    };
+    // Required, and spaces alone don't count. A valid password is still saved as typed.
+    if (values.portalPassword.trim() === "") {
+      setErrors([{ field: "portalPassword", message: "Password can't be blank." }]);
       return;
     }
-    close();
+    setSaving(true);
+    try {
+      const saveErrors = await onSave(values, editing);
+      if (saveErrors.length > 0) {
+        setErrors(saveErrors);
+        return;
+      }
+      close();
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <form onSubmit={handleSubmit} className="p-6">
       <h2 id={`${id}-title`} className="text-base font-semibold text-fg">
-        {editing
-          ? `Edit ${agentName(editing.agentId)} at ${carrierName(editing.carrierId)}`
-          : "Add password"}
+        {editing ? `Edit ${editing.agentName} at ${editing.carrierName}` : "Add password"}
       </h2>
       <p className="mt-1 text-sm text-fg-muted">
         {editing
-          ? "Saving records a note of what changed. Nothing is saved anywhere yet; refreshing undoes it."
-          : "Not saved anywhere yet. The password stays in the list until you refresh."}
+          ? "Saving records a note of what changed; the password itself is never written to a note."
+          : "The password is added for everyone, with a note of what was entered (not the password)."}
       </p>
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
-        <Field label="Agent" htmlFor={`${id}-agent`}>
+        <Field
+          label="Agent"
+          htmlFor={`${id}-agent`}
+          hint={agentError ?? undefined}
+          hintId={`${id}-agent-error`}
+          error
+        >
           <select
             id={`${id}-agent`}
             name="agentId"
             required
             defaultValue={editing?.agentId ?? ""}
-            onChange={() => clear("carrierId")}
+            aria-invalid={agentError ? true : undefined}
+            aria-describedby={agentError ? `${id}-agent-error` : undefined}
+            onChange={() => clear("agentId", "carrierId")}
             className={INPUT_CLASS}
           >
             <option value="">Choose an agent</option>
@@ -300,8 +211,9 @@ function PasswordForm({
         <Field
           label="Portal username"
           htmlFor={`${id}-username`}
-          hint="Portal username for this agent at this carrier."
+          hint={usernameError ?? "Portal username for this agent at this carrier."}
           hintId={`${id}-username-hint`}
+          error={usernameError !== null}
         >
           <input
             id={`${id}-username`}
@@ -310,8 +222,10 @@ function PasswordForm({
             required
             pattern=".*\S.*"
             autoComplete="off"
+            aria-invalid={usernameError ? true : undefined}
             aria-describedby={`${id}-username-hint`}
             defaultValue={editing?.username}
+            onChange={() => clear("username")}
             className={INPUT_CLASS}
           />
         </Field>
@@ -351,12 +265,17 @@ function PasswordForm({
         </Field>
       </div>
 
-      <div className="mt-6 flex justify-end gap-2">
-        <button type="button" onClick={close} className={GHOST_BUTTON_CLASS}>
+      {/* Errors about the attempt itself (no permission, API down), not one field. */}
+      <div role="alert" className="mt-4">
+        {formError ? <p className="text-sm text-danger">{formError}</p> : null}
+      </div>
+
+      <div className="mt-4 flex justify-end gap-2">
+        <button type="button" onClick={close} disabled={saving} className={GHOST_BUTTON_CLASS}>
           Cancel
         </button>
-        <button type="submit" className={PRIMARY_BUTTON_CLASS}>
-          {editing ? "Save changes" : "Add password"}
+        <button type="submit" disabled={saving} className={`${PRIMARY_BUTTON_CLASS} disabled:opacity-60`}>
+          {saving ? "Saving…" : editing ? "Save changes" : "Add password"}
         </button>
       </div>
     </form>

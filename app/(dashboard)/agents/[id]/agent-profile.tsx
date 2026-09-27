@@ -32,10 +32,10 @@ import { writableStates } from "@/lib/us-states";
 import { byName } from "@/lib/text";
 import { AppointmentDialog } from "../../contracts/appointment-dialog";
 import { useAppointments } from "../../contracts/use-appointments";
+import { saveAgent } from "../actions";
 import {
   AGENT_FIELD_LABELS,
   AgentDialog,
-  saveAgent,
   type AgentEditor,
   type AgentError,
   type AgentValues,
@@ -97,29 +97,33 @@ import {
  * duplicate and available-states checks are identical. An inactive agent can
  * still be appointed and keeps their carriers listed: contracts follow the
  * agent, not their status, on every page (the Contracts pages just leave them
- * out of the counts). It is all dummy like the rest: the agent, contracts and
- * notes live in component state, and a refresh brings back the JSON. page.tsx
- * keys this component by agent ID, so switching agents starts that state again.
+ * out of the counts).
+ *
+ * The agent and their licence rows are kept in state so an edit shows at
+ * once; the edit goes to the API through the saveAgent server action, which
+ * writes the note (the notes come from the server and the action's
+ * revalidation brings the new one in). Contracts are still dummy: they live
+ * in component state and a refresh drops them, which the unsaved banner
+ * counts. page.tsx keys this component by agent ID, so switching agents
+ * starts that state again.
  */
 
 type CarrierOption = Pick<CarrierRecord, "id" | "name" | "status" | "availableStates">;
 
 type AgentProfileProps = {
   initialAgent: AgentRecord;
-  /** Every agent: the switcher's options and the NPN uniqueness check. */
-  allAgents: Pick<AgentRecord, "id" | "name" | "status" | "npn">[];
   /** Every carrier, sorted by name, for the Add carrier dialog. */
   carriers: CarrierOption[];
   /** Every contract, not just this agent's: the duplicate check and new IDs need them all. */
   initialContracts: CarrierContractRecord[];
   /** Every contract note, newest first. Not shown here; new ones are still recorded. */
   initialContractNotes: CarrierContractNote[];
-  /** Every agent's licence rows, in ID order: new row IDs need them all. Only this agent's are shown. */
+  /** This agent's licence rows, in state-code order. */
   initialLicenses: AgentStateLicenseRecord[];
   /** This agent's passwords, the carrier as the party, sorted by carrier name. */
   passwords: ProfilePassword[];
-  /** Every agent's notes, newest first: new note IDs need them all. Only this agent's are shown. */
-  initialNotes: AgentNote[];
+  /** This agent's notes, newest first. */
+  notes: AgentNote[];
 };
 
 const CARRIER_COLUMNS = ["Carrier", "Writing number", "Writable states", "Status"];
@@ -286,17 +290,16 @@ type Section = { key: SectionKey; label: string; count: number };
 
 export function AgentProfile({
   initialAgent,
-  allAgents,
   carriers,
   initialContracts,
   initialContractNotes,
   initialLicenses,
   passwords,
-  initialNotes,
+  notes,
 }: AgentProfileProps) {
   const [agent, setAgent] = useState(initialAgent);
-  const [allNotes, setAllNotes] = useState(initialNotes);
-  const [allLicenses, setAllLicenses] = useState(initialLicenses);
+  const [licenses, setLicenses] = useState(initialLicenses);
+  // Appointments made here are not saved anywhere yet (contracts are still JSON).
   const [unsavedCount, setUnsavedCount] = useState(0);
   const [agentEditor, setAgentEditor] = useState<AgentEditor | null>(null);
   // Which section the panel shows. Carriers first: it is what the page is opened for.
@@ -310,11 +313,6 @@ export function AgentProfile({
     carriers,
     onSaved: () => setUnsavedCount((count) => count + 1),
   });
-
-  // An edit here shows at once in the switcher too.
-  const agents = allAgents.map((other) => (other.id === agent.id ? agent : other));
-  const notes = allNotes.filter((note) => note.agentId === agent.id);
-  const licenses = allLicenses.filter((license) => license.agentId === agent.id);
 
   // This agent's carriers, rebuilt from state so a new appointment shows at once.
   // `writable` is what the appointment actually buys them: its states within
@@ -428,22 +426,12 @@ export function AgentProfile({
     { key: "notes", label: "Notes", count: notes.length },
   ];
 
-  /** Edits this agent. Returns the dialog's error, if any. */
-  const saveAgentEdit = (values: AgentValues): AgentError | null => {
-    const result = saveAgent({
-      agents,
-      notes: allNotes,
-      licenses: allLicenses,
-      values,
-      editing: agent,
-    });
-    if (result.error !== null) return result.error;
-    if (!result.changed) return null;
-
+  /** Edits this agent through the API. Resolves with the dialog's error, if any. */
+  const saveAgentEdit = async (values: AgentValues): Promise<AgentError | null> => {
+    const result = await saveAgent(values, agent.id);
+    if (!result.ok) return result.error;
     setAgent(result.agent);
-    setAllLicenses(result.licenses);
-    setAllNotes(result.notes);
-    setUnsavedCount((count) => count + 1);
+    setLicenses(result.licenses);
     return null;
   };
 

@@ -381,7 +381,7 @@ the next entities (Agents, Passwords) follow:
   `linesOfBusiness`, `available_states` → `availableStates`, `is_active` →
   `status`). IDs are the API's UUIDs, used in profile URLs only; the ID
   column and the profile's "Carrier ID" show the carrier's place in the
-  name-sorted list, 1…n (`carrierNumbers` in `lib/carrier-numbers.ts`, a row
+  name-sorted list, 1…n (`rowNumbers` in `lib/row-numbers.ts`, a row
   number, not a key). No `nextId`. `getCarriers()` (by name), `getCarrier(id)` (null on 404) and
   `getCarrierNotes(carrierId)` (one carrier's, newest first). `CarrierValues`
   and `CarrierError` live here too, so the dialog and the action share them.
@@ -403,12 +403,57 @@ the next entities (Agents, Passwords) follow:
   loads notes; the profile reads its carrier's. There is no unsaved banner on
   Carriers any more: a save is saved.
 - `data/carriers.json` stays as the seed file for `python manage.py
-  seed_carriers`; nothing in the app imports it. `data/carrier-notes.json` is
-  unused.
-- Not yet on the API, so still keyed by the old numeric carrier IDs:
-  contracts, passwords and requests. Until they move, a carrier profile's
-  Agents and Passwords panels are empty and the request dialog's carrier
-  options come from the API list.
+  seed_carriers`; nothing in the app imports it.
+- Not yet on the API, so still keyed by the old numeric IDs: contracts
+  (`data/carrier-contracts.json`) and requests (`data/requests.json`). Until
+  they move, the Contracts pages and the profiles' Carriers / Agents panels
+  find no matching agents or carriers, and HR shows requests without a
+  matching agent name.
+
+### Agents and Passwords on the API
+
+Same pattern as Carriers; the differences:
+
+- **Agents** ([lib/agents.ts](../lib/agents.ts), `/api/v1/agents/`,
+  `backend/apps/agents`): the API returns each agent with its licence rows
+  (`licenses`), so `getAgentsWithLicenses()` is one read that feeds both
+  `getAgents()` and `getAgentStateLicenses()` (which no longer has a file of
+  its own). `licensedStates` / `licenseNumbers` are still derived from the
+  rows, on the server and again from the saved agent the action returns.
+  Saving sends `licenses` (the checked states with their numbers) and the
+  API keeps the rows in step the way `applyLicenceEdits` did: kept, dropped,
+  or new-and-active-for-two-years. `applyLicenceEdits` now serves the agency
+  dialog only.
+- The section store (`agents-store.tsx`) holds agents and licence rows only;
+  `save` calls the `saveAgent` action (`agents/actions.ts`) and replaces the
+  agent's rows from the result. No notes and no unsaved count in the store.
+  The Add agent page saves for real, so the new agent has a profile at once.
+- `ProducerForm` is now async-aware: `onSave` may return a promise (the
+  agency dialog's still returns a value), the buttons disable and read
+  "Saving…" meanwhile, and `ProducerError.field` gained `"name"` (a name
+  another agent has) and `"form"` (no permission, API down), rendered under
+  the form in a `role="alert"` region. The form runs the two checks it can
+  see itself before calling `onSave`: every checked state has a number, and
+  the address is all four parts or none (`checkAgentValues` in the agent
+  dialog).
+- The agent profile keeps the agent and its own licence rows in state and
+  takes this agent's notes as a prop; the unsaved banner stays, counting
+  appointments only (contracts are still JSON).
+- **Passwords** ([lib/passwords.ts](../lib/passwords.ts), `/api/v1/passwords/`,
+  `backend/apps/passwords`): `PasswordRecord` gained `agentName` and
+  `carrierName` from the API's summaries, so the table and the profiles'
+  Passwords panels need no lookup; `PasswordValues` is the five editable
+  fields and `PasswordError.field` includes `"agentId"`, `"username"` and
+  `"form"`. The API keeps one password per agent at each carrier (error under
+  Carrier, naming both), rejects a blank password, and records the notes with
+  the password redacted; `getPasswordNotes(passwordId)` reads them, though no
+  page shows them yet. The carrier filter, hidden-record notice and copy /
+  reveal behaviour are unchanged.
+- Both list pages number rows 1…n by name (`rowNumbers`); Agents dropped
+  the unsaved banner.
+- Seed files, no longer imported: `data/agents.json`,
+  `data/agent-state-licenses.json`, `data/passwords.json`. The three
+  `*-notes.json` files are unused.
 
 ### Contracts
 

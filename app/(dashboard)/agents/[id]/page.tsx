@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getAgentStateLicenses } from "@/lib/agent-state-licenses";
-import { getAgent, getAgentNotes, getAgents } from "@/lib/agents";
+import { getAgent, getAgentNotes, getAgentWithLicenses } from "@/lib/agents";
 import { getCarrierContractNotes, getCarrierContracts } from "@/lib/carrier-contracts";
 import { getCarriers } from "@/lib/carriers";
 import { getPasswords } from "@/lib/passwords";
@@ -16,22 +15,17 @@ export async function generateMetadata(props: PageProps<"/agents/[id]">): Promis
 
 export default async function AgentProfilePage(props: PageProps<"/agents/[id]">) {
   const { id } = await props.params;
-  const agent = await getAgent(id);
-  if (!agent) notFound();
+  const loaded = await getAgentWithLicenses(id);
+  if (!loaded) notFound();
+  const { agent, licenses } = loaded;
 
-  const [agents, notes, carrierContracts, contractNotes, passwords, carriers, stateLicenses] =
-    await Promise.all([
-      getAgents(),
-      getAgentNotes(),
-      getCarrierContracts(),
-      getCarrierContractNotes(),
-      getPasswords(),
-      getCarriers(),
-      getAgentStateLicenses(),
-    ]);
-
-  const carriersById = new Map(carriers.map((carrier) => [carrier.id, carrier]));
-  const carrierName = (carrierId: string) => carriersById.get(carrierId)?.name ?? `Carrier ${carrierId}`;
+  const [notes, carrierContracts, contractNotes, passwords, carriers] = await Promise.all([
+    getAgentNotes(id),
+    getCarrierContracts(),
+    getCarrierContractNotes(),
+    getPasswords(),
+    getCarriers(),
+  ]);
 
   return (
     <AgentProfile
@@ -39,7 +33,6 @@ export default async function AgentProfilePage(props: PageProps<"/agents/[id]">)
       // switch to another agent has to start that state again.
       key={agent.id}
       initialAgent={agent}
-      allAgents={agents.map(({ id, name, status, npn }) => ({ id, name, status, npn }))}
       // Every carrier, so Add carrier can appoint this agent to any of them. The
       // profile picks out this agent's contracts; states come only from those
       // appointments, as there are no carrier-less licenses.
@@ -48,17 +41,16 @@ export default async function AgentProfilePage(props: PageProps<"/agents/[id]">)
         .sort(byName)}
       initialContracts={carrierContracts}
       initialContractNotes={contractNotes}
-      // Every agent's rows: a new licence's ID must be unique across them all.
-      initialLicenses={stateLicenses}
+      initialLicenses={licenses}
       passwords={passwords
         .filter((record) => record.agentId === id)
         .map((record) => ({
           ...record,
-          partyName: carrierName(record.carrierId),
+          partyName: record.carrierName,
           partyHref: `/carriers/${record.carrierId}`,
         }))
         .sort((a, b) => a.partyName.localeCompare(b.partyName))}
-      initialNotes={notes}
+      notes={notes}
     />
   );
 }

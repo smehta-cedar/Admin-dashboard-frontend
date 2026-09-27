@@ -2,23 +2,9 @@
 
 import { useId } from "react";
 import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
-import {
-  ProducerForm,
-  producerNoteValues,
-  unnumberedStatesError,
-  type ProducerError,
-  type ProducerLabels,
-} from "@/components/producer-form";
-import type { AgentStateLicenseRecord } from "@/lib/agent-state-licenses";
-import type { AgentField, AgentNote, AgentRecord } from "@/lib/agents";
-import { diffValues, nextId } from "@/lib/change-notes";
-import { applyLicenceEdits, licenseNumbersOf, licensedStatesOf } from "@/lib/state-licenses";
-import {
-  agentContactExtra,
-  agentContactNoteValues,
-  incompleteAddressError,
-  type AgentContact,
-} from "./agent-contact-fields";
+import { ProducerForm, type ProducerError, type ProducerLabels } from "@/components/producer-form";
+import type { AgentField, AgentRecord, AgentValues } from "@/lib/agents";
+import { agentContactExtra, incompleteAddressError, type AgentContact } from "./agent-contact-fields";
 
 /*
  * The one Add / Edit agent dialog: the shared ProducerForm
@@ -31,13 +17,12 @@ import {
  * agent's profile opens it in edit mode from its own Edit button, so every
  * place edits an agent with exactly the same form and the same checks.
  *
- * The states and numbers the form edits are the agent's state licence rows
- * (lib/agent-state-licenses.ts): `saveAgent` updates those rows and derives
- * the saved agent's licensedStates / licenseNumbers from them, the way
- * lib/agents.ts does when an agent loads. So each view owns its agents,
- * licence rows and notes state and passes `onSave`, which usually calls
- * `saveAgent` below and sets all three. Adds and edits are dummy: nothing
- * reaches a server, and a refresh brings back the JSON.
+ * Each place passes `onSave`, which calls the saveAgent server action
+ * (./actions.ts) and updates its own state from the saved agent and licence
+ * rows. The API checks the NPN against every other agent, keeps the licence
+ * rows in step with the checked states, and records the change note. The
+ * form itself only checks what it can see at once: a number for every
+ * checked state, and an address that is all four parts or none.
  */
 
 /**
@@ -46,12 +31,12 @@ import {
  */
 export type AgentEditor = { mode: "add" } | { mode: "edit"; agent: AgentRecord };
 
-export type AgentValues = Omit<AgentRecord, "id">;
+export type { AgentValues } from "@/lib/agents";
 
 /** A save error, shown under the field it names. */
 export type AgentError = ProducerError;
 
-/** Also the order changes are compared and listed in. */
+/** Also the order changes are listed in on a note. */
 export const AGENT_FIELD_LABELS: Record<AgentField, string> = {
   name: "Name",
   aliases: "Aliases",
@@ -66,8 +51,6 @@ export const AGENT_FIELD_LABELS: Record<AgentField, string> = {
   licenseNumbers: "Licence numbers",
 };
 
-const FIELDS = Object.keys(AGENT_FIELD_LABELS) as AgentField[];
-
 const FORM_LABELS: ProducerLabels = {
   name: "Name",
   aliases: "Aliases",
@@ -76,101 +59,16 @@ const FORM_LABELS: ProducerLabels = {
   licensedHint: "Where this agent holds a licence.",
 };
 
-type SaveInput = {
-  /** Every agent the NPN must be unique among. Only `id`, `name` and `npn` are read from the others. */
-  agents: Pick<AgentRecord, "id" | "name" | "npn">[];
-  /** Every agent note, so the new note's ID is unique. */
-  notes: AgentNote[];
-  /** Every agent's licence rows, so a new row's ID is unique. Only this agent's are changed. */
-  licenses: AgentStateLicenseRecord[];
-  values: AgentValues;
-  /** The agent being edited; leave out when adding. */
-  editing?: AgentRecord;
-};
-
-type SaveResult =
-  | { error: AgentError; agent: null }
-  | {
-      error: null;
-      /** The agent as saved; on an edit that changed nothing, the record as it was. */
-      agent: AgentRecord;
-      /** False when an edit changed nothing: no new note. */
-      changed: boolean;
-      notes: AgentNote[];
-      /** Every agent's licence rows after the save. */
-      licenses: AgentStateLicenseRecord[];
-    };
-
-/** An agent as notes compare and show it: licence numbers as items, contact fields as text. */
-const agentNoteValues = (values: AgentValues) => ({
-  ...producerNoteValues(values),
-  ...agentContactNoteValues(values),
-});
-
-/**
- * Adds or edits an agent, pure. Returns the saved agent, the next licence rows
- * and the next notes (a note only when something changed), or the error to
- * show: an NPN that already belongs to another agent, a licensed state with
- * no licence number, or a partly filled address. The view puts the agent into
- * its own list.
- */
-export function saveAgent({ agents, notes, licenses, values, editing }: SaveInput): SaveResult {
-  const npnOwner = agents.find((agent) => agent.id !== editing?.id && agent.npn === values.npn);
-  if (npnOwner) {
-    return {
-      error: { field: "npn", message: `NPN ${values.npn} already belongs to ${npnOwner.name}.` },
-      agent: null,
-    };
-  }
-
-  // The inputs are required too; this holds for any caller.
-  const unnumbered = unnumberedStatesError(values);
-  if (unnumbered) return { error: unnumbered, agent: null };
-  const incomplete = incompleteAddressError(values);
-  if (incomplete) return { error: incomplete, agent: null };
-
-  const agentId = editing?.id ?? nextId(agents);
-  // The licence rows are the truth; the agent's two fields are read back from them.
-  const nextLicenses = applyLicenceEdits({
-    rows: licenses,
-    isOwn: (license) => license.agentId === agentId,
-    values,
-    own: (license) => ({ ...license, agentId }),
-  });
-  const own = nextLicenses.filter((license) => license.agentId === agentId);
-  const saved: AgentRecord = {
-    id: agentId,
-    ...values,
-    licensedStates: licensedStatesOf(own),
-    licenseNumbers: licenseNumbersOf(own),
-  };
-  const changes = diffValues(FIELDS, editing ? agentNoteValues(editing) : {}, agentNoteValues(saved));
-  // Saving an edit with nothing changed just closes, without a note.
-  if (changes.length === 0) return { error: null, agent: saved, changed: false, notes, licenses };
-
-  return {
-    error: null,
-    agent: saved,
-    changed: true,
-    licenses: nextLicenses,
-    notes: [
-      {
-        id: nextId(notes),
-        agentId,
-        kind: editing ? "edited" : "added",
-        createdAt: new Date().toISOString(),
-        changes,
-      },
-      ...notes,
-    ],
-  };
+/** What every caller's `onSave` does before the API: the address check the form can run itself. */
+export function checkAgentValues(values: AgentValues): AgentError | null {
+  return incompleteAddressError(values);
 }
 
 type AgentDialogProps = {
   /** Null keeps the dialog closed. */
   editor: AgentEditor | null;
-  /** Saves the values; returns the error to show instead of closing. */
-  onSave: (values: AgentValues) => AgentError | null;
+  /** Saves the values; resolves with the error to show instead of closing. */
+  onSave: (values: AgentValues) => Promise<AgentError | null>;
   /** Runs for every close: Cancel, Escape, backdrop click, or a save. */
   onClose: () => void;
 };
@@ -180,7 +78,7 @@ type AgentFormProps = {
   id: string;
   /** The agent being edited; leave out for an empty add form. */
   editing?: AgentRecord;
-  onSave: (values: AgentValues) => AgentError | null;
+  onSave: (values: AgentValues) => Promise<AgentError | null>;
   /** Cancel, and what runs after a successful save. */
   close: () => void;
 };
@@ -193,14 +91,14 @@ export function AgentForm({ id, editing, onSave, close }: AgentFormProps) {
       title={editing ? `Edit ${editing.name}` : "Add agent"}
       description={
         editing
-          ? "Saving records a note of what changed. Nothing is saved anywhere yet; refreshing undoes it."
-          : "Not saved anywhere yet. The agent stays in the list until you refresh."
+          ? "Saving records a note of what changed on the agent's profile."
+          : "The agent is added for everyone, with a note of what was entered."
       }
       submitLabel={editing ? "Save changes" : "Add agent"}
       labels={FORM_LABELS}
       initial={editing}
       extra={agentContactExtra(editing)}
-      onSave={onSave}
+      onSave={(values) => checkAgentValues(values) ?? onSave(values)}
       close={close}
     />
   );
