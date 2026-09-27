@@ -5,168 +5,110 @@ import { GHOST_BUTTON_CLASS, INPUT_CLASS, PRIMARY_BUTTON_CLASS } from "@/compone
 import { PasswordInput } from "@/components/credential-value";
 import { Field } from "@/components/field";
 import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
-import { diffValues, nextId } from "@/lib/change-notes";
-import type { UserField, UserNote, UserRecord, UserRole } from "@/lib/users";
+import type { RoleOption, UserError, UserField, UserRecord, UserValues } from "@/lib/users";
 
 /*
- * The one Add / Edit user dialog: name, email, role (admin or staff), status
- * and password. The Users page opens it from Add user and a row's Edit; there
- * is no user profile page yet. Agent and agency sign-in is a later phase, so
- * there is no agent role here and no link from a user to an agent.
+ * The one Add / Edit user dialog: name, email, phone, role, status and
+ * password. The Users page opens it from Add user and a row's Edit; there is
+ * no user profile page. Agent and agency sign-in is a later phase, so there
+ * is no link from a user to an agent.
  *
- * Each view owns its users and notes state and passes `onSave`, which usually
- * calls `saveUser` below and sets that state. Adds and edits are dummy:
- * nothing reaches a server, and a refresh brings back the JSON.
+ * The view passes `onSave`, which calls the saveUser server action
+ * (./actions.ts) and updates its own state from the saved record. The
+ * password is required on add and optional on edit: left blank, it stays as
+ * it is. While the save is in flight the buttons are disabled.
  */
 
 /** Which dialog is open. Edit holds the user as it was when the dialog opened. */
 export type UserEditor = { mode: "add" } | { mode: "edit"; user: UserRecord };
 
-export type UserValues = Omit<UserRecord, "id">;
+export type { UserError, UserValues } from "@/lib/users";
 
-/** A save error, shown under the field it names. */
-export type UserError = { field: "email" | "password"; message: string };
-
-/** Also the order changes are compared and listed in. */
+/** Also the order changes are listed in on a note. */
 export const USER_FIELD_LABELS: Record<UserField, string> = {
   name: "Name",
   email: "Email",
+  phone: "Phone",
   role: "Role",
   status: "Status",
   password: "Password",
 };
 
-export const ROLE_LABELS: Record<UserRole, string> = {
-  admin: "Admin",
-  staff: "Staff",
-};
-
-const FIELDS = Object.keys(USER_FIELD_LABELS) as UserField[];
-
-/** Recorded in notes only as "Password set" / "Password changed", never with its value. */
-const REDACTED_FIELDS: UserField[] = ["password"];
-
-type SaveInput = {
-  /** Every user the email must be unique among. Only `id`, `name` and `email` are read from the others. */
-  users: Pick<UserRecord, "id" | "name" | "email">[];
-  /** Every user note, so the new note's ID is unique. */
-  notes: UserNote[];
-  values: UserValues;
-  /** The user being edited; leave out when adding. */
-  editing?: UserRecord;
-};
-
-type SaveResult =
-  | { error: UserError; user: null }
-  | {
-      error: null;
-      /** The user as saved; on an edit that changed nothing, the record as it was. */
-      user: UserRecord;
-      /** False when an edit changed nothing: no new note. */
-      changed: boolean;
-      notes: UserNote[];
-    };
-
-/**
- * Adds or edits a user, pure. Returns the saved user and the next notes (a
- * note only when something changed), or the error to show: an email another
- * user already has (ignoring case), or a blank password. The view puts the
- * user into its own list.
- */
-export function saveUser({ users, notes, values, editing }: SaveInput): SaveResult {
-  const emailKey = values.email.toLowerCase();
-  const emailOwner = users.find(
-    (user) => user.id !== editing?.id && user.email.toLowerCase() === emailKey,
-  );
-  if (emailOwner) {
-    return {
-      error: {
-        field: "email",
-        message: `Email ${emailOwner.email} already belongs to ${emailOwner.name}.`,
-      },
-      user: null,
-    };
-  }
-
-  // Required, and spaces alone don't count. A valid password is still saved as typed.
-  if (values.password.trim() === "") {
-    return { error: { field: "password", message: "Password can't be blank." }, user: null };
-  }
-
-  const userId = editing?.id ?? nextId(users);
-  const saved = { id: userId, ...values };
-  const changes = diffValues(FIELDS, editing ?? {}, values, REDACTED_FIELDS);
-  // Saving an edit with nothing changed just closes, without a note.
-  if (changes.length === 0) return { error: null, user: saved, changed: false, notes };
-
-  return {
-    error: null,
-    user: saved,
-    changed: true,
-    notes: [
-      {
-        id: nextId(notes),
-        userId,
-        kind: editing ? "edited" : "added",
-        createdAt: new Date().toISOString(),
-        changes,
-      },
-      ...notes,
-    ],
-  };
-}
-
 type UserDialogProps = {
   /** Null keeps the dialog closed. */
   editor: UserEditor | null;
-  /** Saves the values; returns the error to show instead of closing. */
-  onSave: (values: UserValues) => UserError | null;
+  /** The roles a user can be given, by name. */
+  roles: RoleOption[];
+  /** Saves the values; resolves with the error to show instead of closing. */
+  onSave: (values: UserValues) => Promise<UserError | null>;
   /** Runs for every close: Cancel, Escape, backdrop click, or a save. */
   onClose: () => void;
 };
 
-export function UserDialog({ editor, onSave, onClose }: UserDialogProps) {
+export function UserDialog({ editor, roles, onSave, onClose }: UserDialogProps) {
   const { dialogRef, close } = useModalDialog(editor !== null);
   const id = useId();
 
   // Clearing the editor unmounts the form, which resets it.
   return (
     <ModalDialog dialogRef={dialogRef} labelledBy={`${id}-title`} onClose={onClose}>
-      {editor ? <UserForm id={id} editor={editor} onSave={onSave} close={close} /> : null}
+      {editor ? <UserForm id={id} editor={editor} roles={roles} onSave={onSave} close={close} /> : null}
     </ModalDialog>
   );
 }
 
-type UserFormProps = Pick<UserDialogProps, "onSave"> & {
+type UserFormProps = Pick<UserDialogProps, "onSave" | "roles"> & {
   id: string;
   editor: UserEditor;
   close: () => void;
 };
 
 /** The dialog's form. Mounted per open, so its errors start clear each time. */
-function UserForm({ id, editor, onSave, close }: UserFormProps) {
+function UserForm({ id, editor, roles, onSave, close }: UserFormProps) {
   const editing = editor.mode === "edit" ? editor.user : undefined;
-  const [emailError, setEmailError] = useState<string | null>(null);
-  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [error, setError] = useState<UserError | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const messageFor = (field: UserError["field"]) => (error?.field === field ? error.message : null);
+  const clear = () => setError(null);
+
+  const nameError = messageFor("name");
+  const emailError = messageFor("email");
+  const phoneError = messageFor("phone");
+  const roleError = messageFor("roleId");
+  const passwordError = messageFor("password");
+  const formError = messageFor("form") ?? messageFor("status");
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (saving) return;
     const data = new FormData(event.currentTarget);
-    const text = (field: UserField) => String(data.get(field) ?? "").trim();
-    const error = onSave({
+    const text = (field: string) => String(data.get(field) ?? "").trim();
+    const values: UserValues = {
       name: text("name"),
       email: text("email"),
-      role: text("role") === "admin" ? "admin" : "staff",
+      phone: text("phone"),
+      roleId: text("roleId"),
       status: text("status") === "inactive" ? "inactive" : "active",
       // Not trimmed or lowercased: spaces and case can matter in a password.
       password: String(data.get("password") ?? ""),
-    });
-    if (error) {
-      if (error.field === "email") setEmailError(error.message);
-      else setPasswordError(error.message);
+    };
+    // Required on add, and spaces alone don't count; on edit, blank keeps the current one.
+    if (values.password.trim() === "" && (!editing || values.password !== "")) {
+      setError({ field: "password", message: "Password can't be blank." });
       return;
     }
-    close();
+    setSaving(true);
+    try {
+      const saveError = await onSave(values);
+      if (saveError) {
+        setError(saveError);
+        return;
+      }
+      close();
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -176,12 +118,18 @@ function UserForm({ id, editor, onSave, close }: UserFormProps) {
       </h2>
       <p className="mt-1 text-sm text-fg-muted">
         {editing
-          ? "Saving records a note of what changed. Nothing is saved anywhere yet; refreshing undoes it."
-          : "Not saved anywhere yet. The user stays in the list until you refresh."}
+          ? "Saving records a note of what changed; a new password is noted only as changed."
+          : "The account is created for everyone, with a note of what was entered (not the password)."}
       </p>
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
-        <Field label="Name" htmlFor={`${id}-name`}>
+        <Field
+          label="Name"
+          htmlFor={`${id}-name`}
+          hint={nameError ?? undefined}
+          hintId={`${id}-name-error`}
+          error
+        >
           <input
             id={`${id}-name`}
             name="name"
@@ -190,6 +138,9 @@ function UserForm({ id, editor, onSave, close }: UserFormProps) {
             pattern=".*\S.*"
             autoComplete="off"
             defaultValue={editing?.name}
+            aria-invalid={nameError ? true : undefined}
+            aria-describedby={nameError ? `${id}-name-error` : undefined}
+            onChange={clear}
             className={INPUT_CLASS}
           />
         </Field>
@@ -209,35 +160,61 @@ function UserForm({ id, editor, onSave, close }: UserFormProps) {
             defaultValue={editing?.email}
             aria-invalid={emailError ? true : undefined}
             aria-describedby={emailError ? `${id}-email-error` : `${id}-email-hint`}
-            onChange={() => setEmailError(null)}
+            onChange={clear}
+            className={INPUT_CLASS}
+          />
+        </Field>
+        <Field
+          label="Phone"
+          optional
+          htmlFor={`${id}-phone`}
+          hint={phoneError ?? undefined}
+          hintId={`${id}-phone-error`}
+          error
+        >
+          <input
+            id={`${id}-phone`}
+            name="phone"
+            type="tel"
+            autoComplete="off"
+            defaultValue={editing?.phone}
+            aria-invalid={phoneError ? true : undefined}
+            aria-describedby={phoneError ? `${id}-phone-error` : undefined}
+            onChange={clear}
             className={INPUT_CLASS}
           />
         </Field>
         <Field
           label="Role"
           htmlFor={`${id}-role`}
-          hint="Shown only for now; every signed-in user still sees the whole app."
-          hintId={`${id}-role-hint`}
+          hint={roleError ?? "What the API lets them do; pages are not gated by it yet."}
+          hintId={roleError ? `${id}-role-error` : `${id}-role-hint`}
+          error={roleError !== null}
         >
           <select
             id={`${id}-role`}
-            name="role"
-            defaultValue={editing?.role ?? "staff"}
-            aria-describedby={`${id}-role-hint`}
+            name="roleId"
+            defaultValue={editing?.role?.id ?? ""}
+            aria-invalid={roleError ? true : undefined}
+            aria-describedby={roleError ? `${id}-role-error` : `${id}-role-hint`}
+            onChange={clear}
             className={INPUT_CLASS}
           >
-            {(Object.keys(ROLE_LABELS) as UserRole[]).map((value) => (
-              <option key={value} value={value}>
-                {ROLE_LABELS[value]}
+            <option value="">No role</option>
+            {roles.map((role) => (
+              <option key={role.id} value={role.id}>
+                {role.name}
               </option>
             ))}
           </select>
         </Field>
-        <Field label="Status" htmlFor={`${id}-status`}>
+        <Field label="Status" htmlFor={`${id}-status`} hint="Inactive users are signed out and can't sign in." hintId={`${id}-status-hint`}>
           <select
             id={`${id}-status`}
             name="status"
             defaultValue={editing?.status ?? "active"}
+            aria-describedby={`${id}-status-hint`}
+            onChange={clear}
             className={INPUT_CLASS}
           >
             <option value="active">Active</option>
@@ -245,36 +222,40 @@ function UserForm({ id, editor, onSave, close }: UserFormProps) {
           </select>
         </Field>
         <Field
-          label="Password"
+          label={editing ? "New password" : "Password"}
+          optional={Boolean(editing)}
           htmlFor={`${id}-password`}
-          hint={passwordError ?? undefined}
-          hintId={`${id}-password-error`}
-          error
-          className="sm:col-span-2"
+          hint={passwordError ?? (editing ? "Leave blank to keep the current password. Setting one signs them out everywhere." : undefined)}
+          hintId={passwordError ? `${id}-password-error` : `${id}-password-hint`}
+          error={passwordError !== null}
         >
           {/* Spaces are kept; all-spaces is rejected on submit. new-password stops the
               browser filling in the signed-in user's own saved password. */}
           <PasswordInput
             id={`${id}-password`}
             name="password"
-            required
+            required={!editing}
             autoComplete="new-password"
             spellCheck={false}
-            defaultValue={editing?.password}
             aria-invalid={passwordError ? true : undefined}
-            aria-describedby={passwordError ? `${id}-password-error` : undefined}
-            onChange={() => setPasswordError(null)}
+            aria-describedby={passwordError ? `${id}-password-error` : editing ? `${id}-password-hint` : undefined}
+            onChange={clear}
             className={INPUT_CLASS}
           />
         </Field>
       </div>
 
-      <div className="mt-6 flex justify-end gap-2">
-        <button type="button" onClick={close} className={GHOST_BUTTON_CLASS}>
+      {/* Errors about the attempt itself (the API's rules, no permission, API down), not one field. */}
+      <div role="alert" className="mt-4">
+        {formError ? <p className="text-sm text-danger">{formError}</p> : null}
+      </div>
+
+      <div className="mt-4 flex justify-end gap-2">
+        <button type="button" onClick={close} disabled={saving} className={GHOST_BUTTON_CLASS}>
           Cancel
         </button>
-        <button type="submit" className={PRIMARY_BUTTON_CLASS}>
-          {editing ? "Save changes" : "Add user"}
+        <button type="submit" disabled={saving} className={`${PRIMARY_BUTTON_CLASS} disabled:opacity-60`}>
+          {saving ? "Saving…" : editing ? "Save changes" : "Add user"}
         </button>
       </div>
     </form>

@@ -9,7 +9,7 @@ import { SiteNav, type SiteNavSection } from "./site-nav";
  * group: no sidebar, no session gate, the same logo and theme toggle as
  * sign-in. One page of in-page sections with the copy from
  * cedargroveseniorhealth.com and the service tiles, reviews and FAQ from the
- * Medicare site. Ways in: the tee shop at /shop and staff sign-in at /login.
+ * Medicare site. The one way in is staff sign-in at /login.
  * A visitor who is already signed in goes straight to the CRM home instead.
  *
  * Color: the brand gradient (globals.css, sampled from assests/Gradient.jpg)
@@ -138,8 +138,6 @@ const TEXT_LINK_CLASS = "font-medium text-brand-ink hover:underline";
 /* On the gradient: a dark, solid button so it reads against the light green. */
 const ON_GRADIENT_BUTTON_CLASS =
   "inline-block rounded-md bg-gradient-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-gradient-ink-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gradient-ink";
-const ON_GRADIENT_SECONDARY_CLASS =
-  "inline-block rounded-md border-2 border-gradient-ink px-4 py-2 text-sm font-semibold text-gradient-ink hover:bg-white/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gradient-ink";
 
 function SectionHeading({ id, children, onGradient = false }: { id: string; children: string; onGradient?: boolean }) {
   return (
@@ -187,9 +185,6 @@ export default async function LandingPage() {
                 >
                   Watch our webinar
                 </a>
-                <Link href="/shop" className={`${ON_GRADIENT_SECONDARY_CLASS} text-center`}>
-                  Get the Cedar Grove tee
-                </Link>
               </div>
             </div>
           </div>
@@ -366,9 +361,6 @@ export default async function LandingPage() {
             <a href={FACEBOOK} target="_blank" rel="noopener noreferrer" className="hover:text-fg hover:underline">
               Facebook
             </a>
-            <Link href="/shop" className="hover:text-fg hover:underline">
-              Cedar Grove tee
-            </Link>
             <Link href="/login" className="hover:text-fg hover:underline">
               Log in
             </Link>

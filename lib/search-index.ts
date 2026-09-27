@@ -114,10 +114,10 @@ export async function getSearchIndex(): Promise<SearchIndex> {
       ];
     }),
     "/users": users.map((user) =>
-      entry(listHref("/users", user.email), user.name, [user.email, user.role], [
+      entry(listHref("/users", user.email), user.name, [user.email, user.role?.name ?? ""], [
         user.name,
         user.email,
-        user.role,
+        user.role?.name ?? "",
         user.status,
       ]),
     ),

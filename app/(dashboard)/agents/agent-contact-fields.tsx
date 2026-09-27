@@ -3,16 +3,17 @@
 import { INPUT_CLASS } from "@/components/classes";
 import { Field } from "@/components/field";
 import type { ProducerError, ProducerExtra } from "@/components/producer-form";
+import { StateSelect } from "@/components/state-select";
 import { ADDRESS_PARTS, formatAddress, type Address } from "@/lib/address";
 import type { AgentRecord } from "@/lib/agents";
 import { formatPhone } from "@/lib/phone";
-import { US_STATES } from "@/lib/us-states";
 
 /*
  * The agent-only part of the producer form: personal email, personal phone
- * and home address, every one optional. The agency shares the form but has
- * none of these, so the agent dialog passes this section in as the form's
- * `extra` (components/producer-form.tsx) rather than the form owning it.
+ * and home address, every one optional, drawn in the Contact section after
+ * the work email and phone. The agency shares the form but has none of
+ * these, so the agent dialog passes them in as the form's `extra`
+ * (components/producer-form.tsx) rather than the form owning them.
  *
  * The address is all or nothing: fill in street, city, state and ZIP, or
  * leave all four blank. `saveAgent` checks that with `incompleteAddressError`
@@ -61,12 +62,12 @@ export const agentContactNoteValues = (values: AgentContact) => ({
 export function agentContactExtra(initial?: AgentContact): ProducerExtra<AgentContact> {
   return {
     read: readAgentContact,
-    render: ({ id, error, clearError }) => {
+    render: ({ id, error, clearError, span }) => {
       const address = initial?.address;
       const invalid = error ? { "aria-invalid": true as const, "aria-describedby": `${id}-address-error` } : {};
       return (
         <>
-          <Field label="Personal email" optional htmlFor={`${id}-personal-email`}>
+          <Field label="Personal email" optional htmlFor={`${id}-personal-email`} className={span.field}>
             <input
               id={`${id}-personal-email`}
               name="personalEmail"
@@ -76,7 +77,7 @@ export function agentContactExtra(initial?: AgentContact): ProducerExtra<AgentCo
               className={INPUT_CLASS}
             />
           </Field>
-          <Field label="Personal phone" optional htmlFor={`${id}-personal-phone`}>
+          <Field label="Personal phone" optional htmlFor={`${id}-personal-phone`} className={span.field}>
             <input
               id={`${id}-personal-phone`}
               name="personalPhone"
@@ -87,15 +88,16 @@ export function agentContactExtra(initial?: AgentContact): ProducerExtra<AgentCo
             />
           </Field>
 
-          <fieldset className="min-w-0 sm:col-span-2">
+          <fieldset className={`min-w-0 ${span.full}`}>
             <legend className="text-sm font-medium text-fg">
               Address<span className="font-normal text-fg-subtle"> (optional)</span>
             </legend>
             <p className="mt-1 text-xs text-fg-subtle">
               Home address. Fill in all four parts, or leave them all blank.
             </p>
-            <div className="mt-2 grid gap-x-4 gap-y-3 sm:grid-cols-6">
-              <Field label="Street" htmlFor={`${id}-address-street`} className="sm:col-span-6">
+            {/* Street, then ZIP, state and city side by side; all one row on the wide page. */}
+            <div className={`mt-2 grid gap-x-4 gap-y-3 ${span.innerGrid}`}>
+              <Field label="Street" htmlFor={`${id}-address-street`} className="sm:col-span-3">
                 <input
                   id={`${id}-address-street`}
                   name={addressField("street")}
@@ -107,36 +109,7 @@ export function agentContactExtra(initial?: AgentContact): ProducerExtra<AgentCo
                   {...invalid}
                 />
               </Field>
-              <Field label="City" htmlFor={`${id}-address-city`} className="sm:col-span-3">
-                <input
-                  id={`${id}-address-city`}
-                  name={addressField("city")}
-                  type="text"
-                  autoComplete="off"
-                  defaultValue={address?.city}
-                  onChange={clearError}
-                  className={INPUT_CLASS}
-                  {...invalid}
-                />
-              </Field>
-              <Field label="State" htmlFor={`${id}-address-state`} className="sm:col-span-1">
-                <select
-                  id={`${id}-address-state`}
-                  name={addressField("state")}
-                  defaultValue={address?.state ?? ""}
-                  onChange={clearError}
-                  className={INPUT_CLASS}
-                  {...invalid}
-                >
-                  <option value="">—</option>
-                  {US_STATES.map((state) => (
-                    <option key={state.code} value={state.code} title={state.name}>
-                      {state.code}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="ZIP" htmlFor={`${id}-address-zip`} className="sm:col-span-2">
+              <Field label="ZIP code" htmlFor={`${id}-address-zip`}>
                 <input
                   id={`${id}-address-zip`}
                   name={addressField("zip")}
@@ -146,6 +119,28 @@ export function agentContactExtra(initial?: AgentContact): ProducerExtra<AgentCo
                   title="Five digits, or ZIP+4 like 78701-1234"
                   autoComplete="off"
                   defaultValue={address?.zip}
+                  onChange={clearError}
+                  className={INPUT_CLASS}
+                  {...invalid}
+                />
+              </Field>
+              <Field label="State" htmlFor={`${id}-address-state`}>
+                <StateSelect
+                  id={`${id}-address-state`}
+                  name={addressField("state")}
+                  defaultValue={address?.state}
+                  onChange={clearError}
+                  invalid={Boolean(error)}
+                  describedBy={error ? `${id}-address-error` : undefined}
+                />
+              </Field>
+              <Field label="City" htmlFor={`${id}-address-city`}>
+                <input
+                  id={`${id}-address-city`}
+                  name={addressField("city")}
+                  type="text"
+                  autoComplete="off"
+                  defaultValue={address?.city}
                   onChange={clearError}
                   className={INPUT_CLASS}
                   {...invalid}

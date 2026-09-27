@@ -5,9 +5,8 @@ import { useEffect, useId, useState } from "react";
 import { PRIMARY_BUTTON_CLASS } from "@/components/classes";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
-import { UnsavedBanner } from "@/components/unsaved-banner";
 import type { AgentRecord } from "@/lib/agents";
-import type { CarrierContractNote, CarrierContractRecord } from "@/lib/carrier-contracts";
+import type { CarrierContractRecord } from "@/lib/carrier-contracts";
 import type { CarrierRecord } from "@/lib/carriers";
 import { LINES_OF_BUSINESS } from "@/lib/lines-of-business";
 import { stateSummary, writableStates } from "@/lib/us-states";
@@ -43,9 +42,9 @@ import { AgentsPerCarrierChart } from "./agents-per-carrier-chart";
  * Agents list below shows each carrier chip with those states, and clicking
  * them opens Edit. Every add and edit opens the shared AppointmentDialog
  * (../appointment-dialog.tsx), the same one Contracts by state uses; its state
- * grid offers only the states the chosen agent and carrier share. Add and edit
- * are dummy: contracts and notes live in component state only, and a refresh
- * brings back the JSON.
+ * grid offers only the states the chosen agent and carrier share. Saves go to
+ * the API through the saveAppointment server action (the appointments hook),
+ * which records the notes; the by-state page shows them.
  */
 
 type AgentOption = Pick<AgentRecord, "id" | "name" | "status" | "licensedStates">;
@@ -56,7 +55,6 @@ type CarrierOption = Pick<
 
 type CarrierContractsViewProps = {
   initialContracts: CarrierContractRecord[];
-  initialNotes: CarrierContractNote[];
   agents: AgentOption[];
   carriers: CarrierOption[];
 };
@@ -109,19 +107,15 @@ function AddAgentIcon({ className }: { className?: string }) {
 
 export function CarrierContractsView({
   initialContracts,
-  initialNotes,
   agents,
   carriers,
 }: CarrierContractsViewProps) {
-  const [unsavedCount, setUnsavedCount] = useState(0);
-  // Notes are still written on add and edit; the by-state page shows them.
+  // Notes are written by the API on add and edit; the by-state page shows them.
   const { contracts, editor, setEditor, saveContract, agentName, carrierName } = useAppointments({
     initialContracts,
-    initialNotes,
     agents,
     carriers,
     onSaved: (values, nextContracts) => {
-      setUnsavedCount((count) => count + 1);
       noticeIfHidden(
         values.carrierId,
         nextContracts,
@@ -245,7 +239,6 @@ export function CarrierContractsView({
         }
       />
 
-      <UnsavedBanner count={unsavedCount} />
       <div role="status">
         {hiddenNotice ? (
           <p key={hiddenNotice.key} className="mb-4 rounded-md bg-surface-muted px-3 py-2 text-sm text-fg-muted">

@@ -45,8 +45,10 @@ import type { FieldChange } from "@/lib/change-notes";
 import { formatPhone } from "@/lib/phone";
 import {
   STATE_LICENSE_STATUSES,
+  licenseLinesOf,
   licenseNumbersOf,
   licensedStatesOf,
+  type LicenceLines,
   type StateLicenseStatus,
 } from "@/lib/state-licenses";
 
@@ -72,6 +74,11 @@ export type AgentRecord = {
    * from the rows too; a state whose licence has no number yet is left out.
    */
   licenseNumbers: Record<string, string>;
+  /**
+   * The Life / Health lines each licence covers, by state code, for every
+   * state in licensedStates. Derived from the rows too.
+   */
+  licenseLines: Record<string, LicenceLines>;
   /** National Producer Number. Unique across agents. */
   npn: string;
   /** Work email. */
@@ -117,6 +124,8 @@ export type ApiAgentLicense = {
   status: string;
   start_date: string | null;
   end_date: string | null;
+  life: boolean;
+  health: boolean;
 };
 
 /** An agent as the API serialises it (AgentSerializer). */
@@ -159,6 +168,7 @@ const NOTE_FIELDS: Record<string, AgentField> = {
   address: "address",
   licensed_states: "licensedStates",
   license_numbers: "licenseNumbers",
+  license_lines: "licenseLines",
 };
 
 /** An API agent's licence rows as the app holds them. An unknown status reads as "active" with a console warning. */
@@ -176,6 +186,8 @@ export function toLicenseRecords(agent: ApiAgent): AgentStateLicenseRecord[] {
       status: knownStatus ? (row.status as StateLicenseStatus) : "active",
       startDate: row.start_date ?? "",
       endDate: row.end_date ?? "",
+      life: Boolean(row.life),
+      health: Boolean(row.health),
     };
   });
 }
@@ -190,6 +202,7 @@ export function toAgentRecord(agent: ApiAgent): AgentRecord {
     status: agent.is_active ? "active" : "inactive",
     licensedStates: licensedStatesOf(licenses),
     licenseNumbers: licenseNumbersOf(licenses),
+    licenseLines: licenseLinesOf(licenses),
     npn: agent.npn,
     email: agent.email,
     phone: formatPhone(agent.phone),

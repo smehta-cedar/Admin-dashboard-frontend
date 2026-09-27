@@ -32,6 +32,13 @@ export const STATE_LICENSE_STATUSES: readonly string[] = [
   "jit",
 ] satisfies StateLicenseStatus[];
 
+/**
+ * The lines of business a licence covers in its state. An agent's form has
+ * a Life and a Health checkbox beside each checked state; the agency's
+ * rows have neither ticked (its API doesn't record lines).
+ */
+export type LicenceLines = { life: boolean; health: boolean };
+
 export type StateLicense = {
   /** Internal ID, numbered 1, 2, 3, … for now. Not the licence number. */
   id: string;
@@ -44,13 +51,24 @@ export type StateLicense = {
   startDate: string;
   /** YYYY-MM-DD. When it expires. */
   endDate: string;
+  /** Whether the licence covers life insurance. */
+  life: boolean;
+  /** Whether the licence covers health insurance. */
+  health: boolean;
 };
 
 /** The shape the producer form edits; the rows are updated from it. */
 export type LicenceValues = {
   licensedStates: string[];
   licenseNumbers: Record<string, string>;
+  /** The lines ticked per state; a state left out has neither. */
+  licenseLines: Record<string, LicenceLines>;
 };
+
+/** "Life & Health", "Life", "Health" or "", as the profile and notes show a row's lines. */
+export function licenceLinesText(lines: LicenceLines) {
+  return [lines.life ? "Life" : "", lines.health ? "Health" : ""].filter(Boolean).join(" & ");
+}
 
 /** How long a new licence runs from its start date, until the form asks for dates. */
 const LICENCE_TERM_YEARS = 2;
@@ -70,6 +88,16 @@ export function licenseNumbersOf(rows: StateLicense[]): Record<string, string> {
         const number = row.licenseNumber.trim();
         return number ? [[row.state, number]] : [];
       }),
+  );
+}
+
+/** A row's owner's `licenseLines`: the lines by state code, every row, in code order. */
+export function licenseLinesOf(rows: StateLicense[]): Record<string, LicenceLines> {
+  return Object.fromEntries(
+    rows
+      .slice()
+      .sort((a, b) => a.state.localeCompare(b.state))
+      .map((row) => [row.state, { life: row.life, health: row.health }]),
   );
 }
 
@@ -108,12 +136,16 @@ export function applyLicenceEdits<T extends StateLicense>({
 }: ApplyInput<T>): T[] {
   const checked = new Set(values.licensedStates);
   const numberFor = (state: string) => (values.licenseNumbers[state] ?? "").trim();
+  const linesFor = (state: string): LicenceLines =>
+    values.licenseLines[state] ?? { life: false, health: false };
 
   const kept = rows.flatMap((row) => {
     if (!isOwn(row)) return [row];
     if (!checked.has(row.state)) return [];
     const licenseNumber = numberFor(row.state);
-    return [licenseNumber === row.licenseNumber ? row : { ...row, licenseNumber }];
+    const { life, health } = linesFor(row.state);
+    const same = licenseNumber === row.licenseNumber && life === row.life && health === row.health;
+    return [same ? row : { ...row, licenseNumber, life, health }];
   });
 
   const have = new Set(rows.filter(isOwn).map((row) => row.state));
@@ -132,6 +164,7 @@ export function applyLicenceEdits<T extends StateLicense>({
         status: "active",
         startDate: isoDate(now),
         endDate: isoDate(end),
+        ...linesFor(state),
       }),
     );
   }

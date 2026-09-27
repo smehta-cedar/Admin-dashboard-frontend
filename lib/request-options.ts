@@ -1,11 +1,11 @@
 /*
- * The client-safe half of requests: the type and status lists their labels,
- * and the pure `newRequest` the Create-a-request dialog saves through. The
- * record types and the JSON load live in lib/requests.ts (server-only).
+ * The client-safe half of requests: the type and status lists, their labels,
+ * and the checks the Create-a-request dialog runs before it calls the server
+ * action. The record types and the API load live in lib/requests.ts
+ * (server-only).
  */
 
-import { nextId } from "@/lib/change-notes";
-import type { AgentRequestType, RequestRecord, RequestStatus, RequestType } from "@/lib/requests";
+import type { AgentRequestType, RequestStatus, RequestType } from "@/lib/requests";
 
 /** What the Create-a-request dialog offers. Merch is filed by the shop, never here. */
 export const REQUEST_TYPES: readonly AgentRequestType[] = ["licensing", "contract", "dayOff"];
@@ -31,59 +31,33 @@ export type RequestValues = {
   endDate: string;
 };
 
-/** A save error, shown under the field it names. */
+/** A save error, shown under the field it names, or under the form for `form`. */
 export type RequestError = {
-  field: "agentId" | "state" | "carrierId" | "startDate" | "endDate";
+  field: "agentId" | "state" | "carrierId" | "startDate" | "endDate" | "form";
   message: string;
 };
 
-type NewRequestResult = { error: RequestError; request: null } | { error: null; request: RequestRecord };
-
 /**
- * Builds a pending request from the dialog's values, pure. Every request
- * names an agent; a day off also needs its end date on or after its start.
- * The ID follows the highest existing one.
+ * The checks the form can run itself before the API: every request names an
+ * agent; licensing and contract need a state and a carrier; a day off needs
+ * its end date on or after its start. The API runs the same checks again.
  */
-export function newRequest(values: RequestValues, existing: RequestRecord[], now = new Date()): NewRequestResult {
-  if (!values.agentId) return { error: { field: "agentId", message: "Choose an agent." }, request: null };
-
-  const base = {
-    id: nextId(existing),
-    agentId: values.agentId,
-    status: "pending" as const,
-    createdAt: now.toISOString(),
-    ...(values.note ? { note: values.note } : {}),
-  };
+export function checkRequestValues(values: RequestValues): RequestError | null {
+  if (!values.agentId) return { field: "agentId", message: "Choose an agent." };
 
   switch (values.type) {
     case "licensing":
-    case "contract": {
-      if (!values.state) return { error: { field: "state", message: "Choose a state." }, request: null };
-      if (!values.carrierId) {
-        return { error: { field: "carrierId", message: "Choose a carrier." }, request: null };
-      }
-      return {
-        error: null,
-        request: { ...base, type: values.type, state: values.state, carrierId: values.carrierId },
-      };
-    }
+    case "contract":
+      if (!values.state) return { field: "state", message: "Choose a state." };
+      if (!values.carrierId) return { field: "carrierId", message: "Choose a carrier." };
+      return null;
     case "dayOff":
-      if (!values.startDate) {
-        return { error: { field: "startDate", message: "Enter the first day off." }, request: null };
-      }
-      if (!values.endDate) {
-        return { error: { field: "endDate", message: "Enter the last day off." }, request: null };
-      }
+      if (!values.startDate) return { field: "startDate", message: "Enter the first day off." };
+      if (!values.endDate) return { field: "endDate", message: "Enter the last day off." };
       // ISO dates compare as text.
       if (values.endDate < values.startDate) {
-        return {
-          error: { field: "endDate", message: "The last day can't be before the first." },
-          request: null,
-        };
+        return { field: "endDate", message: "The last day can't be before the first." };
       }
-      return {
-        error: null,
-        request: { ...base, type: "dayOff", startDate: values.startDate, endDate: values.endDate },
-      };
+      return null;
   }
 }

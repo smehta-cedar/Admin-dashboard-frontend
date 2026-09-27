@@ -2,38 +2,27 @@
 
 import { useId } from "react";
 import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
-import {
-  ProducerForm,
-  producerNoteValues,
-  unnumberedStatesError,
-  type ProducerLabels,
-} from "@/components/producer-form";
-import type { AgencyField, AgencyNote, AgencyRecord } from "@/lib/agency";
-import type { AgencyStateLicenseRecord } from "@/lib/agency-state-licenses";
-import { diffValues, nextId } from "@/lib/change-notes";
-import { applyLicenceEdits, licenseNumbersOf, licensedStatesOf } from "@/lib/state-licenses";
+import { ProducerForm, type ProducerError, type ProducerLabels } from "@/components/producer-form";
+import type { AgencyField, AgencyRecord, AgencyValues } from "@/lib/agency";
 
 /*
  * The Edit agency dialog: the shared ProducerForm (components/producer-form.tsx)
  * with org-flavoured labels — name, DBA names, status, agency NPN, email,
  * phone, licensed states and the licence number for each checked state. Edit
- * only: there is one agency, so nothing is ever added.
+ * only: there is one agency, so nothing is ever added here.
  *
- * The states and numbers the form edits are the agency's state licence rows
- * (lib/agency-state-licenses.ts): `saveAgency` updates those rows and derives
- * the saved agency's licensedStates / licenseNumbers from them, the way
- * lib/agency.ts does when it loads. The agency profile owns the agency,
- * licence rows and notes state and passes `onSave`, which calls `saveAgency`
- * below. Edits are dummy: nothing reaches a server, and a refresh brings back
- * the JSON.
+ * The agency profile passes `onSave`, which calls the saveAgency server
+ * action (./actions.ts): the API keeps the licence rows in step with the
+ * checked states and records the change note. The form checks that every
+ * checked state has a number before calling it.
  */
 
-export type AgencyValues = AgencyRecord;
+export type { AgencyValues } from "@/lib/agency";
 
 /** A save error, shown under the field it names. */
-export type AgencyError = { field: "licenseNumbers"; message: string };
+export type AgencyError = ProducerError;
 
-/** Also the order changes are compared and listed in. */
+/** Also the order changes are listed in on a note. */
 export const AGENCY_FIELD_LABELS: Record<AgencyField, string> = {
   name: "Agency name",
   aliases: "Other names",
@@ -45,8 +34,6 @@ export const AGENCY_FIELD_LABELS: Record<AgencyField, string> = {
   licenseNumbers: "Licence numbers",
 };
 
-const FIELDS = Object.keys(AGENCY_FIELD_LABELS) as AgencyField[];
-
 const FORM_LABELS: ProducerLabels = {
   name: "Agency name",
   aliases: "Other names",
@@ -55,73 +42,11 @@ const FORM_LABELS: ProducerLabels = {
   licensedHint: "Where the agency holds a licence.",
 };
 
-type SaveInput = {
-  /** Every agency note, so the new note's ID is unique. */
-  notes: AgencyNote[];
-  /** The agency's licence rows (all of them are its own). */
-  licenses: AgencyStateLicenseRecord[];
-  values: AgencyValues;
-  /** The agency as it was when the dialog opened. */
-  editing: AgencyRecord;
-};
-
-type SaveResult =
-  | { error: AgencyError; agency: null }
-  | {
-      error: null;
-      /** The agency as saved; on an edit that changed nothing, the record as it was. */
-      agency: AgencyRecord;
-      /** False when the edit changed nothing: no new note. */
-      changed: boolean;
-      notes: AgencyNote[];
-      /** The licence rows after the save. */
-      licenses: AgencyStateLicenseRecord[];
-    };
-
-/**
- * Edits the agency, pure. Returns the saved agency, the next licence rows and
- * the next notes (a note only when something changed), or the error to show:
- * a licensed state with no licence number. There is no uniqueness check:
- * nothing else has an agency NPN.
- */
-export function saveAgency({ notes, licenses, values, editing }: SaveInput): SaveResult {
-  // The inputs are required too; this holds for any caller.
-  const unnumbered = unnumberedStatesError(values);
-  if (unnumbered) return { error: { ...unnumbered, field: "licenseNumbers" }, agency: null };
-
-  // The licence rows are the truth; the agency's two fields are read back from them.
-  const nextLicenses = applyLicenceEdits({
-    rows: licenses,
-    isOwn: () => true,
-    values,
-    own: (license) => license,
-  });
-  const saved: AgencyRecord = {
-    ...values,
-    licensedStates: licensedStatesOf(nextLicenses),
-    licenseNumbers: licenseNumbersOf(nextLicenses),
-  };
-  const changes = diffValues(FIELDS, producerNoteValues(editing), producerNoteValues(saved));
-  // Saving with nothing changed just closes, without a note.
-  if (changes.length === 0) return { error: null, agency: saved, changed: false, notes, licenses };
-
-  return {
-    error: null,
-    agency: saved,
-    changed: true,
-    licenses: nextLicenses,
-    notes: [
-      { id: nextId(notes), kind: "edited", createdAt: new Date().toISOString(), changes },
-      ...notes,
-    ],
-  };
-}
-
 type AgencyDialogProps = {
   /** The agency to edit, or null to keep the dialog closed. */
   editing: AgencyRecord | null;
-  /** Saves the values; returns the error to show instead of closing. */
-  onSave: (values: AgencyValues) => AgencyError | null;
+  /** Saves the values; resolves with the error to show instead of closing. */
+  onSave: (values: AgencyValues) => Promise<AgencyError | null>;
   /** Runs for every close: Cancel, Escape, backdrop click, or a save. */
   onClose: () => void;
 };
@@ -137,7 +62,7 @@ export function AgencyDialog({ editing, onSave, onClose }: AgencyDialogProps) {
         <ProducerForm
           id={id}
           title={`Edit ${editing.name}`}
-          description="Saving records a note of what changed. Nothing is saved anywhere yet; refreshing undoes it."
+          description="Saving records a note of what changed on this page."
           submitLabel="Save changes"
           labels={FORM_LABELS}
           initial={editing}

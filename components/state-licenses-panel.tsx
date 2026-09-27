@@ -1,32 +1,34 @@
 import { LicenseNumber } from "@/components/license-number";
 import { Panel, PanelEmpty, ProfileTable } from "@/components/profile-shell";
 import { StatusBadge } from "@/components/status-badge";
-import { formatLicenceDate, type StateLicense } from "@/lib/state-licenses";
+import { formatLicenceDate, licenceLinesText, type StateLicense } from "@/lib/state-licenses";
 import { US_STATE_NAMES } from "@/lib/us-states";
 
 /*
  * A profile's read-only "State licences" panel (agent and agency): one row per
- * licence — State, Licence #, Status, Start, End. Dates are formatted from the
- * stored string, never through Date, so the server and the browser agree.
- * Editing happens through the producer form on the profile's Edit button,
- * which updates the rows this renders.
+ * licence — State, Licence #, Lines (agents only: Life, Health or both),
+ * Status, Start, End. Dates are formatted from the stored string, never
+ * through Date, so the server and the browser agree. Editing happens through
+ * the producer form on the profile's Edit button, which updates the rows this
+ * renders.
  */
 
 type StateLicensesPanelProps = {
   /** The owner's rows, in ID order. */
   licenses: StateLicense[];
+  /** Show the Lines column: the agent profile, whose rows record Life / Health. */
+  showLines?: boolean;
   className?: string;
 };
 
-const COLUMNS = ["State", "Licence #", "Status", "Start", "End"];
-
-export function StateLicensesPanel({ licenses, className }: StateLicensesPanelProps) {
+export function StateLicensesPanel({ licenses, showLines = false, className }: StateLicensesPanelProps) {
+  const columns = ["State", "Licence #", ...(showLines ? ["Lines"] : []), "Status", "Start", "End"];
   return (
     <Panel title="State licences" count={licenses.length} className={className}>
       {licenses.length === 0 ? (
         <PanelEmpty>No state licences recorded.</PanelEmpty>
       ) : (
-        <ProfileTable columns={COLUMNS} rows={licenses} rowKey={(license) => license.id}>
+        <ProfileTable columns={columns} rows={licenses} rowKey={(license) => license.id}>
           {(license) => (
             <>
               <td
@@ -41,6 +43,11 @@ export function StateLicensesPanel({ licenses, className }: StateLicensesPanelPr
               <td className="min-w-0 px-3 py-2.5 align-middle">
                 <LicenseNumber value={license.licenseNumber} />
               </td>
+              {showLines ? (
+                <td className="whitespace-nowrap px-3 py-2.5 align-middle text-fg">
+                  {licenceLinesText(license) || <span className="text-fg-subtle">—</span>}
+                </td>
+              ) : null}
               <td className="px-3 py-2.5 align-middle">
                 <StatusBadge status={license.status} />
               </td>

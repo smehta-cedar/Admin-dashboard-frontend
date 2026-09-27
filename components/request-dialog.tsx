@@ -18,9 +18,9 @@ import { US_STATES } from "@/lib/us-states";
  * The Create-a-request popup the navbar opens from any page: one dialog, the
  * type first, then the fields that type needs — a state and a carrier for
  * licensing or a contract, first and last day for a day off — plus the agent
- * it is for and an optional note. Saving files a pending request into the
- * requests store (components/requests-store.tsx), where the HR page picks it
- * up. Nothing reaches a server; a refresh brings back the JSON.
+ * it is for and an optional note. Saving files a pending request through
+ * the requests store (components/requests-store.tsx) to the API, where the
+ * HR page picks it up. While the save is in flight the buttons are disabled.
  *
  * Mounted per open inside a ModalDialog, so its fields and errors start
  * clear each time.
@@ -78,16 +78,25 @@ function RequestForm({ id, close }: { id: string; close: () => void }) {
   const { agents, carriers, addRequest } = useRequestsStore();
   const [type, setType] = useState<AgentRequestType>("licensing");
   const [error, setError] = useState<RequestError | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const saveError = addRequest(readValues(event.currentTarget));
-    if (saveError) {
-      setError(saveError);
-      return;
+    if (saving) return;
+    const values = readValues(event.currentTarget);
+    setSaving(true);
+    try {
+      const saveError = await addRequest(values);
+      if (saveError) {
+        setError(saveError);
+        return;
+      }
+      close();
+    } finally {
+      setSaving(false);
     }
-    close();
   };
+  const formError = error?.field === "form" ? error.message : null;
 
   /** Error props for one field: message under it while the error names it. */
   const errorFor = (field: RequestError["field"]) => {
@@ -112,9 +121,7 @@ function RequestForm({ id, close }: { id: string; close: () => void }) {
       <h2 id={`${id}-title`} className="text-base font-semibold text-fg">
         Create a request
       </h2>
-      <p className="mt-1 text-sm text-fg-muted">
-        Files a pending request for HR. Not saved anywhere yet; it stays until you refresh.
-      </p>
+      <p className="mt-1 text-sm text-fg-muted">Files a pending request for HR to decide on.</p>
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
         <Field label="Type" htmlFor={`${id}-type`}>
@@ -218,12 +225,17 @@ function RequestForm({ id, close }: { id: string; close: () => void }) {
         </Field>
       </div>
 
-      <div className="mt-6 flex justify-end gap-2">
-        <button type="button" onClick={close} className={GHOST_BUTTON_CLASS}>
+      {/* Errors about the attempt itself (no permission, API down), not one field. */}
+      <div role="alert" className="mt-4">
+        {formError ? <p className="text-sm text-danger">{formError}</p> : null}
+      </div>
+
+      <div className="mt-4 flex justify-end gap-2">
+        <button type="button" onClick={close} disabled={saving} className={GHOST_BUTTON_CLASS}>
           Cancel
         </button>
-        <button type="submit" className={PRIMARY_BUTTON_CLASS}>
-          Create request
+        <button type="submit" disabled={saving} className={`${PRIMARY_BUTTON_CLASS} disabled:opacity-60`}>
+          {saving ? "Saving…" : "Create request"}
         </button>
       </div>
     </form>

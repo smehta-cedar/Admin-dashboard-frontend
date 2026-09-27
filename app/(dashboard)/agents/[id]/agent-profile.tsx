@@ -19,13 +19,9 @@ import {
 import { LINK_ACTIVE, LINK_BASE, LINK_IDLE } from "@/components/sidebar";
 import { StateLicensesPanel } from "@/components/state-licenses-panel";
 import { StatusBadge } from "@/components/status-badge";
-import { UnsavedBanner } from "@/components/unsaved-banner";
 import type { AgentStateLicenseRecord } from "@/lib/agent-state-licenses";
 import type { AgentNote, AgentRecord } from "@/lib/agents";
-import type {
-  CarrierContractNote,
-  CarrierContractRecord,
-} from "@/lib/carrier-contracts";
+import type { CarrierContractRecord } from "@/lib/carrier-contracts";
 import type { CarrierRecord } from "@/lib/carriers";
 import { formatAddress } from "@/lib/address";
 import { writableStates } from "@/lib/us-states";
@@ -53,7 +49,6 @@ import {
  * always there, then a split: a section list beside one panel.
  *
  *   name row        — initials, name, status, Edit; not in a card
- *   unsaved banner  — only once something was changed
  *   section list | panel (`13rem` | the rest from `lg`)
  *                   — the list names the six sections, each with its
  *                     current count: Details, Pending, Carriers, State
@@ -102,10 +97,9 @@ import {
  * The agent and their licence rows are kept in state so an edit shows at
  * once; the edit goes to the API through the saveAgent server action, which
  * writes the note (the notes come from the server and the action's
- * revalidation brings the new one in). Contracts are still dummy: they live
- * in component state and a refresh drops them, which the unsaved banner
- * counts. page.tsx keys this component by agent ID, so switching agents
- * starts that state again.
+ * revalidation brings the new one in). Appointments save the same way through
+ * the appointments hook. page.tsx keys this component by agent ID, so
+ * switching agents starts that state again.
  */
 
 type CarrierOption = Pick<CarrierRecord, "id" | "name" | "status" | "availableStates">;
@@ -114,10 +108,8 @@ type AgentProfileProps = {
   initialAgent: AgentRecord;
   /** Every carrier, sorted by name, for the Add carrier dialog. */
   carriers: CarrierOption[];
-  /** Every contract, not just this agent's: the duplicate check and new IDs need them all. */
+  /** Every contract; the profile picks out this agent's. */
   initialContracts: CarrierContractRecord[];
-  /** Every contract note, newest first. Not shown here; new ones are still recorded. */
-  initialContractNotes: CarrierContractNote[];
   /** This agent's licence rows, in state-code order. */
   initialLicenses: AgentStateLicenseRecord[];
   /** This agent's passwords, the carrier as the party, sorted by carrier name. */
@@ -292,15 +284,12 @@ export function AgentProfile({
   initialAgent,
   carriers,
   initialContracts,
-  initialContractNotes,
   initialLicenses,
   passwords,
   notes,
 }: AgentProfileProps) {
   const [agent, setAgent] = useState(initialAgent);
   const [licenses, setLicenses] = useState(initialLicenses);
-  // Appointments made here are not saved anywhere yet (contracts are still JSON).
-  const [unsavedCount, setUnsavedCount] = useState(0);
   const [agentEditor, setAgentEditor] = useState<AgentEditor | null>(null);
   // Which section the panel shows. Carriers first: it is what the page is opened for.
   const [section, setSection] = useState<SectionKey>("carriers");
@@ -308,10 +297,9 @@ export function AgentProfile({
   // lookup it needs; an edited name or licence list is read at save time.
   const { contracts, editor, setEditor, saveContract } = useAppointments({
     initialContracts,
-    initialNotes: initialContractNotes,
     agents: [agent],
     carriers,
-    onSaved: () => setUnsavedCount((count) => count + 1),
+    onSaved: () => {},
   });
 
   // This agent's carriers, rebuilt from state so a new appointment shows at once.
@@ -443,9 +431,6 @@ export function AgentProfile({
         onEdit={() => setAgentEditor({ mode: "edit", agent })}
       />
 
-      {/* The status region always renders; the banner itself only once something changed. */}
-      <UnsavedBanner count={unsavedCount} className="mt-4" />
-
       {/*
        * The split: the section list, then the one panel it picked. From `lg`
        * the list is a narrow column on the left; below, a wrapping row above.
@@ -555,7 +540,7 @@ export function AgentProfile({
               )}
             </Panel>
           ) : section === "licences" ? (
-            <StateLicensesPanel licenses={licenses} />
+            <StateLicensesPanel licenses={licenses} showLines />
           ) : section === "passwords" ? (
             <PasswordsPanel passwords={passwords} partyHeading="Carrier" />
           ) : (

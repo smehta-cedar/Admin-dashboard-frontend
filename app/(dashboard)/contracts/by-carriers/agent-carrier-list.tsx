@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { CarrierContractRecord } from "@/lib/carrier-contracts";
 import { stateSummary, writableStates } from "@/lib/us-states";
 import { initials } from "@/lib/text";
 
@@ -17,13 +18,8 @@ import { initials } from "@/lib/text";
 
 type ListAgent = { id: string; name: string; status: "active" | "inactive"; licensedStates: string[] };
 type ListCarrier = { id: string; name: string; availableStates: string[] };
-type ListContract = {
-  id: string;
-  agentId: string;
-  carrierId: string;
-  writingNumber: string;
-  appointedStates: string[];
-};
+/** A contract as the list needs it: the full record, so Edit can open it in the dialog. */
+type ListContract = CarrierContractRecord;
 
 type AgentCarrierListProps = {
   /** Every agent, sorted by name. */

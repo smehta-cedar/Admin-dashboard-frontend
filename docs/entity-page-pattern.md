@@ -50,7 +50,8 @@ Shared pieces (extracted when Carriers landed — use these, don't copy):
 | `components/hydrated-note-list.tsx` | `HydratedNoteList` — `NoteList` gated on hydration, for a profile's Notes panel |
 | `components/credential-value.tsx` | `CredentialValue` (copy-on-click, masked when `secret`), `PasswordInput` (eye toggle) — Passwords, Users, sign-in, profiles |
 | `components/license-number.tsx` | `LicenseNumber` (a licensed-state card's number, click to copy, or "No number yet"; agent and agency profiles) |
-| `components/producer-form.tsx` | `ProducerForm` + `producerNoteValues`, `unnumberedStatesError` — the one agent/agency form (see Agency) |
+| `components/producer-form.tsx` | `ProducerForm` + `producerNoteValues`, `unnumberedStatesError` — the one agent/agency form (see Agency). Fields grouped into three titled sections with no hint text: Identity (name, NPN, aliases on one line; the status select in the header), Contact (email, phone, then the producer's `extra` fields), Licences. `layout="dialog"` stacks them under rules in a modal; `layout="page"` (Add agent) lays them out as one card per row capped at the 2xl breakpoint, the Contact fields over four columns from `xl` (`FieldSpans`), with a sticky button bar |
+| `components/state-select.tsx` | `StateSelect` — searchable one-state combobox (type a name or code, pick from the list); submits the code through a hidden input under `name`. The agent address's State field |
 | `components/profile-shell.tsx` | Profile layout pieces: `ProfileNameRow`, `ProfileHeader`, `ProducerDetails`, `Detail`, `LicenseCards`, `StateChip`, `Count`, `Panel`, `PanelEmpty`, `ProfileTable` (paginated), `StateChipCell`, `PasswordsPanel`, `PROFILE_BUTTON_CLASS` (see Contracts → Profiles) |
 | `app/(dashboard)/contracts/use-appointments.ts` | `useAppointments` — contracts + notes state, the open `AppointmentDialog` editor, and its `saveContract` (see Contracts → One dialog) |
 
@@ -404,11 +405,8 @@ the next entities (Agents, Passwords) follow:
   Carriers any more: a save is saved.
 - `data/carriers.json` stays as the seed file for `python manage.py
   seed_carriers`; nothing in the app imports it.
-- Not yet on the API, so still keyed by the old numeric IDs: contracts
-  (`data/carrier-contracts.json`) and requests (`data/requests.json`). Until
-  they move, the Contracts pages and the profiles' Carriers / Agents panels
-  find no matching agents or carriers, and HR shows requests without a
-  matching agent name.
+- Every entity now reads and writes the API; the `data/*.json` files are
+  seed input only.
 
 ### Agents and Passwords on the API
 
@@ -455,6 +453,93 @@ Same pattern as Carriers; the differences:
   `data/agent-state-licenses.json`, `data/passwords.json`. The three
   `*-notes.json` files are unused.
 
+### Contracts and Users on the API
+
+- **Contracts** ([lib/carrier-contracts.ts](../lib/carrier-contracts.ts),
+  `/api/v1/contracts/`, `backend/apps/contracts`): `CarrierContractRecord`
+  gained `agentName` and `carrierName`; `AppointmentValues` and
+  `AppointmentError` live in the lib module (`field` includes `"carrierId"`
+  and `"form"`). The pure `saveAppointment` is gone: the API does the
+  duplicate, writing-number and ceiling checks with the same messages
+  (naming the carrier or the agent and the page that fixes it), and records
+  the notes. `useAppointments` keeps contracts and the open editor only, and
+  its `saveContract` calls the `saveAppointment` action
+  (`contracts/actions.ts`). The by-state page reads every contract's notes as
+  a prop (`getCarrierContractNotes()` → `contracts/notes/`); by-carrier and
+  the agent profile read none. No unsaved banners remain on any page.
+- **Users** ([lib/users.ts](../lib/users.ts), `/api/v1/users/` in
+  `backend/apps/accounts`): the Users page now reads the real accounts.
+  `UserRecord` is `{ id, name, email, phone, role: { id, name } | null,
+  status, isSuperuser }`; the role is one of the API's Role rows (`getRoles()`
+  → `roles/`, offered in the dialog) rather than the old `admin | staff`
+  union, and there is no password column since the API never returns one.
+  `saveUser` (`users/actions.ts`) makes up to three calls on an edit: PATCH
+  for name / email / phone / role, block or unblock when the status changed,
+  set-password when a new one was typed (blank keeps it). The API's own rules
+  (only a superuser changes a superuser; nobody blocks themselves or changes
+  their own role) come back as a 403 shown under the form. The users API
+  writes the notes (`users/notes/`), including block / unblock as a status
+  change and a password set as redacted. `data/users.json` seeds accounts
+  through `seed_users` (local dev only).
+- **Agency** ([lib/agency.ts](../lib/agency.ts), `/api/v1/agencies/`,
+  `backend/apps/agency`): `getAgencyWithLicenses()` reads the first agency
+  of the list (the frontend still treats it as a singleton) with its licence
+  rows, or null when none exists, in which case the page shows an empty
+  state pointing at `seed_agency`. `AgencyRecord` gained `id`; `AgencyField`
+  excludes it. The dialog is now thin: `saveAgency` (`agency/actions.ts`)
+  PATCHes the agency with `licenses` built from the checked states, the API
+  keeps the rows in step and records the note, and the profile updates its
+  agency and licence rows from the result with the notes as a prop. No pure
+  save and no unsaved banner remain anywhere; `applyLicenceEdits` in
+  `lib/state-licenses.ts` is unused.
+- **Requests (HR)** ([lib/requests.ts](../lib/requests.ts),
+  `/api/v1/requests/`, `backend/apps/requests`): one model for every type;
+  the API's `day_off` maps to the app's `dayOff`, and agent requests carry
+  `agentName` / `carrierName` so the HR table needs no lookup. The requests
+  store's `addRequest` runs `checkRequestValues` (the client-side half of
+  the old `newRequest`) and then the `fileRequest` action; `setStatus` sets
+  the new status at once, calls `setRequestStatus`, and puts the old one
+  back with `statusError` shown above the calendar if the API refuses. The
+  navbar dialog reads "Saving…" while it waits. No unsaved banner.
+- **Shop orders** go to `POST /requests/merch/` from
+  `app/(dashboard)/storefront/shop/actions.ts` as the signed-in user, the
+  same way HR files every other request (a 401 redirects to sign-in, a 403
+  reads "Your account can't place orders"). The shop used to be public at
+  `/shop` and post as a `Shop` service account (`SHOP_API_EMAIL` /
+  `SHOP_API_PASSWORD`); the frontend no longer needs those variables.
+  `lib/merch-requests.ts` and the writable `data/merch-requests.json` are
+  gone; the file is seed input.
+- **Storefront** ([lib/storefront.ts](../lib/storefront.ts),
+  `/api/v1/storefront/`, `backend/apps/storefront`): the products the shop
+  sells, no longer hard-coded in `lib/shop.ts` (which keeps the types,
+  `colorLabel(product, id)` and `validateOrder(values, product)`). The shop
+  page (`storefront/shop/`, the one sub-link under **Storefront**, navbar
+  title "Shop") reads `getCatalog()` (active products only), offers a
+  product picker when there is more than one, and the shop action re-reads
+  the catalog to validate before posting the order with its `productId`. A
+  merch request carries `productName` and the colour's label. The
+  **Storefront** page itself (`storefront/`, nav item after HR with a
+  shopping-bag icon) lists every product with swatches and notes in the
+  expanded row, links to the shop from its description, and `ProductDialog`
+  edits name, description, section and type, a picture link (with a live
+  thumbnail), price, colours, sizes, the max per order and status through
+  the `saveProduct` action, which also revalidates `/storefront/shop`.
+- Products carry a `category` (Womens, Mens, Maternity, Accessories,
+  Holidays) and a `productType` (Polos, Quarter Zips, Shirts, Pants, Belts,
+  Hats, Backpacks), both optional; `PRODUCT_CATEGORIES` / `PRODUCT_TYPES` in
+  `lib/shop.ts` mirror the API's and give the labels. The shop opens on a
+  **catalog**: a section nav ("All products", then only the sections with
+  products) and a type nav, over a grid of cards (picture or the drawn tee,
+  name, price, colour dots). Picking a card opens the choose step with
+  "← All products" above it.
+- Colours are picked, not typed: `ColorPicker` in the dialog is a grid of
+  `COLOR_PRESETS` (eighteen named colours) where one click adds a colour
+  and another removes it (`aria-pressed`), with a small row under it for a
+  custom colour (name plus a native colour input; id from the label), which
+  then sits in the grid too. `imageUrl` shows in the shop's
+  preview and cards and as a thumbnail on the Storefront table; blank draws
+  the tee.
+
 ### Contracts
 
 Files: [lib/carrier-contracts.ts](../lib/carrier-contracts.ts),
@@ -467,6 +552,7 @@ Files: [lib/carrier-contracts.ts](../lib/carrier-contracts.ts),
 | --- | --- | --- |
 | `AgentRecord.licensedStates` | Personal licences: where the agent may write at all, whoever the carrier. **Derived** from the agent's state licence rows (see Agent state licences), never stored | Agents |
 | `AgentRecord.licenseNumbers` | The licence number each state issued, `{ TX: "2104587" }`. Derived from the same rows; a row whose number is still blank (a pending licence) is left out ("No number yet", and a Pending item). The agent dialog shows a required input per checked state and `saveAgent` rejects a licensed state without a number. Not a ceiling — it never affects writable states | Agents |
+| `AgentRecord.licenseLines` | The Life / Health lines each licence covers, `{ TX: { life: true, health: false } }`, for every licensed state. Derived from the same rows (`life`, `health` on `AgentStateLicense`). The agent form shows a Life and a Health checkbox beside each checked state's number; the profile's State licences panel has a Lines column and notes record `license_lines` ("TX Life & Health"). Agents only: the agency's rows have neither | Agents |
 | `CarrierRecord.availableStates` | Carrier footprint: states the carrier is available in for the agency | Carriers |
 | `CarrierContractRecord.appointedStates` | States one agent may write for that carrier, always ⊆ `licensedStates ∩ availableStates` | Contracts (both views) |
 | `CarrierContractRecord.writingNumber` | Producer ID the carrier assigned. Unique within a carrier when set (ignoring case). Empty until recorded | Contracts (both views) |
@@ -685,15 +771,15 @@ A request is one agent asking for one thing. `RequestRecord` is a union on
 `createdAt` and an optional `note`. A missing or unknown status loads as
 pending with a `console.warn`.
 
-The one exception is `merch`: a Cedar Grove tee order from the public shop
-([app/shop/](../app/shop/), copy and options in [lib/shop.ts](../lib/shop.ts)).
-It has no `agentId`; it carries `buyerName`, `email`, `phone`, `address`,
-`size`, `color` and `quantity`. The shop's server action
-(`app/shop/actions.ts`) appends it as pending to
-[data/merch-requests.json](../data/merch-requests.json), which
-[lib/merch-requests.ts](../lib/merch-requests.ts) reads with fs at request
-time and `getRequests()` merges with `requests.json` (IDs run across both).
-`REQUEST_TYPES` leaves merch out, so the dialog never offers it;
+The one exception is `merch`: a merchandise order placed for a client in the
+shop under Storefront
+([app/(dashboard)/storefront/shop/](<../app/(dashboard)/storefront/shop/>),
+copy and options in [lib/shop.ts](../lib/shop.ts)). It has no `agentId`; it
+carries `buyerName`, `email`, `phone`, `address`, `size`, `color` and
+`quantity`. The shop's server action (its `actions.ts`) posts it as pending
+to `POST /requests/merch/` as the signed-in user, and `getRequests()` lists
+it with the rest. `REQUEST_TYPES` leaves merch out, so the dialog never
+offers it;
 `REQUEST_TYPE_LABELS` has it for the HR Type column.
 
 - **Filed from anywhere.** The navbar's "+" (`CreateRequestButton`, just

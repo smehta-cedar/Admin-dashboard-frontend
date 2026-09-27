@@ -5,12 +5,10 @@ import { TOOLBAR_INPUT_CLASS } from "@/components/classes";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { PageHeader } from "@/components/page-header";
 import { useRequestsStore } from "@/components/requests-store";
-import { UnsavedBanner } from "@/components/unsaved-banner";
 import type { AgentStateLicenseRecord } from "@/lib/agent-state-licenses";
 import { yearMonthOf } from "@/lib/calendar";
 import { REQUEST_STATUSES, REQUEST_TYPE_LABELS } from "@/lib/request-options";
 import type { MerchRequestRecord, RequestRecord, RequestStatus } from "@/lib/requests";
-import { TEE, colorLabel } from "@/lib/shop";
 import { formatLicenceDate } from "@/lib/state-licenses";
 import { US_STATE_NAMES } from "@/lib/us-states";
 import { HrCalendar, type DayOffMark, type ExpiryMark } from "./hr-calendar";
@@ -23,11 +21,11 @@ import { HrCalendar, type DayOffMark, type ExpiryMark } from "./hr-calendar";
  * is what the calendar draws a day off in. Licence expirations are the end
  * dates of the agents' state licence rows, passed in by page.tsx. Every
  * request is listed, whatever its type or status; contracts have no date so
- * the list is the only place they show. Tee orders from the public shop
+ * the list is the only place they show. Merch orders from the shop
  * (the merch type) list too, with the buyer in the Person column and the
  * shipping and contact details in the row; only day-off requests reach the
- * calendar. Status changes live in the store until a refresh, like every
- * other edit in the app.
+ * calendar. Status changes go to the API through the store; one the API
+ * refuses is put back and its message shown above the calendar.
  */
 
 type HrViewProps = {
@@ -48,25 +46,24 @@ const rangeText = (start: string, end: string) =>
   start === end ? formatLicenceDate(start) : `${formatLicenceDate(start)} – ${formatLicenceDate(end)}`;
 
 export function HrView({ licenses, today }: HrViewProps) {
-  const { requests, agents, carriers, unsavedCount, setStatus } = useRequestsStore();
+  const { requests, agents, setStatus, statusError } = useRequestsStore();
   const [month, setMonth] = useState(() => yearMonthOf(today));
 
   const agentName = (id: string) => agents.find((agent) => agent.id === id)?.name ?? `Agent ${id}`;
-  /** Who the request is for: the agent, or the tee buyer for a merch order. */
+  /** Who the request is for: the agent, or the tee buyer for a merch order. Names come with the record. */
   const personOf = (request: RequestRecord) =>
-    request.type === "merch" ? request.buyerName : agentName(request.agentId);
-  const carrierName = (id: string) => carriers.find((carrier) => carrier.id === id)?.name ?? `Carrier ${id}`;
+    request.type === "merch" ? request.buyerName : request.agentName;
 
   /** What a request asks for, as one line: the Details cell and its search text. */
   const detailOf = (request: RequestRecord): string => {
     switch (request.type) {
       case "licensing":
       case "contract":
-        return `${request.state} · ${US_STATE_NAMES[request.state] ?? request.state} · ${carrierName(request.carrierId)}`;
+        return `${request.state} · ${US_STATE_NAMES[request.state] ?? request.state} · ${request.carrierName}`;
       case "dayOff":
         return rangeText(request.startDate, request.endDate);
       case "merch":
-        return `${TEE.name} · ${request.quantity} × ${request.size} · ${colorLabel(request.color)}`;
+        return `${request.productName} · ${request.quantity} × ${request.size} · ${request.color}`;
     }
   };
 
@@ -78,7 +75,7 @@ export function HrView({ licenses, today }: HrViewProps) {
       ? [
           {
             key: request.id,
-            agentName: agentName(request.agentId),
+            agentName: request.agentName,
             status: request.status,
             startDate: request.startDate,
             endDate: request.endDate,
@@ -98,8 +95,8 @@ export function HrView({ licenses, today }: HrViewProps) {
 
   const pendingCount = requests.filter((request) => request.status === "pending").length;
 
-  // `setStatus` and the name lists change only when the store does, which is
-  // when the rows change too, so the columns stay stable between edits.
+  // `setStatus` changes only when the store does, which is when the rows
+  // change too, so the columns stay stable between edits.
   const columns = useMemo<DataTableColumn<RequestRecord>[]>(
     () => [
       {
@@ -177,7 +174,7 @@ export function HrView({ licenses, today }: HrViewProps) {
         searchText: (request) => request.status,
       },
     ],
-    [agents, carriers, setStatus],
+    [setStatus],
   );
 
   return (
@@ -191,7 +188,13 @@ export function HrView({ licenses, today }: HrViewProps) {
         }
       />
 
-      <UnsavedBanner count={unsavedCount} />
+      <div role="alert" className="mb-4">
+        {statusError ? (
+          <p className="rounded-md bg-warn-soft px-3 py-2 text-sm text-warn-ink">
+            The status change was refused: {statusError}
+          </p>
+        ) : null}
+      </div>
 
       <HrCalendar
         month={month}

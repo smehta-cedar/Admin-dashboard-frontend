@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getAgent, getAgentNotes, getAgentWithLicenses } from "@/lib/agents";
-import { getCarrierContractNotes, getCarrierContracts } from "@/lib/carrier-contracts";
+import { getCarrierContracts } from "@/lib/carrier-contracts";
 import { getCarriers } from "@/lib/carriers";
 import { getPasswords } from "@/lib/passwords";
 import { byName } from "@/lib/text";
@@ -19,10 +19,9 @@ export default async function AgentProfilePage(props: PageProps<"/agents/[id]">)
   if (!loaded) notFound();
   const { agent, licenses } = loaded;
 
-  const [notes, carrierContracts, contractNotes, passwords, carriers] = await Promise.all([
+  const [notes, carrierContracts, passwords, carriers] = await Promise.all([
     getAgentNotes(id),
     getCarrierContracts(),
-    getCarrierContractNotes(),
     getPasswords(),
     getCarriers(),
   ]);
@@ -40,7 +39,6 @@ export default async function AgentProfilePage(props: PageProps<"/agents/[id]">)
         .map(({ id, name, status, availableStates }) => ({ id, name, status, availableStates }))
         .sort(byName)}
       initialContracts={carrierContracts}
-      initialContractNotes={contractNotes}
       initialLicenses={licenses}
       passwords={passwords
         .filter((record) => record.agentId === id)

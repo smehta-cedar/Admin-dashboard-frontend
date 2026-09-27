@@ -50,6 +50,13 @@ const NAV_ITEMS: NavItem[] = [
   },
   // Requests and the calendar they land on. No role gate, like the rest of the app.
   { href: "/hr", label: "HR", icon: "hr" },
+  // What the shop sells, and the shop itself; orders land on HR.
+  {
+    href: "/storefront",
+    label: "Storefront",
+    icon: "storefront",
+    children: [{ href: "/storefront/shop", label: "Shop" }],
+  },
   { href: "/users", label: "Users", icon: "users", searchable: true },
 ];
 

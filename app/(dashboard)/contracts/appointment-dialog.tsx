@@ -7,35 +7,35 @@ import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
 import { StateCheckboxes } from "@/components/state-checkboxes";
 import type { AgentRecord } from "@/lib/agents";
 import type {
+  AppointmentError,
+  AppointmentValues,
   CarrierContractField,
-  CarrierContractNote,
   CarrierContractRecord,
 } from "@/lib/carrier-contracts";
 import type { CarrierRecord } from "@/lib/carriers";
-import { diffValues, nextId } from "@/lib/change-notes";
 import { intersectStates, stateSummary } from "@/lib/us-states";
 import { byName } from "@/lib/text";
 
 /*
- * The one Add / Edit contract dialog, shared by Contracts by carrier and
- * Contracts by state so every entry point (Add contract, a card's add-agent
- * icon, Add carrier, Edit, a state panel line) opens the same form: agent,
- * carrier, writing number and a state checkbox grid. Add starts empty or with
- * an agent or carrier picked; Edit starts filled in from the contract. Both
- * check one contract per agent per carrier, a writing number unique within
- * that carrier when set, and record a note of what changed.
+ * The one Add / Edit contract dialog, shared by Contracts by carrier, Contracts
+ * by state and the agent profile so every entry point (Add contract, a card's
+ * add-agent icon, Add carrier, Edit, a state panel line) opens the same form:
+ * agent, carrier, writing number and a state checkbox grid. Add starts empty
+ * or with an agent or carrier picked; Edit starts filled in from the contract.
  *
  * The state grid lists the chosen carrier's whole footprint (availableStates,
  * set on Carriers), but a box is only enabled when the chosen agent is also
  * licensed there (licensedStates, set on Agents): an appointment can only cover
  * states where the agent may write at all and the carrier sells. The rest stay
  * visible but disabled, so it is clear what a new licence would open up; Select
- * all skips them and they never submit. saveAppointment rejects any state
- * outside the intersection, naming which side blocks it. Editing a contract
- * whose states fall outside that ceiling warns, then saving strips them.
+ * all skips them and they never submit. Editing a contract whose states fall
+ * outside that ceiling warns, then saving strips them.
  *
- * Each view owns its contracts and notes state and passes `onSave`, which
- * usually calls `saveAppointment` below and sets that state.
+ * Each view passes `onSave` (usually the hook's saveContract, which calls the
+ * saveAppointment server action). The API checks one contract per agent per
+ * carrier, a writing number unique within that carrier, and every state
+ * against both ceilings, naming the side that blocks it, then records the
+ * change note. While the save is in flight the buttons are disabled.
  */
 
 type AgentOption = Pick<AgentRecord, "id" | "name" | "status" | "licensedStates">;
@@ -46,15 +46,9 @@ export type AppointmentEditor =
   | { mode: "add"; agentId?: string; carrierId?: string }
   | { mode: "edit"; contract: CarrierContractRecord };
 
-export type AppointmentValues = Omit<CarrierContractRecord, "id">;
+export type { AppointmentError, AppointmentValues } from "@/lib/carrier-contracts";
 
-/** A save error, shown under the field it names. */
-export type AppointmentError = {
-  field: "agentId" | "writingNumber" | "appointedStates";
-  message: string;
-};
-
-/** Also the order changes are compared and listed in. */
+/** Also the order changes are listed in on a note. */
 export const APPOINTMENT_FIELD_LABELS: Record<CarrierContractField, string> = {
   agentId: "Agent",
   carrierId: "Carrier",
@@ -62,144 +56,8 @@ export const APPOINTMENT_FIELD_LABELS: Record<CarrierContractField, string> = {
   appointedStates: "States",
 };
 
-const FIELDS = Object.keys(APPOINTMENT_FIELD_LABELS) as CarrierContractField[];
-
-const EMPTY_VALUES = { agentId: "", carrierId: "", writingNumber: "", appointedStates: [] };
-
 /** Unique codes in code order, so a list's order never shows up as a change. */
 export const normalizeStates = (codes: string[]) => [...new Set(codes)].sort();
-
-type SaveInput = {
-  contracts: CarrierContractRecord[];
-  notes: CarrierContractNote[];
-  values: AppointmentValues;
-  /** The contract being edited; leave out when adding. */
-  editing?: CarrierContractRecord;
-  agentName: (agentId: string) => string;
-  carrierName: (carrierId: string) => string;
-  /** The carrier's availableStates: one half of the ceiling for appointedStates. */
-  availableStates: (carrierId: string) => string[];
-  /** The agent's licensedStates: the other half. */
-  licensedStates: (agentId: string) => string[];
-};
-
-type SaveResult =
-  | { error: AppointmentError }
-  | {
-      error: null;
-      /** False when an edit changed nothing: no new contracts or note. */
-      changed: boolean;
-      contracts: CarrierContractRecord[];
-      notes: CarrierContractNote[];
-    };
-
-/**
- * Adds or edits a contract, pure. Returns the next contracts and notes (a note
- * only when something changed), or an error when the agent already has a
- * contract with that carrier, a writing number is already used at that carrier
- * (ignoring case, blank numbers skipped), or a state is outside the ceiling —
- * the agent's licensedStates intersected with the carrier's availableStates.
- */
-export function saveAppointment({
-  contracts,
-  notes,
-  values,
-  editing,
-  agentName,
-  carrierName,
-  availableStates,
-  licensedStates,
-}: SaveInput): SaveResult {
-  const duplicate = contracts.some(
-    (contract) =>
-      contract.id !== editing?.id &&
-      contract.agentId === values.agentId &&
-      contract.carrierId === values.carrierId,
-  );
-  if (duplicate) {
-    return {
-      error: {
-        field: "agentId",
-        message: `${agentName(values.agentId)} already has a contract with ${carrierName(values.carrierId)}.`,
-      },
-    };
-  }
-
-  // Blank means none yet; uniqueness only applies when a number is set.
-  const numberKey = values.writingNumber.toLowerCase();
-  if (numberKey !== "") {
-    const numberOwner = contracts.find(
-      (contract) =>
-        contract.id !== editing?.id &&
-        contract.carrierId === values.carrierId &&
-        contract.writingNumber.toLowerCase() === numberKey,
-    );
-    if (numberOwner) {
-      return {
-        error: {
-          field: "writingNumber",
-          message: `Writing number ${numberOwner.writingNumber} is already used at ${carrierName(values.carrierId)} by ${agentName(numberOwner.agentId)}.`,
-        },
-      };
-    }
-  }
-
-  // Each half of the ceiling is checked on its own, so the error names the side
-  // that blocks the state and the page that fixes it.
-  const states = normalizeStates(values.appointedStates);
-  const unavailable = states.filter((code) => !availableStates(values.carrierId).includes(code));
-  if (unavailable.length > 0) {
-    return {
-      error: {
-        field: "appointedStates",
-        message: `${carrierName(values.carrierId)} isn't available in ${unavailable.join(", ")}. Add ${
-          unavailable.length === 1 ? "it" : "them"
-        } to the carrier's states on Carriers first.`,
-      },
-    };
-  }
-  const unlicensed = states.filter((code) => !licensedStates(values.agentId).includes(code));
-  if (unlicensed.length > 0) {
-    return {
-      error: {
-        field: "appointedStates",
-        message: `${agentName(values.agentId)} isn't licensed in ${unlicensed.join(", ")}. Add ${
-          unlicensed.length === 1 ? "it" : "them"
-        } to their licensed states on Agents first.`,
-      },
-    };
-  }
-
-  // Values as notes show them: agent and carrier by name, states in code order.
-  const shown = (from: AppointmentValues) => ({
-    agentId: agentName(from.agentId),
-    carrierId: carrierName(from.carrierId),
-    writingNumber: from.writingNumber,
-    appointedStates: normalizeStates(from.appointedStates),
-  });
-  const changes = diffValues(FIELDS, editing ? shown(editing) : EMPTY_VALUES, shown(values));
-  if (changes.length === 0) return { error: null, changed: false, contracts, notes };
-
-  const contractId = editing?.id ?? nextId(contracts);
-  const saved = { id: contractId, ...values, appointedStates: states };
-  return {
-    error: null,
-    changed: true,
-    contracts: editing
-      ? contracts.map((contract) => (contract.id === contractId ? saved : contract))
-      : [...contracts, saved],
-    notes: [
-      {
-        id: nextId(notes),
-        contractId,
-        kind: editing ? "edited" : "added",
-        createdAt: new Date().toISOString(),
-        changes,
-      },
-      ...notes,
-    ],
-  };
-}
 
 type AppointmentDialogProps = {
   /** Null keeps the dialog closed. */
@@ -207,8 +65,8 @@ type AppointmentDialogProps = {
   /** Every agent; inactive ones are marked, like inactive carriers. */
   agents: AgentOption[];
   carriers: CarrierOption[];
-  /** Saves the values; returns an error to show instead of closing. */
-  onSave: (values: AppointmentValues, editing?: CarrierContractRecord) => AppointmentError | null;
+  /** Saves the values; resolves with an error to show instead of closing. */
+  onSave: (values: AppointmentValues, editing?: CarrierContractRecord) => Promise<AppointmentError | null>;
   /** Runs for every close: Cancel, Escape, backdrop click, or a save. */
   onClose: () => void;
 };
@@ -244,6 +102,7 @@ type AppointmentFormProps = Omit<AppointmentDialogProps, "editor" | "onClose"> &
 function AppointmentForm({ id, editor, agents, carriers, onSave, close }: AppointmentFormProps) {
   const editing = editor.mode === "edit" ? editor.contract : undefined;
   const [error, setError] = useState<AppointmentError | null>(null);
+  const [saving, setSaving] = useState(false);
   // Both controlled, so the state grid follows whichever of the two changes.
   const [agentId, setAgentId] = useState(
     editing?.agentId ?? (editor.mode === "add" ? editor.agentId : undefined) ?? "",
@@ -251,11 +110,6 @@ function AppointmentForm({ id, editor, agents, carriers, onSave, close }: Appoin
   const [carrierId, setCarrierId] = useState(
     editing?.carrierId ?? (editor.mode === "add" ? editor.carrierId : undefined) ?? "",
   );
-
-  const agentName = (agentId: string) =>
-    agents.find((agent) => agent.id === agentId)?.name ?? `Agent ${agentId}`;
-  const carrierName = (otherId: string) =>
-    carriers.find((option) => option.id === otherId)?.name ?? `Carrier ${otherId}`;
 
   const agent = agents.find((option) => option.id === agentId);
   const carrier = carriers.find((option) => option.id === carrierId);
@@ -288,42 +142,46 @@ function AppointmentForm({ id, editor, agents, carriers, onSave, close }: Appoin
     .join(" ");
 
   const agentError = error?.field === "agentId" ? error.message : null;
+  const carrierError = error?.field === "carrierId" ? error.message : null;
   const writingNumberError = error?.field === "writingNumber" ? error.message : null;
   const statesError = error?.field === "appointedStates" ? error.message : null;
+  const formError = error?.field === "form" ? error.message : null;
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (saving) return;
     const data = new FormData(event.currentTarget);
     const text = (field: CarrierContractField) => String(data.get(field) ?? "").trim();
-    const saveError = onSave(
-      {
-        agentId: text("agentId"),
-        carrierId: text("carrierId"),
-        writingNumber: text("writingNumber"),
-        appointedStates: normalizeStates(
-          data.getAll("appointedStates").map((code) => String(code).trim()).filter(Boolean),
-        ),
-      },
-      editing,
-    );
-    if (saveError) {
-      setError(saveError);
-      return;
+    const values: AppointmentValues = {
+      agentId: text("agentId"),
+      carrierId: text("carrierId"),
+      writingNumber: text("writingNumber"),
+      appointedStates: normalizeStates(
+        data.getAll("appointedStates").map((code) => String(code).trim()).filter(Boolean),
+      ),
+    };
+    setSaving(true);
+    try {
+      const saveError = await onSave(values, editing);
+      if (saveError) {
+        setError(saveError);
+        return;
+      }
+      close();
+    } finally {
+      setSaving(false);
     }
-    close();
   };
 
   return (
     <form onSubmit={handleSubmit} className="p-6">
       <h2 id={`${id}-title`} className="text-base font-semibold text-fg">
-        {editing
-          ? `Edit ${agentName(editing.agentId)} at ${carrierName(editing.carrierId)}`
-          : "Add contract"}
+        {editing ? `Edit ${editing.agentName} at ${editing.carrierName}` : "Add contract"}
       </h2>
       <p className="mt-1 text-sm text-fg-muted">
         {editing
-          ? "Saving records a note of what changed. Nothing is saved anywhere yet; refreshing undoes it."
-          : "Not saved anywhere yet. The contract stays on the page until you refresh."}
+          ? "Saving records a note of what changed."
+          : "The contract is added for everyone, with a note of what was entered."}
       </p>
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -356,12 +214,20 @@ function AppointmentForm({ id, editor, agents, carriers, onSave, close }: Appoin
             ))}
           </select>
         </Field>
-        <Field label="Carrier" htmlFor={`${id}-carrier`}>
+        <Field
+          label="Carrier"
+          htmlFor={`${id}-carrier`}
+          hint={carrierError ?? undefined}
+          hintId={`${id}-carrier-error`}
+          error
+        >
           <select
             id={`${id}-carrier`}
             name="carrierId"
             required
             value={carrierId}
+            aria-invalid={carrierError ? true : undefined}
+            aria-describedby={carrierError ? `${id}-carrier-error` : undefined}
             onChange={(event) => {
               setCarrierId(event.target.value);
               setError(null);
@@ -440,12 +306,17 @@ function AppointmentForm({ id, editor, agents, carriers, onSave, close }: Appoin
         </StateCheckboxes>
       </div>
 
-      <div className="mt-6 flex justify-end gap-2">
-        <button type="button" onClick={close} className={GHOST_BUTTON_CLASS}>
+      {/* Errors about the attempt itself (no permission, API down), not one field. */}
+      <div role="alert" className="mt-4">
+        {formError ? <p className="text-sm text-danger">{formError}</p> : null}
+      </div>
+
+      <div className="mt-4 flex justify-end gap-2">
+        <button type="button" onClick={close} disabled={saving} className={GHOST_BUTTON_CLASS}>
           Cancel
         </button>
-        <button type="submit" className={PRIMARY_BUTTON_CLASS}>
-          {editing ? "Save changes" : "Add contract"}
+        <button type="submit" disabled={saving} className={`${PRIMARY_BUTTON_CLASS} disabled:opacity-60`}>
+          {saving ? "Saving…" : editing ? "Save changes" : "Add contract"}
         </button>
       </div>
     </form>

@@ -2,15 +2,21 @@
 
 import { useId } from "react";
 import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
-import { ProducerForm, type ProducerError, type ProducerLabels } from "@/components/producer-form";
+import {
+  ProducerForm,
+  type ProducerError,
+  type ProducerFormLayout,
+  type ProducerLabels,
+} from "@/components/producer-form";
 import type { AgentField, AgentRecord, AgentValues } from "@/lib/agents";
 import { agentContactExtra, incompleteAddressError, type AgentContact } from "./agent-contact-fields";
 
 /*
  * The one Add / Edit agent dialog: the shared ProducerForm
  * (components/producer-form.tsx) with agent wording — name, aliases, status,
- * NPN, email, phone, licensed states, and the licence number for each state
- * that is checked — plus the agent-only personal contact section
+ * NPN, email, phone, licensed states, and the licence number and Life /
+ * Health lines for each state that is checked (`lines`, which the agency's
+ * copy doesn't have) — plus the agent-only personal contact section
  * (./agent-contact-fields.tsx: personal email, personal phone, address),
  * which the agency's copy of the form doesn't have. The Agents page opens it
  * from a row's Edit and the Add agent page renders the same form; an
@@ -49,6 +55,7 @@ export const AGENT_FIELD_LABELS: Record<AgentField, string> = {
   address: "Address",
   licensedStates: "Licensed states",
   licenseNumbers: "Licence numbers",
+  licenseLines: "Lines of business",
 };
 
 const FORM_LABELS: ProducerLabels = {
@@ -81,13 +88,16 @@ type AgentFormProps = {
   onSave: (values: AgentValues) => Promise<AgentError | null>;
   /** Cancel, and what runs after a successful save. */
   close: () => void;
+  /** Stacked for a dialog (the default), or spread across a page. */
+  layout?: ProducerFormLayout;
 };
 
 /** The agent form itself: the producer form with agent wording and the personal contact section. */
-export function AgentForm({ id, editing, onSave, close }: AgentFormProps) {
+export function AgentForm({ id, editing, onSave, close, layout }: AgentFormProps) {
   return (
     <ProducerForm<AgentContact>
       id={id}
+      layout={layout}
       title={editing ? `Edit ${editing.name}` : "Add agent"}
       description={
         editing
@@ -98,6 +108,7 @@ export function AgentForm({ id, editing, onSave, close }: AgentFormProps) {
       labels={FORM_LABELS}
       initial={editing}
       extra={agentContactExtra(editing)}
+      lines
       onSave={(values) => checkAgentValues(values) ?? onSave(values)}
       close={close}
     />

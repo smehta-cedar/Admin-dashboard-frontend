@@ -10,7 +10,6 @@ import { NoteList } from "@/components/note-list";
 import { PageHeader } from "@/components/page-header";
 import { MAP_BUCKETS, UsMap } from "@/components/us-map";
 import { US_MAP_VIEWBOX } from "@/components/us-map-shapes";
-import { UnsavedBanner } from "@/components/unsaved-banner";
 import type { AgentRecord } from "@/lib/agents";
 import type { CarrierContractNote, CarrierContractRecord } from "@/lib/carrier-contracts";
 import type { CarrierRecord } from "@/lib/carriers";
@@ -46,8 +45,9 @@ import { useAppointments } from "./use-appointments";
  * Inactive agents follow the same rule as inactive carriers: their
  * appointments are listed and editable, marked "(inactive)", but never counted
  * — the map, the stats and the state panel's counts are active agents only.
- * Appointments and notes live in component state only: nothing reaches a
- * server, and a refresh brings back the JSON.
+ * Saves go to the API through the saveAppointment server action (the
+ * appointments hook); the API records the notes, which arrive as a prop and
+ * refresh with the action's revalidation.
  */
 
 type AgentOption = Pick<AgentRecord, "id" | "name" | "status" | "licensedStates" | "licenseNumbers">;
@@ -55,7 +55,8 @@ type CarrierOption = Pick<CarrierRecord, "id" | "name" | "status" | "availableSt
 
 type ContractsViewProps = {
   initialContracts: CarrierContractRecord[];
-  initialNotes: CarrierContractNote[];
+  /** Every contract's notes, newest first. */
+  notes: CarrierContractNote[];
   agents: AgentOption[];
   carriers: CarrierOption[];
   /** The agency's licence number per state code; shown under the selected state. */
@@ -158,18 +159,16 @@ const isActive = (row: AppointmentRow) => row.agent.status === "active";
 
 export function ContractsView({
   initialContracts,
-  initialNotes,
+  notes,
   agents,
   carriers,
   agencyLicenseNumbers,
 }: ContractsViewProps) {
-  const [unsavedCount, setUnsavedCount] = useState(0);
-  const { contracts, notes, editor, setEditor, saveContract } = useAppointments({
+  const { contracts, editor, setEditor, saveContract } = useAppointments({
     initialContracts,
-    initialNotes,
     agents,
     carriers,
-    onSaved: () => setUnsavedCount((count) => count + 1),
+    onSaved: () => {},
   });
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   // The state the panel shows. It outlives `selectedCode` so the panel keeps
@@ -445,8 +444,6 @@ export function ContractsView({
       />
 
  
-
-      <UnsavedBanner count={unsavedCount} />
 
       <section aria-labelledby={`${id}-map-title`}>
         <h2 id={`${id}-map-title`} className="sr-only">

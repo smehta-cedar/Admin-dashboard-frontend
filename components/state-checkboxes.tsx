@@ -24,6 +24,11 @@ type StateCheckboxesProps = {
   className?: string;
   /** Extra classes for the heading only, e.g. a heavier weight. */
   legendClassName?: string;
+  /**
+   * The grid's height cap and columns, replacing the default
+   * `max-h-64 sm:grid-cols-3` where there is room for more of the list.
+   */
+  gridClassName?: string;
   /** Hint, error or warning ids that describe the group. */
   describedBy?: string;
   /** Shown between the heading and the grid, e.g. a hint. */
@@ -51,6 +56,7 @@ export function StateCheckboxes({
   onChange,
   className,
   legendClassName = "font-medium",
+  gridClassName = "max-h-64 sm:grid-cols-3",
   describedBy,
   children,
   footer,
@@ -109,7 +115,9 @@ export function StateCheckboxes({
       </div>
       {children}
       {states.length > 0 ? (
-        <div className="mt-2 grid max-h-64 grid-cols-2 gap-x-4 gap-y-1.5 overflow-y-auto rounded-md border border-line p-3 sm:grid-cols-3">
+        <div
+          className={`mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 overflow-y-auto rounded-md border border-line p-3 ${gridClassName}`}
+        >
           {states.map((state) => {
             const disabled = disabledCodes.includes(state.code);
             return (

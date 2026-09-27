@@ -24,7 +24,7 @@ export default async function ContractsPage() {
   return (
     <ContractsView
       initialContracts={contracts}
-      initialNotes={notes}
+      notes={notes}
       agents={agents.map(({ id, name, status, licensedStates, licenseNumbers }) => ({
         id,
         name,
@@ -38,7 +38,7 @@ export default async function ContractsPage() {
         status,
         availableStates,
       }))}
-      agencyLicenseNumbers={agency.licenseNumbers}
+      agencyLicenseNumbers={agency?.licenseNumbers ?? {}}
     />
   );
 }

@@ -13,8 +13,8 @@ import { ThemeToggle } from "@/components/theme-toggle";
  *
  * The section link whose section is most in view is marked current, from an
  * IntersectionObserver on the section elements, so the bar doubles as a
- * progress marker. Below `lg` the sections and the two sign-in / shop links
- * fold into a panel under the bar; a link click, Escape, or widening the
+ * progress marker. Below `lg` the sections and the sign-in link fold
+ * into a panel under the bar; a link click, Escape, or widening the
  * viewport closes it.
  */
 
@@ -145,13 +145,6 @@ export function SiteNav({ sections, phone }: SiteNavProps) {
         <nav aria-label="Page sections" className="mx-auto flex max-w-(--breakpoint-2xl) flex-col gap-1 px-4 py-3 sm:px-6 lg:px-10">
           {sectionLinks(() => setOpen(false), "block")}
           <div className="mt-2 flex flex-col gap-1 border-t border-line pt-3">
-            <Link
-              href="/shop"
-              onClick={() => setOpen(false)}
-              className={`${SECTION_LINK_CLASS} ${SECTION_LINK_IDLE} block`}
-            >
-              Cedar Grove tee
-            </Link>
             <Link
               href="/login"
               onClick={() => setOpen(false)}

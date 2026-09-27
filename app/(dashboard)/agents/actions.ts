@@ -59,6 +59,8 @@ export async function saveAgent(values: AgentValues, editingId?: string): Promis
     licenses: values.licensedStates.map((state) => ({
       state,
       license_number: values.licenseNumbers[state] ?? "",
+      life: values.licenseLines[state]?.life ?? false,
+      health: values.licenseLines[state]?.health ?? false,
     })),
   };
   const result = editingId
