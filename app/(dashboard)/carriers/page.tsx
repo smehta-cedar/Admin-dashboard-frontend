@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getCarrierNotes, getCarriers } from "@/lib/carriers";
+import { getCarriers } from "@/lib/carriers";
 import { CarriersView } from "./carriers-view";
 
 export const metadata: Metadata = {
@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 };
 
 export default async function CarriersPage() {
-  const [carriers, notes] = await Promise.all([getCarriers(), getCarrierNotes()]);
+  const carriers = await getCarriers();
 
-  return <CarriersView initialCarriers={carriers} initialNotes={notes} />;
+  return <CarriersView initialCarriers={carriers} />;
 }

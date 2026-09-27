@@ -8,52 +8,55 @@ import { EditIcon } from "@/components/edit-icon";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge, statusRank } from "@/components/status-badge";
-import { UnsavedBanner } from "@/components/unsaved-banner";
-import type { CarrierNote, CarrierRecord } from "@/lib/carriers";
+import { carrierNumbers, type CarrierRecord } from "@/lib/carrier-numbers";
+import { byName } from "@/lib/text";
 import { US_STATE_NAMES, stateSummary } from "@/lib/us-states";
+import { saveCarrier } from "./actions";
 import {
   CarrierDialog,
-  saveCarrier,
   type CarrierEditor,
   type CarrierError,
   type CarrierValues,
 } from "./carrier-dialog";
 
 /*
- * Carriers table with dummy add and edit, through the shared CarrierDialog
- * (./carrier-dialog.tsx), which a carrier's profile opens too. Every add or
- * edit records a note listing what changed. The table sorts by header and
- * filters by search. A name links to the carrier's profile, which shows its
- * aliases and notes; rows don't expand. States are the carrier's
- * availableStates: one of the two ceilings on an agent appointment
- * (Contracts), the other being the agent's own licensedStates. Carriers and
- * notes live in component state only: nothing reaches a server, and a refresh
- * brings back the JSON.
+ * Carriers table with add and edit through the shared CarrierDialog
+ * (./carrier-dialog.tsx), which a carrier's profile opens too. Saves go to
+ * the API through the saveCarrier server action; the API records a note of
+ * what changed, read on the profile. The table sorts by header and filters
+ * by search. A name links to the carrier's profile, which shows its aliases
+ * and notes; rows don't expand. States are the carrier's availableStates:
+ * one of the two ceilings on an agent appointment (Contracts), the other
+ * being the agent's own licensedStates.
+ *
+ * The list is server-loaded and kept in state so a save shows at once; the
+ * action also revalidates the page, so the next render agrees.
  */
 
 type CarriersViewProps = {
   initialCarriers: CarrierRecord[];
-  initialNotes: CarrierNote[];
 };
 
-export function CarriersView({ initialCarriers, initialNotes }: CarriersViewProps) {
+export function CarriersView({ initialCarriers }: CarriersViewProps) {
   const [carriers, setCarriers] = useState(initialCarriers);
-  // Not shown here (the profile lists notes); new ones are still recorded.
-  const [notes, setNotes] = useState(initialNotes);
-  const [unsavedCount, setUnsavedCount] = useState(0);
   const [editor, setEditor] = useState<CarrierEditor | null>(null);
+
+  // The ID shown is the carrier's place in the name-sorted list, 1…n, not the
+  // API's UUID (that only appears in the profile URL). It moves when a name
+  // sorts elsewhere, so it is a row number, not a key.
+  const numbers = useMemo(() => carrierNumbers(carriers), [carriers]);
 
   // Sort and search run in DataTable. Search covers aliases, so a carrier can be
   // found by any name it appears under on statements.
   const columns = useMemo<DataTableColumn<CarrierRecord>[]>(
     () => [
       {
-        id: "id",
+        id: "number",
         header: "ID",
-        cell: (carrier) => carrier.id,
+        cell: (carrier) => numbers.get(carrier.id),
         className: "font-mono text-fg-muted",
-        sortValue: (carrier) => Number(carrier.id),
-        searchText: (carrier) => carrier.id,
+        sortValue: (carrier) => numbers.get(carrier.id) ?? 0,
+        searchText: (carrier) => String(numbers.get(carrier.id) ?? ""),
       },
       {
         id: "name",
@@ -114,19 +117,22 @@ export function CarriersView({ initialCarriers, initialNotes }: CarriersViewProp
         className: "text-right",
       },
     ],
-    [],
+    [numbers],
   );
 
-  /** Adds or edits a carrier. Returns the dialog's errors, if any. */
-  const handleSave = (values: CarrierValues): CarrierError[] => {
+  /** Adds or edits a carrier through the API. Resolves with the dialog's errors, if any. */
+  const handleSave = async (values: CarrierValues): Promise<CarrierError[]> => {
     const editing = editor?.mode === "edit" ? editor.carrier : undefined;
-    const result = saveCarrier({ carriers, notes, values, editing });
-    if (result.carrier === null) return result.errors;
-    if (!result.changed) return [];
+    const result = await saveCarrier(values, editing?.id);
+    if (!result.ok) return result.errors;
 
-    setCarriers(result.carriers);
-    setNotes(result.notes);
-    setUnsavedCount((count) => count + 1);
+    const saved = result.carrier;
+    setCarriers((current) =>
+      (editing
+        ? current.map((carrier) => (carrier.id === saved.id ? saved : carrier))
+        : [...current, saved]
+      ).sort(byName),
+    );
     return [];
   };
 
@@ -139,8 +145,6 @@ export function CarriersView({ initialCarriers, initialNotes }: CarriersViewProp
   return (
     <>
       <PageHeader title="Carriers" actions={addButton} />
-
-      <UnsavedBanner count={unsavedCount} />
 
       {carriers.length === 0 ? (
         <EmptyState

@@ -1,15 +1,16 @@
 import "server-only";
 
 /*
- * Data boundary for carriers. Today it reads carriers and notes from
- * data/carriers.json and data/carrier-notes.json; later it queries Supabase.
- * The JSON is trusted as-is, not validated, except that a carrier missing
- * availableStates loads with none (and a console warning).
+ * Data boundary for carriers: reads the Django API (backend/apps/carriers,
+ * `/api/v1/carriers/`) as the signed-in user. Adds and edits go through the
+ * server actions in app/(dashboard)/carriers/actions.ts, which post to the
+ * same API; the API records a change note on every add and every edit that
+ * changed something.
  *
  * A carrier is listed once however many lines of business it writes (e.g.
  * HealthSpring is both MAPD and Supp/Ancillary). Writing numbers are not
  * stored on carriers; they live on carrier contracts in
- * lib/carrier-contracts.ts. Portal username and password live with Name
+ * lib/carrier-contracts.ts. Portal username and password live with
  * Passwords in lib/passwords.ts.
  *
  * availableStates is the carrier's footprint for the agency: one of the two
@@ -21,18 +22,21 @@ import "server-only";
  * The commission matrix still uses the slim `Carrier` ({ code, name }) and its
  * own getCarriers() from commissions.ts. Don't widen that; use CarrierRecord
  * here for carrier detail.
+ *
+ * data/carriers.json is no longer read here; it is the seed file for
+ * `python manage.py seed_carriers`.
  */
 
-import carriersJson from "@/data/carriers.json";
-import notesJson from "@/data/carrier-notes.json";
-import type { LineOfBusiness } from "@/lib/lines-of-business";
+import { apiFetch, apiGet, apiGetAll, ApiError } from "@/lib/api-server";
+import type { FieldChange } from "@/lib/change-notes";
+import { LINES_OF_BUSINESS, type LineOfBusiness } from "@/lib/lines-of-business";
 
 export type { LineOfBusiness } from "@/lib/lines-of-business";
 
 export type CarrierStatus = "active" | "inactive";
 
 export type CarrierRecord = {
-  /** Internal ID, numbered 1, 2, 3, … for now. Not a carrier code. */
+  /** The API's UUID. Not a carrier code. */
   id: string;
   /** Name as the team refers to the carrier. Unique across carrier names and aliases. */
   name: string;
@@ -45,22 +49,23 @@ export type CarrierRecord = {
    * agency, unique and in code order. Empty when none yet (not "all states").
    */
   availableStates: string[];
-  /** Defaults to "active" when adding. */
+  /** The API's is_active. Defaults to "active" when adding. */
   status: CarrierStatus;
 };
 
 /** Carrier fields a note can record. The ID never changes. */
 export type CarrierField = Exclude<keyof CarrierRecord, "id">;
 
-export type CarrierChange = {
-  field: CarrierField;
-  /** Value before, as shown in the UI (lists joined with ", "). Empty for a new carrier. */
-  from: string;
-  to: string;
-};
+/** What the add / edit form submits: every field but the ID. */
+export type CarrierValues = Omit<CarrierRecord, "id">;
+
+/** A save error, shown under the field it names, or under the form for `form`. */
+export type CarrierError = { field: CarrierField | "form"; message: string };
+
+export type CarrierChange = FieldChange<CarrierField>;
 
 /**
- * Change-log entry, written automatically whenever a carrier is added or edited.
+ * Change-log entry the API writes whenever a carrier is added or edited.
  * Append-only: notes are never edited or deleted.
  */
 export type CarrierNote = {
@@ -69,41 +74,93 @@ export type CarrierNote = {
   kind: "added" | "edited";
   /** ISO 8601 timestamp in UTC, e.g. "2026-09-02T14:05:00.000Z". */
   createdAt: string;
+  /** Full name of who made the change, or null when unknown. */
+  createdBy: string | null;
   /** Only the fields that changed, in form order. */
   changes: CarrierChange[];
 };
 
-/** A carrier as the JSON may hold it: older rows have no availableStates. */
-type StoredCarrier = Omit<CarrierRecord, "availableStates"> & { availableStates?: string[] };
+/** A carrier as the API serialises it (CarrierSerializer). */
+export type ApiCarrier = {
+  id: string;
+  name: string;
+  aliases: string[];
+  lines_of_business: string[];
+  available_states: string[];
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
 
-/**
- * A stored carrier with availableStates unique and in code order. Missing
- * availableStates becomes [] (with a console warning naming the carrier).
- */
-function toRecord(carrier: StoredCarrier): CarrierRecord {
-  if (!Array.isArray(carrier.availableStates)) {
-    console.warn(
-      `Carrier ${carrier.id} has no availableStates; treating it as available in no states.`,
-    );
+/** A note as the API serialises it (CarrierNoteSerializer). */
+type ApiCarrierNote = {
+  id: string;
+  carrier_id: string;
+  kind: "added" | "edited";
+  changes: { field: string; from: string; to: string }[];
+  created_by: string | null;
+  created_at: string;
+};
+
+/** API field name -> CarrierRecord field, for a note's changes. */
+const NOTE_FIELDS: Record<string, CarrierField> = {
+  name: "name",
+  aliases: "aliases",
+  lines_of_business: "linesOfBusiness",
+  available_states: "availableStates",
+  status: "status",
+};
+
+const KNOWN_LINES: readonly string[] = LINES_OF_BUSINESS;
+
+/** An API carrier as the app holds it. A line the app doesn't know is dropped with a console warning. */
+export function toCarrierRecord(carrier: ApiCarrier): CarrierRecord {
+  const unknown = carrier.lines_of_business.filter((line) => !KNOWN_LINES.includes(line));
+  if (unknown.length > 0) {
+    console.warn(`Carrier ${carrier.name} has unknown lines of business: ${unknown.join(", ")}.`);
   }
-  const states = Array.isArray(carrier.availableStates) ? carrier.availableStates : [];
-  return { ...carrier, availableStates: [...new Set(states)].sort() };
+  return {
+    id: carrier.id,
+    name: carrier.name,
+    aliases: carrier.aliases,
+    linesOfBusiness: LINES_OF_BUSINESS.filter((line) => carrier.lines_of_business.includes(line)),
+    availableStates: [...new Set(carrier.available_states)].sort(),
+    status: carrier.is_active ? "active" : "inactive",
+  };
 }
 
-/** Every carrier, active and inactive, in ID order (1, 2, 3, …). */
+function toCarrierNote(note: ApiCarrierNote): CarrierNote {
+  return {
+    id: note.id,
+    carrierId: note.carrier_id,
+    kind: note.kind,
+    createdAt: note.created_at,
+    createdBy: note.created_by,
+    changes: note.changes.flatMap((change) => {
+      const field = NOTE_FIELDS[change.field];
+      return field ? [{ field, from: change.from, to: change.to }] : [];
+    }),
+  };
+}
+
+/** Every carrier, active and inactive, sorted by name. */
 export async function getCarriers(): Promise<CarrierRecord[]> {
-  return (carriersJson as StoredCarrier[]).map(toRecord).sort((a, b) => Number(a.id) - Number(b.id));
+  const carriers = await apiGetAll<ApiCarrier>("/carriers/");
+  return carriers.map(toCarrierRecord);
 }
 
-/** One carrier by internal ID, or null when there is none. */
+/** One carrier by ID, or null when there is none (or the ID isn't one). */
 export async function getCarrier(id: string): Promise<CarrierRecord | null> {
-  const carrier = (carriersJson as StoredCarrier[]).find((stored) => stored.id === id);
-  return carrier ? toRecord(carrier) : null;
+  const result = await apiFetch<ApiCarrier>(`/carriers/${encodeURIComponent(id)}/`);
+  if (!result.ok) {
+    if (result.status === 404) return null;
+    throw new ApiError(`/carriers/${id}/`, result);
+  }
+  return toCarrierRecord(result.data);
 }
 
-/** Every carrier note, newest first. */
-export async function getCarrierNotes(): Promise<CarrierNote[]> {
-  return (notesJson as CarrierNote[])
-    .slice()
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+/** One carrier's change notes, newest first. */
+export async function getCarrierNotes(carrierId: string): Promise<CarrierNote[]> {
+  const notes = await apiGet<ApiCarrierNote[]>(`/carriers/${encodeURIComponent(carrierId)}/notes/`);
+  return notes.map(toCarrierNote);
 }

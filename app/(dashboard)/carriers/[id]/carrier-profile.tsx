@@ -18,14 +18,13 @@ import {
   type ProfilePassword,
 } from "@/components/profile-shell";
 import { StatusBadge } from "@/components/status-badge";
-import { UnsavedBanner } from "@/components/unsaved-banner";
 import type { AgentStatus } from "@/lib/agents";
 import type { CarrierNote, CarrierRecord } from "@/lib/carriers";
 import { writableStates } from "@/lib/us-states";
+import { saveCarrier } from "../actions";
 import {
   CARRIER_FIELD_LABELS,
   CarrierDialog,
-  saveCarrier,
   type CarrierEditor,
   type CarrierError,
   type CarrierValues,
@@ -37,7 +36,8 @@ import {
  * agents, passwords, and change notes. An agent row shows the states they
  * can actually write here: their appointment narrowed to their own licences
  * (Agents) and this carrier's footprint. Edit opens the same CarrierDialog as
- * the Carriers list. Agent names link to their profiles.
+ * the Carriers list and saves through the same server action. Agent names
+ * link to their profiles.
  *
  * Same layout as the agent profile, built from the shared pieces in
  * components/profile-shell.tsx: the name row (initials, name, status, Edit)
@@ -45,8 +45,9 @@ import {
  * states, then panels: Agents beside Notes, and Passwords full width
  * under them.
  *
- * Dummy like the rest: the carrier and notes live in component state, and a
- * refresh brings back the JSON. page.tsx keys this component by carrier ID, so
+ * The carrier is kept in state so an edit shows at once; the notes come
+ * from the server (the API writes them), and the action's revalidation
+ * brings the new one in. page.tsx keys this component by carrier ID, so
  * switching carriers starts that state again.
  */
 
@@ -62,33 +63,21 @@ type AgentRow = {
 
 type CarrierProfileProps = {
   initialCarrier: CarrierRecord;
-  /** Every carrier: the switcher's options and the name uniqueness check. */
-  allCarriers: CarrierRecord[];
+  /** The carrier's place in the name-sorted list, 1…n, as the Carriers page shows it. */
+  number: number;
   /** Contracted agents, sorted by name. */
   agents: AgentRow[];
   /** This carrier's passwords, the agent as the party, sorted by agent name. */
   passwords: ProfilePassword[];
-  /** Every carrier's notes, newest first: new note IDs need them all. Only this carrier's are shown. */
-  initialNotes: CarrierNote[];
+  /** This carrier's notes, newest first. */
+  notes: CarrierNote[];
 };
 
 const AGENT_COLUMNS = ["Agent", "Writing number", "Writable states", "Status"];
 
-export function CarrierProfile({
-  initialCarrier,
-  allCarriers,
-  agents,
-  passwords,
-  initialNotes,
-}: CarrierProfileProps) {
+export function CarrierProfile({ initialCarrier, number, agents, passwords, notes }: CarrierProfileProps) {
   const [carrier, setCarrier] = useState(initialCarrier);
-  const [allNotes, setAllNotes] = useState(initialNotes);
-  const [unsavedCount, setUnsavedCount] = useState(0);
   const [editor, setEditor] = useState<CarrierEditor | null>(null);
-
-  // An edit here shows at once in the switcher and the uniqueness check too.
-  const carriers = allCarriers.map((other) => (other.id === carrier.id ? carrier : other));
-  const notes = allNotes.filter((note) => note.carrierId === carrier.id);
 
   // Writable is what the appointment actually buys them: its states within
   // this agent's licences and this carrier's live footprint.
@@ -97,15 +86,11 @@ export function CarrierProfile({
     writable: writableStates(agent.appointedStates, agent.licensedStates, carrier.availableStates),
   }));
 
-  /** Edits this carrier. Returns the dialog's errors, if any. */
-  const saveCarrierEdit = (values: CarrierValues): CarrierError[] => {
-    const result = saveCarrier({ carriers, notes: allNotes, values, editing: carrier });
-    if (result.carrier === null) return result.errors;
-    if (!result.changed) return [];
-
+  /** Edits this carrier through the API. Resolves with the dialog's errors, if any. */
+  const saveCarrierEdit = async (values: CarrierValues): Promise<CarrierError[]> => {
+    const result = await saveCarrier(values, carrier.id);
+    if (!result.ok) return result.errors;
     setCarrier(result.carrier);
-    setAllNotes(result.notes);
-    setUnsavedCount((count) => count + 1);
     return [];
   };
 
@@ -121,7 +106,7 @@ export function CarrierProfile({
         details={
           <>
             <Detail label="Carrier ID">
-              <span className="font-mono">#{carrier.id}</span>
+              <span className="font-mono">#{number}</span>
             </Detail>
             <Detail label="Aliases">{carrier.aliases.join(", ")}</Detail>
             <Detail label="Lines of business">
@@ -156,8 +141,6 @@ export function CarrierProfile({
           </ul>
         )}
       </ProfileHeader>
-
-      <UnsavedBanner count={unsavedCount} className="mt-4" />
 
       <div className="mt-5 grid items-start gap-5 xl:grid-cols-2">
         <Panel title="Agents" count={agentRows.length}>

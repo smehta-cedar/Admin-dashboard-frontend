@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getAgents } from "@/lib/agents";
 import { getCarrierContracts } from "@/lib/carrier-contracts";
+import { carrierNumbers } from "@/lib/carrier-numbers";
 import { getCarrier, getCarrierNotes, getCarriers } from "@/lib/carriers";
 import { getPasswords } from "@/lib/passwords";
 import { byName } from "@/lib/text";
@@ -20,11 +21,13 @@ export default async function CarrierProfilePage(props: PageProps<"/carriers/[id
 
   const [carriers, notes, carrierContracts, passwords, agents] = await Promise.all([
     getCarriers(),
-    getCarrierNotes(),
+    getCarrierNotes(id),
     getCarrierContracts(),
     getPasswords(),
     getAgents(),
   ]);
+  // The number the Carriers list shows: its place among every carrier, by name.
+  const number = carrierNumbers(carriers).get(id) ?? 0;
 
   const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
   const agentName = (agentId: string) => agentsById.get(agentId)?.name ?? `Agent ${agentId}`;
@@ -35,8 +38,7 @@ export default async function CarrierProfilePage(props: PageProps<"/carriers/[id
       // switch to another carrier has to start that state again.
       key={carrier.id}
       initialCarrier={carrier}
-      // Every carrier, so Edit can check name uniqueness against the rest.
-      allCarriers={carriers}
+      number={number}
       // Appointment + licence inputs stay raw; the profile derives writable
       // against the live availableStates after an edit.
       agents={carrierContracts
@@ -65,7 +67,7 @@ export default async function CarrierProfilePage(props: PageProps<"/carriers/[id
           partyHref: `/agents/${record.agentId}`,
         }))
         .sort((a, b) => a.partyName.localeCompare(b.partyName))}
-      initialNotes={notes}
+      notes={notes}
     />
   );
 }

@@ -5,8 +5,7 @@ import { GHOST_BUTTON_CLASS, INPUT_CLASS, PRIMARY_BUTTON_CLASS } from "@/compone
 import { Field } from "@/components/field";
 import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
 import { StateCheckboxes } from "@/components/state-checkboxes";
-import type { CarrierField, CarrierNote, CarrierRecord } from "@/lib/carriers";
-import { diffValues, nextId } from "@/lib/change-notes";
+import type { CarrierError, CarrierField, CarrierRecord, CarrierValues } from "@/lib/carriers";
 import { LINES_OF_BUSINESS } from "@/lib/lines-of-business";
 
 /*
@@ -15,20 +14,19 @@ import { LINES_OF_BUSINESS } from "@/lib/lines-of-business";
  * appointment with it). The Carriers page opens it from Add carrier and a row's
  * Edit; the carrier profile opens it from its Edit.
  *
- * Each view owns its carriers and notes state and passes `onSave`, which
- * usually calls `saveCarrier` below and sets that state. Adds and edits are
- * dummy: nothing reaches a server, and a refresh brings back the JSON.
+ * Each view passes `onSave`, which calls the saveCarrier server action
+ * (./actions.ts) and updates its own state from the saved record. The API
+ * checks the name against every other carrier's name and aliases and records
+ * the change note; the form only checks what it can see at once (a line of
+ * business is chosen). While the save is in flight the buttons are disabled.
  */
 
 /** Which dialog is open. Edit holds the carrier as it was when the dialog opened. */
 export type CarrierEditor = { mode: "add" } | { mode: "edit"; carrier: CarrierRecord };
 
-export type CarrierValues = Omit<CarrierRecord, "id">;
+export type { CarrierError, CarrierValues } from "@/lib/carriers";
 
-/** A save error, shown under the field it names. Name and lines can both fail at once. */
-export type CarrierError = { field: "name" | "linesOfBusiness"; message: string };
-
-/** Also the order changes are compared and listed in. */
+/** Also the order changes are listed in on a note. */
 export const CARRIER_FIELD_LABELS: Record<CarrierField, string> = {
   name: "Name",
   aliases: "Aliases",
@@ -37,89 +35,29 @@ export const CARRIER_FIELD_LABELS: Record<CarrierField, string> = {
   availableStates: "Available states",
 };
 
-const FIELDS = Object.keys(CARRIER_FIELD_LABELS) as CarrierField[];
-
-const EMPTY_VALUES = { name: "", aliases: [], linesOfBusiness: [], availableStates: [] };
-
-type SaveInput = {
-  carriers: CarrierRecord[];
-  notes: CarrierNote[];
-  values: CarrierValues;
-  /** The carrier being edited; leave out when adding. */
-  editing?: CarrierRecord;
-};
-
-type SaveResult =
-  | { errors: CarrierError[]; carrier: null }
-  | {
-      errors: [];
-      /** The carrier as saved; on an edit that changed nothing, the record as it was. */
-      carrier: CarrierRecord;
-      /** False when an edit changed nothing: no new carriers or note. */
-      changed: boolean;
-      carriers: CarrierRecord[];
-      notes: CarrierNote[];
-    };
-
-/**
- * Adds or edits a carrier, pure. Returns the next carriers and notes (a note
- * only when something changed), or the errors to show: a name another carrier
- * already uses as its name or an alias, and no line of business checked.
- */
-export function saveCarrier({ carriers, notes, values, editing }: SaveInput): SaveResult {
-  // A name can't repeat another carrier's name or alias (ignoring case).
-  const nameKey = values.name.toLowerCase();
-  const nameOwner = carriers.find(
-    (carrier) =>
-      carrier.id !== editing?.id &&
-      [carrier.name, ...carrier.aliases].some((name) => name.toLowerCase() === nameKey),
-  );
-  const errors: CarrierError[] = [];
-  if (nameOwner) {
-    errors.push({
-      field: "name",
-      message:
-        nameOwner.name.toLowerCase() === nameKey
-          ? `${nameOwner.name} is already carrier ${nameOwner.id}.`
-          : `${values.name} is already an alias of ${nameOwner.name}.`,
-    });
-  }
-  if (values.linesOfBusiness.length === 0) {
-    errors.push({ field: "linesOfBusiness", message: "Choose at least one line of business." });
-  }
-  if (errors.length > 0) return { errors, carrier: null };
-
-  const carrierId = editing?.id ?? nextId(carriers);
-  const saved = { id: carrierId, ...values };
-  const changes = diffValues(FIELDS, editing ?? EMPTY_VALUES, values);
-  // Saving an edit with nothing changed just closes, without a note.
-  if (changes.length === 0) return { errors: [], carrier: saved, changed: false, carriers, notes };
-
+/** The form's values, read off the submitted FormData. */
+export function readCarrierForm(data: FormData): CarrierValues {
+  const text = (field: CarrierField) => String(data.get(field) ?? "").trim();
+  const checkedLines = data.getAll("linesOfBusiness");
   return {
-    errors: [],
-    carrier: saved,
-    changed: true,
-    carriers: editing
-      ? carriers.map((carrier) => (carrier.id === carrierId ? saved : carrier))
-      : [...carriers, saved],
-    notes: [
-      {
-        id: nextId(notes),
-        carrierId,
-        kind: editing ? "edited" : "added",
-        createdAt: new Date().toISOString(),
-        changes,
-      },
-      ...notes,
-    ],
+    name: text("name"),
+    aliases: text("aliases")
+      .split(",")
+      .map((alias) => alias.trim())
+      .filter(Boolean),
+    linesOfBusiness: LINES_OF_BUSINESS.filter((line) => checkedLines.includes(line)),
+    status: text("status") === "inactive" ? "inactive" : "active",
+    availableStates: [
+      ...new Set(data.getAll("availableStates").map((code) => String(code).trim()).filter(Boolean)),
+    ].sort(),
   };
 }
 
 type CarrierDialogProps = {
   /** Null keeps the dialog closed. */
   editor: CarrierEditor | null;
-  /** Saves the values; returns the errors to show instead of closing. */
-  onSave: (values: CarrierValues) => CarrierError[];
+  /** Saves the values; resolves with the errors to show instead of closing. */
+  onSave: (values: CarrierValues) => Promise<CarrierError[]>;
   /** Runs for every close: Cancel, Escape, backdrop click, or a save. */
   onClose: () => void;
 };
@@ -153,6 +91,7 @@ type CarrierFormProps = Omit<CarrierDialogProps, "editor" | "onClose"> & {
 function CarrierForm({ id, editor, onSave, close }: CarrierFormProps) {
   const editing = editor.mode === "edit" ? editor.carrier : undefined;
   const [errors, setErrors] = useState<CarrierError[]>([]);
+  const [saving, setSaving] = useState(false);
 
   const messageFor = (field: CarrierError["field"]) =>
     errors.find((error) => error.field === field)?.message ?? null;
@@ -160,30 +99,30 @@ function CarrierForm({ id, editor, onSave, close }: CarrierFormProps) {
     setErrors((current) => current.filter((error) => error.field !== field));
 
   const nameError = messageFor("name");
+  const aliasesError = messageFor("aliases");
   const linesError = messageFor("linesOfBusiness");
+  const statesError = messageFor("availableStates");
+  const formError = messageFor("form") ?? messageFor("status");
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const text = (field: CarrierField) => String(data.get(field) ?? "").trim();
-    const checkedLines = data.getAll("linesOfBusiness");
-    const saveErrors = onSave({
-      name: text("name"),
-      aliases: text("aliases")
-        .split(",")
-        .map((alias) => alias.trim())
-        .filter(Boolean),
-      linesOfBusiness: LINES_OF_BUSINESS.filter((line) => checkedLines.includes(line)),
-      status: text("status") === "inactive" ? "inactive" : "active",
-      availableStates: [
-        ...new Set(data.getAll("availableStates").map((code) => String(code).trim()).filter(Boolean)),
-      ].sort(),
-    });
-    if (saveErrors.length > 0) {
-      setErrors(saveErrors);
+    if (saving) return;
+    const values = readCarrierForm(new FormData(event.currentTarget));
+    if (values.linesOfBusiness.length === 0) {
+      setErrors([{ field: "linesOfBusiness", message: "Choose at least one line of business." }]);
       return;
     }
-    close();
+    setSaving(true);
+    try {
+      const saveErrors = await onSave(values);
+      if (saveErrors.length > 0) {
+        setErrors(saveErrors);
+        return;
+      }
+      close();
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -193,8 +132,8 @@ function CarrierForm({ id, editor, onSave, close }: CarrierFormProps) {
       </h2>
       <p className="mt-1 text-sm text-fg-muted">
         {editing
-          ? "Saving records a note of what changed. Nothing is saved anywhere yet; refreshing undoes it."
-          : "Not saved anywhere yet. The carrier stays in the list until you refresh."}
+          ? "Saving records a note of what changed on the carrier's profile."
+          : "The carrier is added for everyone, with a note of what was entered."}
       </p>
 
       {/* Name and aliases full width; status (left) and lines of business (right) share a row; states below. */}
@@ -225,8 +164,9 @@ function CarrierForm({ id, editor, onSave, close }: CarrierFormProps) {
           label="Aliases"
           optional
           htmlFor={`${id}-aliases`}
-          hint="Separate with commas."
+          hint={aliasesError ?? "Separate with commas."}
           hintId={`${id}-aliases-hint`}
+          error={aliasesError !== null}
           className="sm:col-span-2 mt-2"
         >
           <input
@@ -234,8 +174,10 @@ function CarrierForm({ id, editor, onSave, close }: CarrierFormProps) {
             name="aliases"
             type="text"
             autoComplete="off"
+            aria-invalid={aliasesError ? true : undefined}
             aria-describedby={`${id}-aliases-hint`}
             defaultValue={editing?.aliases.join(", ")}
+            onChange={() => clear("aliases")}
             className={INPUT_CLASS}
           />
         </Field>
@@ -280,17 +222,31 @@ function CarrierForm({ id, editor, onSave, close }: CarrierFormProps) {
           legend="Available states"
           name="availableStates"
           defaultChecked={editing?.availableStates}
+          onChange={() => clear("availableStates")}
           className="sm:col-span-2 mt-4"
           legendClassName="font-semibold"
+          describedBy={statesError ? `${id}-states-error` : undefined}
+          footer={
+            statesError ? (
+              <p id={`${id}-states-error`} className="mt-1 text-xs text-danger">
+                {statesError}
+              </p>
+            ) : null
+          }
         />
       </div>
 
-      <div className="mt-6 flex justify-end gap-2">
-        <button type="button" onClick={close} className={GHOST_BUTTON_CLASS}>
+      {/* Errors about the attempt itself (no permission, API down), not one field. */}
+      <div role="alert" className="mt-4">
+        {formError ? <p className="text-sm text-danger">{formError}</p> : null}
+      </div>
+
+      <div className="mt-4 flex justify-end gap-2">
+        <button type="button" onClick={close} disabled={saving} className={GHOST_BUTTON_CLASS}>
           Cancel
         </button>
-        <button type="submit" className={PRIMARY_BUTTON_CLASS}>
-          {editing ? "Save changes" : "Add carrier"}
+        <button type="submit" disabled={saving} className={`${PRIMARY_BUTTON_CLASS} disabled:opacity-60`}>
+          {saving ? "Saving…" : editing ? "Save changes" : "Add carrier"}
         </button>
       </div>
     </form>

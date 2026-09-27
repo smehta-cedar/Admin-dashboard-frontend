@@ -358,11 +358,57 @@ audit; see the table in §2. Still copied per view (small, and may diverge):
 the name toggle button with chevron and the aliases section.
 
 Carriers ([app/(dashboard)/carriers/carriers-view.tsx](../app/(dashboard)/carriers/carriers-view.tsx))
-uses the shared `CarrierDialog` + `saveCarrier` (same component the carrier
-profile opens). Two variations on the Agents form: a required checkbox group
-(`<fieldset>` + `<legend>`, "at least one" checked in `saveCarrier`, error on
-each checkbox via `aria-invalid`/`aria-describedby`), and a name uniqueness
-check against other carriers' names *and* aliases, ignoring case.
+uses the shared `CarrierDialog` (same component the carrier profile opens).
+Two variations on the Agents form: a required checkbox group (`<fieldset>` +
+`<legend>`, "at least one" checked in the form, error on each checkbox via
+`aria-invalid`/`aria-describedby`), and a name uniqueness check against other
+carriers' names *and* aliases, ignoring case — done by the API (see
+§Carriers on the API).
+
+### Carriers on the API
+
+Carriers is the first entity that reads and writes the Django API
+(`backend/apps/carriers`, `/api/v1/carriers/`) instead of JSON. The pattern
+the next entities (Agents, Passwords) follow:
+
+- [lib/api-server.ts](../lib/api-server.ts) (server-only): `apiFetch(path,
+  { method, body, params })` is `apiRequest` with the access-token cookie
+  attached; `apiGet` and `apiGetAll` (follows `?page=` to the end, 100 a
+  page) throw `ApiError` on any failure, so a page that can't read the API
+  errors rather than showing an empty table.
+- [lib/carriers.ts](../lib/carriers.ts) keeps the same `CarrierRecord` the
+  views always had and maps the API's shape to it (`lines_of_business` →
+  `linesOfBusiness`, `available_states` → `availableStates`, `is_active` →
+  `status`). IDs are the API's UUIDs, used in profile URLs only; the ID
+  column and the profile's "Carrier ID" show the carrier's place in the
+  name-sorted list, 1…n (`carrierNumbers` in `lib/carrier-numbers.ts`, a row
+  number, not a key). No `nextId`. `getCarriers()` (by name), `getCarrier(id)` (null on 404) and
+  `getCarrierNotes(carrierId)` (one carrier's, newest first). `CarrierValues`
+  and `CarrierError` live here too, so the dialog and the action share them.
+- [app/(dashboard)/carriers/actions.ts](../app/(dashboard)/carriers/actions.ts)
+  (`"use server"`): `saveCarrier(values, editingId?)` posts to
+  `carriers/create/` or patches `carriers/{id}/` and answers
+  `{ ok: true, carrier }` or `{ ok: false, errors }` — a 400's field errors
+  mapped to form fields (`lines_of_business` → `linesOfBusiness`, …), anything
+  else (403, API down) as a `"form"` error shown under the form; a 401 sends
+  the user to sign in. On success it calls `revalidatePath("/", "layout")`,
+  since every dashboard page reads carriers (navbar search, request dialog).
+- The dialog's `onSave` is async and resolves with the errors; the form
+  disables its buttons and reads "Saving…" while it waits. The list and the
+  profile update their state from the returned record, so the change shows
+  at once, and the revalidation makes the next render agree.
+- **Notes are written by the API**, not the view: an "added" note on create
+  (every filled field) and an "edited" note on an update that changed
+  something, with `createdBy` (the user's full name). The list page no longer
+  loads notes; the profile reads its carrier's. There is no unsaved banner on
+  Carriers any more: a save is saved.
+- `data/carriers.json` stays as the seed file for `python manage.py
+  seed_carriers`; nothing in the app imports it. `data/carrier-notes.json` is
+  unused.
+- Not yet on the API, so still keyed by the old numeric carrier IDs:
+  contracts, passwords and requests. Until they move, a carrier profile's
+  Agents and Passwords panels are empty and the request dialog's carrier
+  options come from the API list.
 
 ### Contracts
 
