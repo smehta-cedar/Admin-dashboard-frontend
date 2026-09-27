@@ -44,6 +44,22 @@ export function AgentsView() {
   const columns = useMemo<DataTableColumn<AgentRecord>[]>(
     () => [
       {
+        id: "actions",
+        header: "Action",
+        cell: (agent) => (
+          <button
+            type="button"
+            onClick={() => setEditor({ mode: "edit", agent })}
+            className={`inline-flex items-center gap-1.5 ${ROW_BUTTON_CLASS}`}
+          >
+            <EditIcon className="size-3.5 shrink-0" />
+            <span className="sr-only"> {agent.name}</span>
+          </button>
+        ),
+        
+        
+      },
+      {
         id: "number",
         header: "ID",
         cell: (agent) => numbers.get(agent.id),
@@ -101,22 +117,6 @@ export function AgentsView() {
           agent.personalPhone ?? "",
           phoneDigits(agent.personalPhone ?? ""),
         ],
-      },
-      {
-        id: "actions",
-        header: "Actions",
-        srOnlyHeader: true,
-        cell: (agent) => (
-          <button
-            type="button"
-            onClick={() => setEditor({ mode: "edit", agent })}
-            className={`inline-flex items-center gap-1.5 ${ROW_BUTTON_CLASS}`}
-          >
-            <EditIcon className="size-3.5 shrink-0" />
-            <span className="sr-only"> {agent.name}</span>
-          </button>
-        ),
-        className: "text-right",
       },
     ],
     [numbers],

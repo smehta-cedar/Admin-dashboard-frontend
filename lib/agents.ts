@@ -13,9 +13,10 @@ import "server-only";
  * An agent can write with a carrier in a state only when the state is in both,
  * and an appointment lists it. Empty means licensed nowhere, never "everywhere".
  *
- * licenseNumbers holds the licence number the state issued, per licensed state.
+ * licenseNumbers holds the licence number the state issued, per licensed state;
+ * licenseLines and licenseDates the lines and the term of each.
  *
- * Neither is stored on the agent. Both are derived here from the agent's
+ * None is stored on the agent. All are derived here from the agent's
  * licence rows, which the API returns with each agent (one row per state with
  * its number, status and dates): every row lists its state, and a row whose
  * number is still blank (a pending licence) shows "No number yet". The agent
@@ -45,9 +46,11 @@ import type { FieldChange } from "@/lib/change-notes";
 import { formatPhone } from "@/lib/phone";
 import {
   STATE_LICENSE_STATUSES,
+  licenseDatesOf,
   licenseLinesOf,
   licenseNumbersOf,
   licensedStatesOf,
+  type LicenceDates,
   type LicenceLines,
   type StateLicenseStatus,
 } from "@/lib/state-licenses";
@@ -79,6 +82,11 @@ export type AgentRecord = {
    * state in licensedStates. Derived from the rows too.
    */
   licenseLines: Record<string, LicenceLines>;
+  /**
+   * When each licence starts and ends, by state code, for every state in
+   * licensedStates. Derived from the rows too; the form enters them.
+   */
+  licenseDates: Record<string, LicenceDates>;
   /** National Producer Number. Unique across agents. */
   npn: string;
   /** Work email. */
@@ -169,6 +177,7 @@ const NOTE_FIELDS: Record<string, AgentField> = {
   licensed_states: "licensedStates",
   license_numbers: "licenseNumbers",
   license_lines: "licenseLines",
+  license_dates: "licenseDates",
 };
 
 /** An API agent's licence rows as the app holds them. An unknown status reads as "active" with a console warning. */
@@ -203,6 +212,7 @@ export function toAgentRecord(agent: ApiAgent): AgentRecord {
     licensedStates: licensedStatesOf(licenses),
     licenseNumbers: licenseNumbersOf(licenses),
     licenseLines: licenseLinesOf(licenses),
+    licenseDates: licenseDatesOf(licenses),
     npn: agent.npn,
     email: agent.email,
     phone: formatPhone(agent.phone),

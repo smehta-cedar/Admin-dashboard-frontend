@@ -12,10 +12,15 @@ import "server-only";
  * The agency has the same producer shape as an agent (NPN, licensed states
  * with licence numbers, contact details) because it is licensed like one:
  * the API returns its licence rows (`licenses`) and licensedStates /
- * licenseNumbers are derived from them here, the same way an agent's are
- * (lib/agents.ts). It is the org identity, licence footprint and roster
- * only: it is not a participant in carrier contracts or passwords, which
- * stay on individual agents.
+ * licenseNumbers / licenseStatuses / licenseDates are derived from them
+ * here, the same way an agent's are (lib/agents.ts). It is the org
+ * identity, licence footprint and roster only: it is not a participant in
+ * carrier contracts or passwords, which stay on individual agents.
+ *
+ * The profile's Edit dialog changes the agency's own fields (AgencyValues);
+ * the licence rows are added, edited and removed one at a time from the
+ * profile's State licences panel, through the licence actions in
+ * app/(dashboard)/agency/actions.ts.
  *
  * data/agency.json and data/agency-state-licenses.json are no longer read
  * here; they are the seed files for `seed_agency`.
@@ -27,8 +32,11 @@ import type { FieldChange } from "@/lib/change-notes";
 import { formatPhone } from "@/lib/phone";
 import {
   STATE_LICENSE_STATUSES,
+  licenseDatesOf,
   licenseNumbersOf,
+  licenseStatusesOf,
   licensedStatesOf,
+  type LicenceDates,
   type StateLicenseStatus,
 } from "@/lib/state-licenses";
 
@@ -52,6 +60,10 @@ export type AgencyRecord = {
   licensedStates: string[];
   /** Licence number by state code, for states in licensedStates only. Derived from the rows too. */
   licenseNumbers: Record<string, string>;
+  /** Licence status by state code, every state in licensedStates. Derived from the rows too. */
+  licenseStatuses: Record<string, StateLicenseStatus>;
+  /** Licence term by state code, every state in licensedStates. Derived from the rows too. */
+  licenseDates: Record<string, LicenceDates>;
   email: string;
   /** "(555)010-4410" (formatPhone); other lengths stay as entered. */
   phone: string;
@@ -60,8 +72,8 @@ export type AgencyRecord = {
 /** Agency fields a note can record. The ID never changes. */
 export type AgencyField = Exclude<keyof AgencyRecord, "id">;
 
-/** What the edit form submits: every field but the ID. */
-export type AgencyValues = Omit<AgencyRecord, "id">;
+/** What the profile's edit form submits: the agency's own fields, not its licences. */
+export type AgencyValues = Pick<AgencyRecord, "name" | "aliases" | "status" | "npn" | "email" | "phone">;
 
 export type AgencyChange = FieldChange<AgencyField>;
 
@@ -125,6 +137,8 @@ const NOTE_FIELDS: Record<string, AgencyField> = {
   phone: "phone",
   licensed_states: "licensedStates",
   license_numbers: "licenseNumbers",
+  license_statuses: "licenseStatuses",
+  license_dates: "licenseDates",
 };
 
 /** The API agency's licence rows as the app holds them. An unknown status reads as "active" with a console warning. */
@@ -159,6 +173,8 @@ export function toAgencyRecord(agency: ApiAgency): AgencyRecord {
     npn: agency.npn,
     licensedStates: licensedStatesOf(licenses),
     licenseNumbers: licenseNumbersOf(licenses),
+    licenseStatuses: licenseStatusesOf(licenses),
+    licenseDates: licenseDatesOf(licenses),
     email: agency.email,
     phone: formatPhone(agency.phone),
   };

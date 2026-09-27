@@ -4,8 +4,8 @@
  * Add or edit an agent, run on the Next server so the access token stays in
  * its HttpOnly cookie. POST /agents/create/ or PATCH /agents/{id}/; the API
  * checks the NPN against every other agent, needs an address to be all four
- * parts or none, replaces the licence rows from the checked states and their
- * numbers, and records the change note.
+ * parts or none, replaces the licence rows from the licences listed on the
+ * form (state, number, dates and lines), and records the change note.
  *
  * What the API answers, and what the form shows for it:
  *
@@ -61,6 +61,9 @@ export async function saveAgent(values: AgentValues, editingId?: string): Promis
       license_number: values.licenseNumbers[state] ?? "",
       life: values.licenseLines[state]?.life ?? false,
       health: values.licenseLines[state]?.health ?? false,
+      // A blank date is left to the API: today / two years on for a new row, unchanged for a kept one.
+      start_date: values.licenseDates[state]?.startDate || null,
+      end_date: values.licenseDates[state]?.endDate || null,
     })),
   };
   const result = editingId

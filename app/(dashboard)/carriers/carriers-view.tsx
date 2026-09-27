@@ -52,6 +52,21 @@ export function CarriersView({ initialCarriers }: CarriersViewProps) {
   const columns = useMemo<DataTableColumn<CarrierRecord>[]>(
     () => [
       {
+        id: "actions",
+        header: "Action",
+        cell: (carrier) => (
+          <button
+            type="button"
+            onClick={() => setEditor({ mode: "edit", carrier })}
+            className={`inline-flex items-center gap-1.5 ${ROW_BUTTON_CLASS}`}
+          >
+            <EditIcon className="size-3.5 shrink-0" />
+            <span className="sr-only"> {carrier.name}</span>
+          </button>
+        ),
+       
+      },
+      {
         id: "number",
         header: "ID",
         cell: (carrier) => numbers.get(carrier.id),
@@ -100,22 +115,6 @@ export function CarriersView({ initialCarriers }: CarriersViewProps) {
         cell: (carrier) => <StatusBadge status={carrier.status} />,
         sortValue: (carrier) => statusRank(carrier.status),
         searchText: (carrier) => carrier.status,
-      },
-      {
-        id: "actions",
-        header: "Actions",
-        srOnlyHeader: true,
-        cell: (carrier) => (
-          <button
-            type="button"
-            onClick={() => setEditor({ mode: "edit", carrier })}
-            className={`inline-flex items-center gap-1.5 ${ROW_BUTTON_CLASS}`}
-          >
-            <EditIcon className="size-3.5 shrink-0" />
-            Edit<span className="sr-only"> {carrier.name}</span>
-          </button>
-        ),
-        className: "text-right",
       },
     ],
     [numbers],

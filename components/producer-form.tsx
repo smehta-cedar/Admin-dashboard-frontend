@@ -1,45 +1,55 @@
 "use client";
 
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import {
   GHOST_BUTTON_CLASS,
   INPUT_CLASS,
   PRIMARY_BUTTON_CLASS,
+  ROW_BUTTON_CLASS,
   TOOLBAR_INPUT_CLASS,
 } from "@/components/classes";
 import { Field } from "@/components/field";
-import { StateCheckboxes } from "@/components/state-checkboxes";
+import { StateSelect } from "@/components/state-select";
 import { formatPhone } from "@/lib/phone";
-import type { LicenceLines } from "@/lib/state-licenses";
+import { formatLicenceDate, type LicenceDates, type LicenceLines } from "@/lib/state-licenses";
 import { US_STATE_NAMES } from "@/lib/us-states";
 
 /*
  * The one producer form, shared by the agent dialog (agents/agent-dialog.tsx),
  * the Add agent page (agents/new) and the agency dialog
  * (agency/agency-dialog.tsx): an agent and the agency are both licensed
- * producers with the same eight fields — name, aliases, status, NPN, email,
- * phone, licensed states and the licence number for each checked state
- * (required, so a state can't be added without its number). Only the wording
- * differs, so each dialog passes its `labels`, and the pure save (saveAgent /
- * saveAgency) stays with the dialog.
+ * producers with the same fields — name, aliases, status, NPN, email, phone
+ * and their state licences. Only the wording differs, so each dialog passes
+ * its `labels`, and the save (saveAgent / saveAgency) stays with the dialog.
+ * The agency edits its licences one at a time from its profile's State
+ * licences panel instead, so its dialog turns the Licences section off
+ * (`licences={false}`).
  *
- * The fields are grouped into three titled sections, no hint text under the
- * titles:
+ * The fields are grouped into three titled sections. It is an internal form
+ * for people who know it, so there is no help text, apart from "Separate by
+ * comma." under the aliases:
  *
  *   Identity  — name, NPN and aliases on one line; the status select sits
  *               in the section's header, on the right, Active by default
  *   Contact   — email and phone, then the producer's `extra` fields if it
  *               has any (the agent's personal email, phone and address)
- *   Licences  — the state grid and, for each checked state, its number and
- *               (with `lines`, the agent) a Life and a Health checkbox for
- *               the lines of business the licence covers
+ *   Licences  — entered one at a time: a row with a state dropdown, the
+ *               licence number, (with `dates`) a start and an end date,
+ *               (with `lines`) a Health and a Life checkbox, and an Add
+ *               button. Adding puts the licence in the list underneath and
+ *               clears the row for the next one. A listed licence can be
+ *               taken back up into the row (Edit) or removed. The list is
+ *               what the form submits; the row itself is never part of it.
  *
  * Two layouts. `dialog` (the default) stacks the sections under the title
  * inside a modal, separated by rules, the fields in two columns. `page` is
  * for a full page: one card per row, capped at the 2xl breakpoint so the
  * inputs never stretch too wide, the fields inside spread over four columns
- * from `xl`, and the state grid and licence numbers side by side. The Cancel
- * and submit buttons sit in a bar stuck to the bottom of the viewport.
+ * from `xl`. The licence entry row is one line in both. The Cancel and
+ * submit buttons sit in a bar stuck to the bottom of the viewport.
+ *
+ * A required field has a red star after its label (`Field required`); the
+ * others carry no "(optional)", the star being the only marking.
  *
  * Mounted per open inside a ModalDialog, so its errors start clear each time.
  */
@@ -54,14 +64,16 @@ export type ProducerValues = {
   phone: string;
   licensedStates: string[];
   licenseNumbers: Record<string, string>;
-  /** The Life / Health lines per checked state; empty without `lines` (the agency). */
+  /** The Life / Health lines per licensed state; empty without `lines` (the agency). */
   licenseLines: Record<string, LicenceLines>;
+  /** The start and end date per licensed state; empty without `dates` (the agency). */
+  licenseDates: Record<string, LicenceDates>;
 };
 
 /**
- * A save error, shown under the field it names. "address" is the agent-only
- * section's; "form" is about the attempt itself (no permission, API down)
- * and shows under the form.
+ * A save error, shown under the field it names. "licenseNumbers" is the
+ * licence list's; "address" is the agent-only section's; "form" is about
+ * the attempt itself (no permission, API down) and shows under the form.
  */
 export type ProducerError = {
   field: "name" | "npn" | "licenseNumbers" | "address" | "form";
@@ -104,13 +116,16 @@ export type ProducerExtra<E extends object> = {
 export type ProducerLabels = {
   name: string;
   aliases: string;
+  /** The one hint on the form, under the aliases. */
   aliasesHint: string;
   npn: string;
-  licensedHint: string;
 };
 
 /** Where the form is drawn; see the file comment. */
 export type ProducerFormLayout = "dialog" | "page";
+
+/** The licence part of the values, which the initial values may leave out. */
+type LicenceMaps = "licensedStates" | "licenseNumbers" | "licenseLines" | "licenseDates";
 
 type ProducerFormProps<E extends object> = {
   /** Prefix for element IDs; the `<h2>` is `${id}-title`, which the dialog is labelled by. */
@@ -120,12 +135,16 @@ type ProducerFormProps<E extends object> = {
   description: string;
   submitLabel: string;
   labels: ProducerLabels;
-  /** Values to start from; leave out for an empty add form. The lines are optional: the agency has none. */
-  initial?: Omit<ProducerValues, "licenseLines"> & Partial<Pick<ProducerValues, "licenseLines">> & Partial<E>;
+  /** Values to start from; leave out for an empty add form. The licence maps are optional: the agency has no lines or dates, and no licences at all without `licences`. */
+  initial?: Omit<ProducerValues, LicenceMaps> & Partial<Pick<ProducerValues, LicenceMaps>> & Partial<E>;
   /** Fields only this producer has; see ProducerExtra. */
   extra?: ProducerExtra<E>;
-  /** Show a Life and a Health checkbox beside each checked state's number (agents). */
+  /** Show the Licences section. Off, the licence values come back empty (the agency). */
+  licences?: boolean;
+  /** Ask for the Health and Life lines on each licence (agents). */
   lines?: boolean;
+  /** Ask for the start and end date on each licence (agents). */
+  dates?: boolean;
   layout?: ProducerFormLayout;
   /**
    * Saves the values; returns (or resolves with) the error to show instead
@@ -135,45 +154,58 @@ type ProducerFormProps<E extends object> = {
   close: () => void;
 };
 
-/** Input name for one state's licence number. */
-const numberField = (code: string) => `licenseNumber-${code}`;
-
-/** Checkbox name for one line of business on one state's licence. */
-const lineField = (code: string, line: keyof LicenceLines) => `licenseLine-${code}-${line}`;
-
-const LINES: { key: keyof LicenceLines; label: string }[] = [
-  { key: "life", label: "Life" },
-  { key: "health", label: "Health" },
-];
-
-/** A producer's values as notes compare and show them: licence numbers become "TX 2104587" items. */
-export const producerNoteValues = (values: ProducerValues) => ({
-  ...values,
-  licenseNumbers: Object.entries(values.licenseNumbers).map(
-    ([code, number]) => `${code} ${number}`,
-  ),
-});
-
-/** The error `saveAgent` and `saveAgency` both return for a licensed state with no number. */
-export const unnumberedStatesError = (values: ProducerValues): ProducerError | null => {
-  const unnumbered = values.licensedStates.filter((code) => !values.licenseNumbers[code]);
-  if (unnumbered.length === 0) return null;
-  return {
-    field: "licenseNumbers",
-    message: `Enter the licence number for ${unnumbered.join(", ")}, or uncheck ${unnumbered.length === 1 ? "it" : "them"}.`,
-  };
+/** One licence as the form lists it, and as the entry row holds it while it is typed. */
+type LicenceEntry = {
+  state: string;
+  licenseNumber: string;
+  startDate: string;
+  endDate: string;
+  life: boolean;
+  health: boolean;
 };
 
+const EMPTY_ENTRY: LicenceEntry = {
+  state: "",
+  licenseNumber: "",
+  startDate: "",
+  endDate: "",
+  life: false,
+  health: false,
+};
+
+/** The line checkboxes, in the order the row shows them. */
+const LINES: { key: keyof LicenceLines; label: string }[] = [
+  { key: "health", label: "Health" },
+  { key: "life", label: "Life" },
+];
+
+/** The initial values' licences as list entries, in state-code order. */
+function entriesFrom(initial: ProducerFormProps<object>["initial"]): LicenceEntry[] {
+  if (!initial?.licensedStates) return [];
+  return initial.licensedStates.map((state) => ({
+    state,
+    licenseNumber: initial.licenseNumbers?.[state] ?? "",
+    startDate: initial.licenseDates?.[state]?.startDate ?? "",
+    endDate: initial.licenseDates?.[state]?.endDate ?? "",
+    life: initial.licenseLines?.[state]?.life ?? false,
+    health: initial.licenseLines?.[state]?.health ?? false,
+  }));
+}
+
+/** "Health & Life", "Health", "Life" or "—", as the list shows an entry's lines. */
+const linesText = (entry: LicenceEntry) =>
+  LINES.filter((line) => entry[line.key])
+    .map((line) => line.label)
+    .join(" & ") || "—";
+
 /**
- * Trimmed values out of the submitted form, licence numbers (and lines,
- * when the form shows them) for checked states only.
+ * Trimmed values out of the submitted form, plus the licence maps from the
+ * list (lines and dates only when the form asks for them).
  */
-function readValues(form: HTMLFormElement, lines: boolean): ProducerValues {
+function readValues(form: HTMLFormElement, licences: LicenceEntry[], lines: boolean, dates: boolean): ProducerValues {
   const data = new FormData(form);
   const text = (field: keyof ProducerValues) => String(data.get(field) ?? "").trim();
-  const licensedStates = [
-    ...new Set(data.getAll("licensedStates").map((code) => String(code).trim()).filter(Boolean)),
-  ].sort();
+  const sorted = licences.slice().sort((a, b) => a.state.localeCompare(b.state));
   return {
     name: text("name"),
     aliases: text("aliases")
@@ -184,21 +216,16 @@ function readValues(form: HTMLFormElement, lines: boolean): ProducerValues {
     npn: text("npn"),
     email: text("email"),
     phone: formatPhone(text("phone")),
-    licensedStates,
-    // Only checked states have an input, and it is required.
+    licensedStates: sorted.map((entry) => entry.state),
     licenseNumbers: Object.fromEntries(
-      licensedStates.flatMap((code) => {
-        const number = String(data.get(numberField(code)) ?? "").trim();
-        return number ? [[code, number]] : [];
-      }),
+      sorted.flatMap((entry) => (entry.licenseNumber ? [[entry.state, entry.licenseNumber]] : [])),
     ),
-    // An unticked box has no entry in the form data.
     licenseLines: lines
+      ? Object.fromEntries(sorted.map((entry) => [entry.state, { life: entry.life, health: entry.health }]))
+      : {},
+    licenseDates: dates
       ? Object.fromEntries(
-          licensedStates.map((code) => [
-            code,
-            { life: data.has(lineField(code, "life")), health: data.has(lineField(code, "health")) },
-          ]),
+          sorted.map((entry) => [entry.state, { startDate: entry.startDate, endDate: entry.endDate }]),
         )
       : {},
   };
@@ -244,19 +271,25 @@ export function ProducerForm<E extends object = Record<never, never>>({
   labels,
   initial,
   extra,
+  licences = true,
   lines = false,
+  dates = false,
   layout = "dialog",
   onSave,
   close,
 }: ProducerFormProps<E>) {
   const [nameError, setNameError] = useState<string | null>(null);
   const [npnError, setNpnError] = useState<string | null>(null);
-  const [numbersError, setNumbersError] = useState<string | null>(null);
+  const [licencesError, setLicencesError] = useState<string | null>(null);
   const [addressError, setAddressError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  // Follows the checkboxes, so each checked state gets a licence number input.
-  const [licensedCodes, setLicensedCodes] = useState(initial?.licensedStates ?? []);
+  // The licences the form will submit, in the order they were added; none when the section is off.
+  const [licenceList, setLicenceList] = useState<LicenceEntry[]>(() => (licences ? entriesFrom(initial) : []));
+  // The entry row. The key remounts the state dropdown, which is uncontrolled, whenever the row is reset.
+  const [draft, setDraft] = useState<LicenceEntry>(EMPTY_ENTRY);
+  const [draftKey, setDraftKey] = useState(0);
+  const [draftError, setDraftError] = useState<string | null>(null);
   const page = layout === "page";
   const span = spans(layout);
 
@@ -265,13 +298,7 @@ export function ProducerForm<E extends object = Record<never, never>>({
     if (saving) return;
     const form = event.currentTarget;
     const extraValues = extra ? extra.read(new FormData(form)) : ({} as E);
-    // The checks a save can't pass without: a number for every checked state.
-    const values = { ...readValues(form, lines), ...extraValues };
-    const unnumbered = unnumberedStatesError(values);
-    if (unnumbered) {
-      setNumbersError(unnumbered.message);
-      return;
-    }
+    const values = { ...readValues(form, licenceList, lines, dates), ...extraValues };
     setSaving(true);
     setFormError(null);
     try {
@@ -281,13 +308,72 @@ export function ProducerForm<E extends object = Record<never, never>>({
         else if (error.field === "npn") setNpnError(error.message);
         else if (error.field === "address") setAddressError(error.message);
         else if (error.field === "form") setFormError(error.message);
-        else setNumbersError(error.message);
+        else setLicencesError(error.message);
         return;
       }
       close();
     } finally {
       setSaving(false);
     }
+  };
+
+  /** Clears the entry row (and starts it from `next`, for Edit), then puts the cursor back on the state. */
+  const resetDraft = (next: LicenceEntry = EMPTY_ENTRY) => {
+    setDraft(next);
+    setDraftError(null);
+    setDraftKey((key) => key + 1);
+    requestAnimationFrame(() => document.getElementById(`${id}-licence-state`)?.focus());
+  };
+
+  /** Moves the entry row into the list, once it has a state and a number and its dates are in order. */
+  const addLicence = () => {
+    const entry = { ...draft, licenseNumber: draft.licenseNumber.trim() };
+    if (!entry.state) {
+      setDraftError("Pick a state.");
+      return;
+    }
+    if (!entry.licenseNumber) {
+      setDraftError(`Enter the ${US_STATE_NAMES[entry.state] ?? entry.state} licence number.`);
+      return;
+    }
+    if (entry.startDate && entry.endDate && entry.endDate < entry.startDate) {
+      setDraftError("The end date must be on or after the start date.");
+      return;
+    }
+    if (licenceList.some((licence) => licence.state === entry.state)) {
+      setDraftError(`${entry.state} is already in the list. Remove it to enter it again.`);
+      return;
+    }
+    setLicenceList((current) => [...current, entry]);
+    setLicencesError(null);
+    resetDraft();
+  };
+
+  /** Takes a listed licence back into the entry row to change it. */
+  const editLicence = (state: string) => {
+    const entry = licenceList.find((licence) => licence.state === state);
+    if (!entry) return;
+    setLicenceList((current) => current.filter((licence) => licence.state !== state));
+    resetDraft(entry);
+  };
+
+  const removeLicence = (state: string) => {
+    setLicenceList((current) => current.filter((licence) => licence.state !== state));
+  };
+
+  // Enter inside the entry row adds the licence instead of saving the whole
+  // form. The state dropdown handles its own Enter (a pick) and the Add
+  // button clicks itself, so neither is doubled up.
+  const addOnEnter = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key !== "Enter" || event.defaultPrevented) return;
+    if ((event.target as HTMLElement).tagName === "BUTTON") return;
+    event.preventDefault();
+    addLicence();
+  };
+
+  const updateDraft = (patch: Partial<LicenceEntry>) => {
+    setDraft((current) => ({ ...current, ...patch }));
+    setDraftError(null);
   };
 
   // Status lives in the Identity header, not the grid: it is a setting, not a detail.
@@ -310,6 +396,7 @@ export function ProducerForm<E extends object = Record<never, never>>({
     <FormSection title="Identity" action={status} layout={layout} columns="sm:grid-cols-3">
       <Field
         label={labels.name}
+        required
         htmlFor={`${id}-name`}
         hint={nameError ?? undefined}
         hintId={`${id}-name-error`}
@@ -331,6 +418,7 @@ export function ProducerForm<E extends object = Record<never, never>>({
       </Field>
       <Field
         label={labels.npn}
+        required
         htmlFor={`${id}-npn`}
         hint={npnError ?? undefined}
         hintId={`${id}-npn-error`}
@@ -353,7 +441,6 @@ export function ProducerForm<E extends object = Record<never, never>>({
       </Field>
       <Field
         label={labels.aliases}
-        optional
         htmlFor={`${id}-aliases`}
         hint={labels.aliasesHint}
         hintId={`${id}-aliases-hint`}
@@ -377,7 +464,7 @@ export function ProducerForm<E extends object = Record<never, never>>({
       layout={layout}
       columns={page ? "sm:grid-cols-2 xl:grid-cols-4" : "sm:grid-cols-2"}
     >
-      <Field label="Email" htmlFor={`${id}-email`} className={span.field}>
+      <Field label="Email" required htmlFor={`${id}-email`} className={span.field}>
         <input
           id={`${id}-email`}
           name="email"
@@ -388,7 +475,7 @@ export function ProducerForm<E extends object = Record<never, never>>({
           className={INPUT_CLASS}
         />
       </Field>
-      <Field label="Phone" htmlFor={`${id}-phone`} className={span.field}>
+      <Field label="Phone" required htmlFor={`${id}-phone`} className={span.field}>
         <input
           id={`${id}-phone`}
           name="phone"
@@ -404,88 +491,182 @@ export function ProducerForm<E extends object = Record<never, never>>({
     </FormSection>
   );
 
-  const licences = (
-    <FormSection title="Licences" layout={layout} columns={page ? "xl:grid-cols-2" : ""}>
-      <StateCheckboxes
-        legend="Licensed states"
-        name="licensedStates"
-        defaultChecked={initial?.licensedStates}
-        onChange={(codes) => {
-          setLicensedCodes(codes);
-          setNumbersError(null);
-        }}
-        // The page has the room to show more of the list at once.
-        gridClassName={page ? "max-h-[24rem] sm:grid-cols-3 2xl:grid-cols-4" : undefined}
-        describedBy={`${id}-licensed-hint`}
-      >
-        <p id={`${id}-licensed-hint`} className="sr-only">
-          {labels.licensedHint} Each checked state needs its licence number.
-        </p>
-      </StateCheckboxes>
+  // The entry row: every field on one line, whatever the width, so a licence reads left to right.
+  const entryColumns = `grid-cols-[minmax(0,1.4fr)_minmax(0,1.2fr)${dates ? "_minmax(0,1fr)_minmax(0,1fr)" : ""}${lines ? "_auto" : ""}_auto]`;
 
-      <fieldset className="min-w-0">
-        <legend className="text-sm font-medium text-fg">
-          Licence numbers
-          {licensedCodes.length > 0 ? (
-            <span className="font-normal text-fg-subtle"> ({licensedCodes.length})</span>
-          ) : null}
-        </legend>
-        {licensedCodes.length === 0 ? (
-          <p className="mt-1 text-xs text-fg-subtle">Check a state and its number goes here.</p>
-        ) : (
-          // With the line checkboxes a row is wide, so those stay one to a line.
-          <div className={`mt-2 grid gap-x-4 gap-y-2 ${lines ? "" : "sm:grid-cols-2"}`}>
-            {licensedCodes.map((code) => {
-              const stateName = US_STATE_NAMES[code] ?? code;
-              return (
-                // One row per state: code, the number, then the lines it covers.
-                <div key={code} className="flex items-center gap-3 text-sm text-fg">
-                  <span
-                    className="w-7 shrink-0 font-mono text-xs font-medium text-fg-muted"
-                    title={US_STATE_NAMES[code]}
+  const entryRow = (
+    <div
+      role="group"
+      aria-label="New licence"
+      className={`grid items-end gap-3 ${entryColumns}`}
+      onKeyDown={addOnEnter}
+    >
+      <Field label="State" required htmlFor={`${id}-licence-state`}>
+        <StateSelect
+          key={draftKey}
+          id={`${id}-licence-state`}
+          name={`${id}-licence-state`}
+          defaultValue={draft.state}
+          onChange={(state) => updateDraft({ state })}
+          invalid={Boolean(draftError) && !draft.state}
+          describedBy={draftError ? `${id}-licence-error` : undefined}
+        />
+      </Field>
+      <Field label="Licence number" required htmlFor={`${id}-licence-number`}>
+        <input
+          id={`${id}-licence-number`}
+          type="text"
+          autoComplete="off"
+          value={draft.licenseNumber}
+          onChange={(event) => updateDraft({ licenseNumber: event.target.value })}
+          aria-invalid={draftError && draft.state && !draft.licenseNumber.trim() ? true : undefined}
+          aria-describedby={draftError ? `${id}-licence-error` : undefined}
+          className={INPUT_CLASS}
+        />
+      </Field>
+      {dates ? (
+        <>
+          <Field label="Start date" htmlFor={`${id}-licence-start`}>
+            <input
+              id={`${id}-licence-start`}
+              type="date"
+              value={draft.startDate}
+              onChange={(event) => updateDraft({ startDate: event.target.value })}
+              className={INPUT_CLASS}
+            />
+          </Field>
+          <Field label="End date" htmlFor={`${id}-licence-end`}>
+            <input
+              id={`${id}-licence-end`}
+              type="date"
+              min={draft.startDate || undefined}
+              value={draft.endDate}
+              onChange={(event) => updateDraft({ endDate: event.target.value })}
+              className={INPUT_CLASS}
+            />
+          </Field>
+        </>
+      ) : null}
+      {lines ? (
+        <div role="group" aria-label="Lines" className="flex items-center gap-4 pb-2.5 text-sm text-fg">
+          {LINES.map((line) => (
+            <label key={line.key} className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={draft[line.key]}
+                onChange={(event) => updateDraft({ [line.key]: event.target.checked })}
+                className="size-4 accent-brand-strong"
+              />
+              {line.label}
+            </label>
+          ))}
+        </div>
+      ) : null}
+      <button type="button" onClick={addLicence} className={`${PRIMARY_BUTTON_CLASS} whitespace-nowrap`}>
+        Add
+      </button>
+    </div>
+  );
+
+  const licenceTable =
+    licenceList.length === 0 ? (
+      <p className="text-sm text-fg-subtle">No licences added yet.</p>
+    ) : (
+      <div className="overflow-x-auto rounded-md border border-line">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-surface-hover text-xs text-fg-muted">
+            <tr>
+              <th scope="col" className="px-3 py-2 font-medium">
+                State
+              </th>
+              <th scope="col" className="px-3 py-2 font-medium">
+                Licence number
+              </th>
+              {dates ? (
+                <>
+                  <th scope="col" className="px-3 py-2 font-medium">
+                    Start date
+                  </th>
+                  <th scope="col" className="px-3 py-2 font-medium">
+                    End date
+                  </th>
+                </>
+              ) : null}
+              {lines ? (
+                <th scope="col" className="px-3 py-2 font-medium">
+                  Lines
+                </th>
+              ) : null}
+              <th scope="col" className="px-3 py-2">
+                <span className="sr-only">Actions</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {licenceList.map((entry) => (
+              <tr key={entry.state} className="text-fg">
+                <td className="px-3 py-2">
+                  <span className="font-mono text-xs font-medium text-fg-muted">{entry.state}</span>{" "}
+                  {US_STATE_NAMES[entry.state] ?? ""}
+                </td>
+                <td className="px-3 py-2 font-mono text-xs">{entry.licenseNumber}</td>
+                {dates ? (
+                  <>
+                    <td className="px-3 py-2 whitespace-nowrap">{entry.startDate ? formatLicenceDate(entry.startDate) : "—"}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{entry.endDate ? formatLicenceDate(entry.endDate) : "—"}</td>
+                  </>
+                ) : null}
+                {lines ? <td className="px-3 py-2">{linesText(entry)}</td> : null}
+                <td className="px-3 py-1 text-right whitespace-nowrap">
+                  <button
+                    type="button"
+                    onClick={() => editLicence(entry.state)}
+                    aria-label={`Edit the ${US_STATE_NAMES[entry.state] ?? entry.state} licence`}
+                    className={ROW_BUTTON_CLASS}
                   >
-                    {code}
-                  </span>
-                  <input
-                    name={numberField(code)}
-                    type="text"
-                    required
-                    pattern=".*\S.*"
-                    autoComplete="off"
-                    placeholder="Licence number"
-                    aria-label={`${stateName} licence number`}
-                    aria-invalid={numbersError ? true : undefined}
-                    aria-describedby={numbersError ? `${id}-numbers-error` : undefined}
-                    onChange={() => setNumbersError(null)}
-                    defaultValue={initial?.licenseNumbers[code]}
-                    className={`${INPUT_CLASS} mt-0! min-w-0 flex-1`}
-                  />
-                  {lines ? (
-                    <div className="flex shrink-0 items-center gap-3" role="group" aria-label={`${stateName} lines`}>
-                      {LINES.map((line) => (
-                        <label key={line.key} className="flex items-center gap-1.5 text-sm text-fg">
-                          <input
-                            type="checkbox"
-                            name={lineField(code, line.key)}
-                            defaultChecked={initial?.licenseLines?.[code]?.[line.key] ?? false}
-                            className="size-4 accent-brand-strong"
-                          />
-                          {line.label}
-                        </label>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-        )}
-        {numbersError ? (
-          <p id={`${id}-numbers-error`} className="mt-1 text-xs text-danger">
-            {numbersError}
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeLicence(entry.state)}
+                    aria-label={`Remove the ${US_STATE_NAMES[entry.state] ?? entry.state} licence`}
+                    className={`${ROW_BUTTON_CLASS} hover:text-danger`}
+                  >
+                    Remove
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+
+  const licencesSection = (
+    <FormSection title="Licences" layout={layout} columns="">
+      <div className="min-w-0">
+        {entryRow}
+        {draftError ? (
+          <p id={`${id}-licence-error`} role="alert" className="mt-1 text-xs text-danger">
+            {draftError}
           </p>
         ) : null}
-      </fieldset>
+      </div>
+
+      <div className="min-w-0">
+        <p className="mb-2 text-sm font-medium text-fg">
+          Added
+          {licenceList.length > 0 ? (
+            <span className="font-normal text-fg-subtle"> ({licenceList.length})</span>
+          ) : null}
+        </p>
+        {licenceTable}
+        {licencesError ? (
+          <p id={`${id}-licences-error`} role="alert" className="mt-1 text-xs text-danger">
+            {licencesError}
+          </p>
+        ) : null}
+      </div>
     </FormSection>
   );
 
@@ -511,7 +692,7 @@ export function ProducerForm<E extends object = Record<never, never>>({
         <div className="mx-auto grid max-w-(--breakpoint-2xl) gap-5">
           {identity}
           {contact}
-          {licences}
+          {licences ? licencesSection : null}
         </div>
 
         {/*
@@ -540,7 +721,7 @@ export function ProducerForm<E extends object = Record<never, never>>({
       <div className="mt-5 grid gap-5">
         {identity}
         {contact}
-        {licences}
+        {licences ? licencesSection : null}
       </div>
 
       {/* Errors about the attempt itself (no permission, API down), not one field. */}

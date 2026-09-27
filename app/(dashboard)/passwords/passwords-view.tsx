@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { PRIMARY_BUTTON_CLASS, ROW_BUTTON_CLASS, TOOLBAR_INPUT_CLASS } from "@/components/classes";
 import { CredentialValue } from "@/components/credential-value";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
+import { EditIcon } from "@/components/edit-icon";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge, statusRank } from "@/components/status-badge";
@@ -148,26 +149,24 @@ export function PasswordsView({ initialPasswords, agents, carriers }: PasswordsV
 
   const columns = useMemo<DataTableColumn<PasswordRow>[]>(
     () => [
-      ...COLUMNS,
       {
         id: "actions",
-        header: "Actions",
-        srOnlyHeader: true,
+        header: "Action",
         cell: ({ password, agent, carrier }) => (
           <button
             type="button"
             onClick={() => setEditor({ mode: "edit", password })}
-            className={ROW_BUTTON_CLASS}
+            className={`inline-flex items-center gap-1.5 ${ROW_BUTTON_CLASS}`}
           >
-            Edit
+            <EditIcon className="size-3.5 shrink-0" />
             <span className="sr-only">
               {" "}
               {agent} at {carrier}
             </span>
           </button>
         ),
-        className: "text-right",
       },
+      ...COLUMNS,
     ],
     [],
   );

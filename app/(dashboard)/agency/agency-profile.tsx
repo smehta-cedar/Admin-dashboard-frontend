@@ -8,6 +8,7 @@ import {
   Panel,
   PanelEmpty,
   ProducerDetails,
+  PROFILE_BUTTON_CLASS,
   PROFILE_LINK_CLASS,
   ProfileHeader,
   ProfileNameRow,
@@ -19,8 +20,9 @@ import { StatusBadge } from "@/components/status-badge";
 import type { AgencyNote, AgencyRecord } from "@/lib/agency";
 import type { AgencyStateLicenseRecord } from "@/lib/agency-state-licenses";
 import type { AgentRecord } from "@/lib/agents";
-import { saveAgency } from "./actions";
+import { removeAgencyLicense, saveAgency, saveAgencyLicense } from "./actions";
 import { AGENCY_FIELD_LABELS, AgencyDialog, type AgencyError, type AgencyValues } from "./agency-dialog";
+import { AgencyLicenseDialog, type AgencyLicenseEditor, type AgencyLicenseValues } from "./license-dialog";
 
 /*
  * Profile for the agency: the one org record for this shop, laid out like an
@@ -30,15 +32,21 @@ import { AGENCY_FIELD_LABELS, AgencyDialog, type AgencyError, type AgencyValues 
  * with its licence number. Below, a full-width State licences panel — the same
  * licences as rows (number, status, start and end dates); the rows are the
  * truth and the header's licensedStates / licenseNumbers are derived from
- * them, so an Edit changes both at once — then two panels: Agents — everyone
- * under the shop, linking to their profiles (agents are still edited on
- * Agents) — beside Notes, the agency's change log.
+ * them, so a change to a row changes both at once — then two panels: Agents
+ * — everyone under the shop, linking to their profiles (agents are still
+ * edited on Agents) — beside Notes, the agency's change log.
  *
- * Edit opens AgencyDialog, the producer form with org labels, and saves
- * through the saveAgency server action: the agency and its licence rows are
- * kept in state so the change shows at once, and the notes come from the
- * server (the API writes them; the action's revalidation brings the new one
- * in). No back link or switcher: there is one agency and no list of them.
+ * Two editors. The name row's Edit opens AgencyDialog, the producer form
+ * with org labels and no licences, and saves the agency's own fields
+ * through the saveAgency server action. The State licences panel's Add
+ * button and each row's Edit open AgencyLicenseDialog for one licence
+ * (state, number, status, start and end dates; Edit can also remove it),
+ * saved through saveAgencyLicense / removeAgencyLicense, which send the API
+ * the full set of rows with the one change. Every save returns the agency
+ * and its rows, kept in state so the change shows at once; the notes come
+ * from the server (the API writes them; the action's revalidation brings
+ * the new one in). No back link or switcher: there is one agency and no
+ * list of them.
  */
 
 type AgentRow = Pick<AgentRecord, "id" | "name" | "status" | "licensedStates">;
@@ -59,6 +67,7 @@ export function AgencyProfile({ initialAgency, notes, initialLicenses, agents }:
   const [agency, setAgency] = useState(initialAgency);
   const [licenses, setLicenses] = useState(initialLicenses);
   const [editing, setEditing] = useState<AgencyRecord | null>(null);
+  const [licenseEditor, setLicenseEditor] = useState<AgencyLicenseEditor | null>(null);
 
   /** Edits the agency through the API. Resolves with the dialog's error, if any. */
   const saveEdit = async (values: AgencyValues): Promise<AgencyError | null> => {
@@ -68,6 +77,29 @@ export function AgencyProfile({ initialAgency, notes, initialLicenses, agents }:
     setLicenses(result.licenses);
     return null;
   };
+
+  /** Adds a licence, or replaces the row `previousState` had. Resolves with the message to show, if any. */
+  const saveLicense = async (values: AgencyLicenseValues, previousState: string | null): Promise<string | null> => {
+    const result = await saveAgencyLicense({ agencyId: agency.id, licenses, previousState, values });
+    if (!result.ok) return result.message;
+    setAgency(result.agency);
+    setLicenses(result.licenses);
+    return null;
+  };
+
+  const removeLicense = async (state: string): Promise<string | null> => {
+    const result = await removeAgencyLicense({ agencyId: agency.id, licenses, state });
+    if (!result.ok) return result.message;
+    setAgency(result.agency);
+    setLicenses(result.licenses);
+    return null;
+  };
+
+  const addLicenseButton = (
+    <button type="button" onClick={() => setLicenseEditor({ mode: "add" })} className={PROFILE_BUTTON_CLASS}>
+      <span aria-hidden="true">+</span> Add<span className="sr-only"> licence</span>
+    </button>
+  );
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -100,7 +132,12 @@ export function AgencyProfile({ initialAgency, notes, initialLicenses, agents }:
       </ProfileHeader>
 
       <div className="mt-5 grid items-start gap-5 xl:grid-cols-2">
-        <StateLicensesPanel licenses={licenses} className="xl:col-span-2" />
+        <StateLicensesPanel
+          licenses={licenses}
+          className="xl:col-span-2"
+          action={addLicenseButton}
+          onEdit={(license) => setLicenseEditor({ mode: "edit", license })}
+        />
 
         <Panel
           title="Agents"
@@ -145,6 +182,13 @@ export function AgencyProfile({ initialAgency, notes, initialLicenses, agents }:
       </div>
 
       <AgencyDialog editing={editing} onSave={saveEdit} onClose={() => setEditing(null)} />
+      <AgencyLicenseDialog
+        editor={licenseEditor}
+        licensedStates={agency.licensedStates}
+        onSave={saveLicense}
+        onRemove={removeLicense}
+        onClose={() => setLicenseEditor(null)}
+      />
     </div>
   );
 }

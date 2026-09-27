@@ -7,14 +7,14 @@ import type { AgencyField, AgencyRecord, AgencyValues } from "@/lib/agency";
 
 /*
  * The Edit agency dialog: the shared ProducerForm (components/producer-form.tsx)
- * with org-flavoured labels — name, DBA names, status, agency NPN, email,
- * phone, licensed states and the licence number for each checked state. Edit
- * only: there is one agency, so nothing is ever added here.
+ * with org-flavoured labels — name, DBA names, status, agency NPN, email
+ * and phone. The form's Licences section is off: the agency's state
+ * licences are added, edited and removed one at a time from the profile's
+ * State licences panel (./license-dialog.tsx). Edit only: there is one
+ * agency, so nothing is ever added here.
  *
  * The agency profile passes `onSave`, which calls the saveAgency server
- * action (./actions.ts): the API keeps the licence rows in step with the
- * checked states and records the change note. The form checks that every
- * checked state has a number before calling it.
+ * action (./actions.ts); the API records the change note.
  */
 
 export type { AgencyValues } from "@/lib/agency";
@@ -32,14 +32,15 @@ export const AGENCY_FIELD_LABELS: Record<AgencyField, string> = {
   phone: "Phone",
   licensedStates: "Licensed states",
   licenseNumbers: "Licence numbers",
+  licenseStatuses: "Licence statuses",
+  licenseDates: "Licence dates",
 };
 
 const FORM_LABELS: ProducerLabels = {
   name: "Agency name",
   aliases: "Other names",
-  aliasesHint: "DBA and other names on statements, separated by commas.",
+  aliasesHint: "Separate by comma.",
   npn: "Agency NPN",
-  licensedHint: "Where the agency holds a licence.",
 };
 
 type AgencyDialogProps = {
@@ -66,6 +67,7 @@ export function AgencyDialog({ editing, onSave, onClose }: AgencyDialogProps) {
           submitLabel="Save changes"
           labels={FORM_LABELS}
           initial={editing}
+          licences={false}
           onSave={onSave}
           close={close}
         />

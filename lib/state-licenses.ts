@@ -20,17 +20,31 @@ import { nextId } from "@/lib/change-notes";
 
 /**
  * active: licence in force. review: renewal or paperwork under review.
- * pending: applied for, not issued yet. jit: "just in time" — obtained only
- * when a sale there needs it.
+ * pending: applied for, not issued yet. applied: the application is in.
+ * expired: the term ran out. cancelled: given up or revoked. jit: "just in
+ * time" — obtained only when a sale there needs it.
  */
-export type StateLicenseStatus = "active" | "review" | "pending" | "jit";
+export type StateLicenseStatus = "active" | "review" | "pending" | "applied" | "expired" | "cancelled" | "jit";
 
 export const STATE_LICENSE_STATUSES: readonly string[] = [
   "active",
   "review",
   "pending",
+  "applied",
+  "expired",
+  "cancelled",
   "jit",
 ] satisfies StateLicenseStatus[];
+
+/** The statuses the agency form offers for a licence, in the order the dropdown lists them. */
+export const AGENCY_LICENCE_STATUSES: readonly StateLicenseStatus[] = [
+  "active",
+  "pending",
+  "review",
+  "applied",
+  "expired",
+  "cancelled",
+];
 
 /**
  * The lines of business a licence covers in its state. An agent's form has
@@ -38,6 +52,9 @@ export const STATE_LICENSE_STATUSES: readonly string[] = [
  * rows have neither ticked (its API doesn't record lines).
  */
 export type LicenceLines = { life: boolean; health: boolean };
+
+/** A licence's term, YYYY-MM-DD each; "" while unknown. */
+export type LicenceDates = { startDate: string; endDate: string };
 
 export type StateLicense = {
   /** Internal ID, numbered 1, 2, 3, … for now. Not the licence number. */
@@ -98,6 +115,26 @@ export function licenseLinesOf(rows: StateLicense[]): Record<string, LicenceLine
       .slice()
       .sort((a, b) => a.state.localeCompare(b.state))
       .map((row) => [row.state, { life: row.life, health: row.health }]),
+  );
+}
+
+/** A row's owner's `licenseStatuses`: the status by state code, every row, in code order. */
+export function licenseStatusesOf(rows: StateLicense[]): Record<string, StateLicenseStatus> {
+  return Object.fromEntries(
+    rows
+      .slice()
+      .sort((a, b) => a.state.localeCompare(b.state))
+      .map((row) => [row.state, row.status]),
+  );
+}
+
+/** A row's owner's `licenseDates`: the term by state code, every row, in code order. */
+export function licenseDatesOf(rows: StateLicense[]): Record<string, LicenceDates> {
+  return Object.fromEntries(
+    rows
+      .slice()
+      .sort((a, b) => a.state.localeCompare(b.state))
+      .map((row) => [row.state, { startDate: row.startDate, endDate: row.endDate }]),
   );
 }
 

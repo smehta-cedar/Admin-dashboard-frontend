@@ -9,18 +9,20 @@ import type { AgentRecord } from "@/lib/agents";
 import { formatPhone } from "@/lib/phone";
 
 /*
- * The agent-only part of the producer form: personal email, personal phone
- * and home address, every one optional, drawn in the Contact section after
- * the work email and phone. The agency shares the form but has none of
+ * The agent-only part of the producer form: personal email and personal
+ * phone (both required on the form; the record keeps them optional for
+ * agents entered before that) and the optional home address, drawn in the
+ * Contact section after the work email and phone. The agency shares the form but has none of
  * these, so the agent dialog passes them in as the form's `extra`
  * (components/producer-form.tsx) rather than the form owning them.
  *
  * The address is all or nothing: fill in street, city, state and ZIP, or
  * leave all four blank. `saveAgent` checks that with `incompleteAddressError`
- * and the form shows the message under the address fields.
+ * and the form shows the message under the address fields; there is no
+ * help text ahead of it, this being an internal form.
  */
 
-/** The three optional fields, exactly as AgentRecord holds them. */
+/** The three fields, exactly as AgentRecord holds them. */
 export type AgentContact = Pick<AgentRecord, "personalEmail" | "personalPhone" | "address">;
 
 const addressField = (part: keyof Address) => `address-${part}`;
@@ -67,21 +69,24 @@ export function agentContactExtra(initial?: AgentContact): ProducerExtra<AgentCo
       const invalid = error ? { "aria-invalid": true as const, "aria-describedby": `${id}-address-error` } : {};
       return (
         <>
-          <Field label="Personal email" optional htmlFor={`${id}-personal-email`} className={span.field}>
+          <Field label="Personal email" required htmlFor={`${id}-personal-email`} className={span.field}>
             <input
               id={`${id}-personal-email`}
               name="personalEmail"
               type="email"
+              required
               autoComplete="off"
               defaultValue={initial?.personalEmail}
               className={INPUT_CLASS}
             />
           </Field>
-          <Field label="Personal phone" optional htmlFor={`${id}-personal-phone`} className={span.field}>
+          <Field label="Personal phone" required htmlFor={`${id}-personal-phone`} className={span.field}>
             <input
               id={`${id}-personal-phone`}
               name="personalPhone"
               type="tel"
+              required
+              pattern=".*\S.*"
               autoComplete="off"
               defaultValue={initial?.personalPhone}
               className={INPUT_CLASS}
@@ -90,11 +95,8 @@ export function agentContactExtra(initial?: AgentContact): ProducerExtra<AgentCo
 
           <fieldset className={`min-w-0 ${span.full}`}>
             <legend className="text-sm font-medium text-fg">
-              Address<span className="font-normal text-fg-subtle"> (optional)</span>
+              Address
             </legend>
-            <p className="mt-1 text-xs text-fg-subtle">
-              Home address. Fill in all four parts, or leave them all blank.
-            </p>
             {/* Street, then ZIP, state and city side by side; all one row on the wide page. */}
             <div className={`mt-2 grid gap-x-4 gap-y-3 ${span.innerGrid}`}>
               <Field label="Street" htmlFor={`${id}-address-street`} className="sm:col-span-3">

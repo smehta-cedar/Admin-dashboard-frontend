@@ -14,9 +14,10 @@ import { agentContactExtra, incompleteAddressError, type AgentContact } from "./
 /*
  * The one Add / Edit agent dialog: the shared ProducerForm
  * (components/producer-form.tsx) with agent wording — name, aliases, status,
- * NPN, email, phone, licensed states, and the licence number and Life /
- * Health lines for each state that is checked (`lines`, which the agency's
- * copy doesn't have) — plus the agent-only personal contact section
+ * NPN, email, phone, and the licences added one at a time: state, number,
+ * start and end date (`dates`) and the Life / Health lines (`lines`), the
+ * last two of which the agency's copy doesn't have — plus the agent-only
+ * personal contact section
  * (./agent-contact-fields.tsx: personal email, personal phone, address),
  * which the agency's copy of the form doesn't have. The Agents page opens it
  * from a row's Edit and the Add agent page renders the same form; an
@@ -26,9 +27,9 @@ import { agentContactExtra, incompleteAddressError, type AgentContact } from "./
  * Each place passes `onSave`, which calls the saveAgent server action
  * (./actions.ts) and updates its own state from the saved agent and licence
  * rows. The API checks the NPN against every other agent, keeps the licence
- * rows in step with the checked states, and records the change note. The
- * form itself only checks what it can see at once: a number for every
- * checked state, and an address that is all four parts or none.
+ * rows in step with the licences listed, and records the change note. The
+ * form itself only checks what it can see at once: a state and a number
+ * before a licence is added, and an address that is all four parts or none.
  */
 
 /**
@@ -56,14 +57,14 @@ export const AGENT_FIELD_LABELS: Record<AgentField, string> = {
   licensedStates: "Licensed states",
   licenseNumbers: "Licence numbers",
   licenseLines: "Lines of business",
+  licenseDates: "Licence dates",
 };
 
 const FORM_LABELS: ProducerLabels = {
   name: "Name",
   aliases: "Aliases",
-  aliasesHint: "Other names on statements, separated by commas.",
+  aliasesHint: "Separate by comma.",
   npn: "NPN",
-  licensedHint: "Where this agent holds a licence.",
 };
 
 /** What every caller's `onSave` does before the API: the address check the form can run itself. */
@@ -109,6 +110,7 @@ export function AgentForm({ id, editing, onSave, close, layout }: AgentFormProps
       initial={editing}
       extra={agentContactExtra(editing)}
       lines
+      dates
       onSave={(values) => checkAgentValues(values) ?? onSave(values)}
       close={close}
     />
