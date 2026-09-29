@@ -19,7 +19,8 @@ import { agentContactExtra, incompleteAddressError, type AgentContact } from "./
  * start and end date (`dates`) and the Life / Health lines (`lines`), the
  * last two of which the agency's copy doesn't have — plus the agent-only
  * personal contact section
- * (./agent-contact-fields.tsx: personal email, personal phone, address),
+ * (./agent-contact-fields.tsx: personal email, personal phone, address,
+ * date of birth, join date, start date, SSN),
  * which the agency's copy of the form doesn't have. Add agent
  * (/agents/new) and Edit agent (/agents/[id]/edit) render this form as a
  * page, so every place uses the same form and the same checks.
@@ -54,6 +55,10 @@ export const AGENT_FIELD_LABELS: Record<AgentField, string> = {
   personalEmail: "Personal email",
   personalPhone: "Personal phone",
   address: "Address",
+  dateOfBirth: "Date of birth",
+  joinDate: "Join date",
+  startDate: "Start date",
+  ssnLast4: "SSN",
   licensedStates: "Licensed states",
   licenseNumbers: "Licence numbers",
   licenseLines: "Lines of business",

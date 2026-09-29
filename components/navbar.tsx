@@ -9,6 +9,7 @@ import { initials } from "@/lib/text";
 import { BrandLogo } from "./brand-logo";
 import { ChangePasswordDialog } from "./change-password-dialog";
 import { NavbarSearch } from "./navbar-search";
+import { NotificationsMenu } from "./notifications-menu";
 import { RequestDialog } from "./request-dialog";
 import type { NavItem } from "./sidebar";
 import { ThemeToggle } from "./theme-toggle";
@@ -110,7 +111,7 @@ export function Navbar({
         <div className="ml-auto flex items-center justify-end gap-1 md:ml-0 md:flex-1">
           <CreateRequestButton />
           <ThemeToggle />
-          <NotificationsButton />
+          <NotificationsMenu buttonClassName={ICON_BUTTON_CLASS} />
           <UserMenu user={user} />
         </div>
       </header>
@@ -173,31 +174,6 @@ function CreateRequestButton() {
       </button>
       <RequestDialog open={open} onClose={() => setOpen(false)} />
     </>
-  );
-}
-
-/** Bell; placeholder until notifications exist. */
-function NotificationsButton() {
-  return (
-    <button
-      type="button"
-      aria-label="Notifications"
-      title="Notifications"
-      className={ICON_BUTTON_CLASS}
-    >
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 20 20"
-        className="size-5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.5}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M8.5 16.5a1.5 1.5 0 0 0 3 0M4.5 14.5h11l-1.2-1.5V9a4.3 4.3 0 1 0-8.6 0v4Z" />
-      </svg>
-    </button>
   );
 }
 

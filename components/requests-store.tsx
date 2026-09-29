@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { fileRequest, setRequestStatus } from "@/app/(dashboard)/hr/actions";
+import { refreshNotificationsSoon } from "@/lib/notifications";
 import { checkRequestValues, type RequestError, type RequestValues } from "@/lib/request-options";
 import type { RequestRecord, RequestStatus } from "@/lib/requests";
 
@@ -53,6 +54,8 @@ export function RequestsProvider({ initialRequests, agents, carriers, children }
     const result = await fileRequest(values);
     if (!result.ok) return result.error;
     setRequests((current) => [...current, result.request]);
+    // Filing notifies the admins, this user among them when they are one.
+    refreshNotificationsSoon();
     return null;
   };
 

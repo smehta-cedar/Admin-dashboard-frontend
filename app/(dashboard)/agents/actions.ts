@@ -67,6 +67,10 @@ export async function saveAgent(values: AgentValues, editingId?: string): Promis
     personal_email: values.personalEmail ?? "",
     personal_phone: values.personalPhone ?? "",
     address: values.address ?? null,
+    date_of_birth: values.dateOfBirth || null,
+    join_date: values.joinDate || null,
+    start_date: values.startDate || null,
+    ssn_last4: values.ssnLast4 ?? "",
     is_active: values.status === "active",
     licenses: licenseBody(values),
   };

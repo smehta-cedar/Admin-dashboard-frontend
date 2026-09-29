@@ -25,7 +25,10 @@ import "server-only";
  *
  * Email and phone are the agent's work contact. personalEmail, personalPhone
  * and address are their own contact details, all optional and agent-only (the
- * agency, which shares the producer form, has none of them).
+ * agency, which shares the producer form, has none of them). dateOfBirth,
+ * joinDate (joined the agency) and startDate (employment start, not a
+ * licence's) are "YYYY-MM-DD"; ssnLast4 is only ever the last four digits of
+ * the SSN, shown masked, and notes record that it changed but never the digits.
  *
  * Writing numbers are not stored on agents or carriers. They live on carrier
  * contracts in lib/carrier-contracts.ts (one agent's producer ID at one
@@ -98,6 +101,14 @@ export type AgentRecord = {
   personalPhone?: string;
   /** Home address: street, city, state code and ZIP. */
   address?: Address;
+  /** "YYYY-MM-DD". */
+  dateOfBirth?: string;
+  /** When they joined the agency, "YYYY-MM-DD". */
+  joinDate?: string;
+  /** Employment start, "YYYY-MM-DD". Not a licence's start date. */
+  startDate?: string;
+  /** The last four digits of the SSN, never the full number. */
+  ssnLast4?: string;
 };
 
 /** Agent fields a note can record. The ID never changes. */
@@ -147,6 +158,10 @@ export type ApiAgent = {
   personal_email: string;
   personal_phone: string;
   address: Address | null;
+  date_of_birth: string | null;
+  join_date: string | null;
+  start_date: string | null;
+  ssn_last4: string;
   licenses: ApiAgentLicense[];
   is_active: boolean;
   created_at: string;
@@ -174,6 +189,10 @@ const NOTE_FIELDS: Record<string, AgentField> = {
   personal_email: "personalEmail",
   personal_phone: "personalPhone",
   address: "address",
+  date_of_birth: "dateOfBirth",
+  join_date: "joinDate",
+  start_date: "startDate",
+  ssn_last4: "ssnLast4",
   licensed_states: "licensedStates",
   license_numbers: "licenseNumbers",
   license_lines: "licenseLines",
@@ -219,6 +238,10 @@ export function toAgentRecord(agent: ApiAgent): AgentRecord {
     ...(agent.personal_email ? { personalEmail: agent.personal_email } : {}),
     ...(agent.personal_phone ? { personalPhone: formatPhone(agent.personal_phone) } : {}),
     ...(agent.address ? { address: agent.address } : {}),
+    ...(agent.date_of_birth ? { dateOfBirth: agent.date_of_birth } : {}),
+    ...(agent.join_date ? { joinDate: agent.join_date } : {}),
+    ...(agent.start_date ? { startDate: agent.start_date } : {}),
+    ...(agent.ssn_last4 ? { ssnLast4: agent.ssn_last4 } : {}),
   };
 }
 

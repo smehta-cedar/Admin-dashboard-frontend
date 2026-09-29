@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
+import { CredentialValue } from "@/components/credential-value";
 import { HydratedNoteList } from "@/components/hydrated-note-list";
 import { CopyableNumber } from "@/components/license-number";
 import {
@@ -26,6 +27,7 @@ import type { CertificationRecord } from "@/lib/certifications";
 import type { CarrierContractRecord } from "@/lib/carrier-contracts";
 import type { CarrierRecord } from "@/lib/carriers";
 import { formatAddress } from "@/lib/address";
+import { formatLicenceDate } from "@/lib/state-licenses";
 import { writableStates } from "@/lib/us-states";
 import { byName } from "@/lib/text";
 import { saveCertification } from "../../certifications/actions";
@@ -67,9 +69,11 @@ import { AGENT_FIELD_LABELS } from "../agent-dialog";
  *                     rail's link classes (components/sidebar.tsx) so the
  *                     active mark, spacing and type match it
  *
- * Details is a two-column table of the seven contact fields — the four work
- * ones (NPN, email with mailto, phone with tel, aliases), then the three
- * personal ones (personal email, personal phone, address). Every row is
+ * Details is a two-column table of eleven fields — the four work ones (NPN,
+ * email with mailto, phone with tel, aliases), the three personal contact
+ * ones (personal email, personal phone, address), then date of birth, join
+ * date, start date (dated like licences) and the SSN's last four, masked
+ * until its eye button shows it. Every row is
  * always there; an empty one shows "—". Its count is the filled fields.
  * Pending is a `Panel` too, with an empty state ("Nothing is pending") since
  * it is always in the list.
@@ -339,7 +343,7 @@ export function AgentProfile({
   const pending = pendingItems({ agent, agentCarriers, passwords });
 
 
-  // Detail rows: always all four work fields, then all three personal ones,
+  // Detail rows: always all four work fields, then all the personal ones,
   // so the table keeps its shape; an empty field shows "—".
   const empty = <span className="text-fg-subtle">—</span>;
   const linkClass = "hover:text-brand-ink hover:underline";
@@ -411,6 +415,21 @@ export function AgentProfile({
       label: AGENT_FIELD_LABELS.address,
       value: address || empty,
       filled: address !== "",
+    },
+    ...(["dateOfBirth", "joinDate", "startDate"] as const).map((key) => {
+      const date = agent[key];
+      return {
+        key,
+        label: AGENT_FIELD_LABELS[key],
+        value: date ? <time dateTime={date}>{formatLicenceDate(date)}</time> : empty,
+        filled: Boolean(date),
+      };
+    }),
+    {
+      key: "ssnLast4",
+      label: AGENT_FIELD_LABELS.ssnLast4,
+      value: agent.ssnLast4 ? <CredentialValue value={agent.ssnLast4} label="SSN" secret /> : empty,
+      filled: Boolean(agent.ssnLast4),
     },
   ];
   const filledCount = details.filter((row) => row.filled).length;

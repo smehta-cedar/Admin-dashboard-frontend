@@ -12,6 +12,7 @@ import "server-only";
 
 import { formatAddress } from "@/lib/address";
 import { getAgents } from "@/lib/agents";
+import { allowForbidden } from "@/lib/api-server";
 import { getCarrierContracts } from "@/lib/carrier-contracts";
 import { getCarriers } from "@/lib/carriers";
 import { getPasswords } from "@/lib/passwords";
@@ -31,13 +32,16 @@ const entry = (href: string, title: string, details: string[], text: string[]): 
 const listHref = (href: string, ...words: string[]) =>
   `${href}?${SEARCH_PARAM}=${encodeURIComponent(words.filter(Boolean).join(" "))}`;
 
+/** A module the role can't see (a 403) searches as empty rather than failing the page. */
+const orEmpty = async <T>(request: Promise<T[]>): Promise<T[]> => (await allowForbidden(request)) ?? [];
+
 export async function getSearchIndex(): Promise<SearchIndex> {
   const [agents, carriers, passwords, contracts, users] = await Promise.all([
-    getAgents(),
-    getCarriers(),
-    getPasswords(),
-    getCarrierContracts(),
-    getUsers(),
+    orEmpty(getAgents()),
+    orEmpty(getCarriers()),
+    orEmpty(getPasswords()),
+    orEmpty(getCarrierContracts()),
+    orEmpty(getUsers()),
   ]);
   const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
   const carriersById = new Map(carriers.map((carrier) => [carrier.id, carrier]));

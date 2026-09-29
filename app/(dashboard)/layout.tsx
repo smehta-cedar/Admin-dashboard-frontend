@@ -4,6 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { RequestsProvider } from "@/components/requests-store";
 import type { NavItem } from "@/components/sidebar";
 import { getAgents } from "@/lib/agents";
+import { allowForbidden } from "@/lib/api-server";
 import { getCarriers } from "@/lib/carriers";
 import { getRequests } from "@/lib/requests";
 import { getSearchIndex } from "@/lib/search-index";
@@ -84,12 +85,13 @@ export default async function DashboardLayout({
   // After the gate: the index holds record data, so only a signed-in user gets it.
   // The requests and the dialog's agent and carrier options load here too:
   // the navbar's Create-a-request button is on every page, so the list lives
-  // above them all (components/requests-store.tsx).
+  // above them all (components/requests-store.tsx). A role that can't see
+  // one of these lists (a 403) gets it empty instead of a broken dashboard.
   const [searchIndex, requests, agents, carriers] = await Promise.all([
     getSearchIndex(),
-    getRequests(),
-    getAgents(),
-    getCarriers(),
+    allowForbidden(getRequests()).then((list) => list ?? []),
+    allowForbidden(getAgents()).then((list) => list ?? []),
+    allowForbidden(getCarriers()).then((list) => list ?? []),
   ]);
   const party = ({ id, name, status }: { id: string; name: string; status: "active" | "inactive" }) => ({
     id,

@@ -52,7 +52,7 @@ function DocumentCell({ certification }: { certification: CertificationRecord })
 }
 
 export function CertificationsTable({ certifications, leading, onEdit }: CertificationsTableProps) {
-  const columns = ["Action", leading === "agent" ? "Agent" : "Policy type", "Start", "End", "Document", "Verified", "Status"];
+  const columns = ["Action", leading === "agent" ? "Agent" : "Policy type", "Completion Date", "Expiry Date", "Document", "Verified", "Status"];
 
   return (
     <ProfileTable columns={columns} rows={certifications} rowKey={(certification) => certification.id}>

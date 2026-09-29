@@ -5,7 +5,7 @@ import { CopyButton, useCopy } from "@/components/license-number";
 
 /*
  * Username and password controls, shared by Passwords, Users, the sign-in
- * form and the profiles' Passwords panels. In a table, a value copies when
+ * form and the profiles' Passwords panels (and the agent profile's SSN). In a table, a value copies when
  * you click it or its copy button; a password shows a fixed mask until its eye
  * button reveals it. The form's password input is type="password" until its eye
  * button shows it. Reveal state lives in each component, so a reload, a
@@ -21,7 +21,7 @@ const ICON_BUTTON_CLASS =
 type CredentialValueProps = {
   value: string;
   /** Names the value in button labels. */
-  label: "username" | "password";
+  label: "username" | "password" | "SSN";
   /** Masked until the eye button reveals it. */
   secret?: boolean;
 };
@@ -52,7 +52,7 @@ export function CredentialValue({ value, label, secret = false }: CredentialValu
         {hidden ? (
           <>
             <span aria-hidden="true">{MASK}</span>
-            <span className="sr-only">Hidden password</span>
+            <span className="sr-only">Hidden {label}</span>
           </>
         ) : (
           value
@@ -63,7 +63,7 @@ export function CredentialValue({ value, label, secret = false }: CredentialValu
         <button
           type="button"
           onClick={() => setRevealed((current) => !current)}
-          aria-label={hidden ? "Show password" : "Hide password"}
+          aria-label={hidden ? `Show ${label}` : `Hide ${label}`}
           className={ICON_BUTTON_CLASS}
         >
           {hidden ? <EyeIcon /> : <EyeOffIcon />}
@@ -75,7 +75,11 @@ export function CredentialValue({ value, label, secret = false }: CredentialValu
 }
 
 /** The form's password input: type="password" until the eye button shows it. */
-export function PasswordInput({ className, ...props }: Omit<ComponentProps<"input">, "type">) {
+export function PasswordInput({
+  className,
+  label = "password",
+  ...props
+}: Omit<ComponentProps<"input">, "type"> & { label?: "password" | "SSN" }) {
   const [revealed, setRevealed] = useState(false);
 
   return (
@@ -85,7 +89,7 @@ export function PasswordInput({ className, ...props }: Omit<ComponentProps<"inpu
       <button
         type="button"
         onClick={() => setRevealed((current) => !current)}
-        aria-label={revealed ? "Hide password" : "Show password"}
+        aria-label={revealed ? `Hide ${label}` : `Show ${label}`}
         className={`absolute right-1.5 top-1/2 mt-0.5 -translate-y-1/2 ${ICON_BUTTON_CLASS}`}
       >
         {revealed ? <EyeOffIcon /> : <EyeIcon />}
