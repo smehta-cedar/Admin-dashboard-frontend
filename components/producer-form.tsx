@@ -283,7 +283,7 @@ type FormSectionProps = {
 };
 
 /** One titled group of fields. A card on the page; in the dialog, a block under a rule. */
-function FormSection({ title, action, layout, columns, children }: FormSectionProps) {
+export function FormSection({ title, action, layout, columns, children }: FormSectionProps) {
   const shell =
     layout === "page"
       ? "rounded-lg border border-line bg-surface p-5 shadow-sm"

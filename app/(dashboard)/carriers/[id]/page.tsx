@@ -37,10 +37,10 @@ export default async function CarrierProfilePage(props: PageProps<"/carriers/[id
 
   return (
     <CarrierProfile
-      // The profile keeps the carrier in state (it can be edited there), so a
-      // switch to another carrier has to start that state again.
+      // The profile keeps the carrier's policies in state, so a switch to
+      // another carrier has to start that state again.
       key={carrier.id}
-      initialCarrier={carrier}
+      carrier={carrier}
       number={number}
       // Appointment + licence inputs stay raw; the profile derives writable
       // against the live availableStates after an edit.

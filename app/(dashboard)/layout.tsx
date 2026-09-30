@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
-import { RequestsProvider } from "@/components/requests-store";
+import { RequestsProvider, type RequestParty } from "@/components/requests-store";
 import type { NavItem } from "@/components/sidebar";
 import { getAgents } from "@/lib/agents";
 import { allowForbidden } from "@/lib/api-server";
@@ -35,8 +35,14 @@ const NAV_ITEMS: NavItem[] = [
     icon: "carriers",
     searchable: true,
     children: [
-      // Opens the first carrier; stays highlighted on every /carriers/<id>.
-      { href: "/carriers/profile", label: "Carrier profile", activePrefix: "/carriers/" },
+      // Opens the first carrier; stays highlighted on every /carriers/<id>,
+      // but not on Add carrier or Edit carrier, which belong to the section.
+      {
+        href: "/carriers/profile",
+        label: "Carrier profile",
+        activePrefix: "/carriers/",
+        activeExcept: ["/carriers/new", "/edit"],
+      },
     ],
   },
   // The catalog of policy kinds; policies and certifications will point at it.
@@ -95,7 +101,7 @@ export default async function DashboardLayout({
     allowForbidden(getAgents()).then((list) => list ?? []),
     allowForbidden(getCarriers()).then((list) => list ?? []),
   ]);
-  const party = ({ id, name, status }: { id: string; name: string; status: "active" | "inactive" }) => ({
+  const party = ({ id, name, status }: RequestParty) => ({
     id,
     name,
     status,

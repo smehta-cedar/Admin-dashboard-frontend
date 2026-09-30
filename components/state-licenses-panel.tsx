@@ -8,8 +8,8 @@ import { formatLicenceDate, licenceLinesText, type StateLicense } from "@/lib/st
 import { US_STATE_NAMES } from "@/lib/us-states";
 
 /*
- * A profile's "State licences" panel (agent and agency): one row per
- * licence — State, Licence #, Lines (agents only: Life, Health or both),
+ * A profile's "State licences" panel (agent, agency and carrier): one row
+ * per licence — State, Licence #, Lines (agents and carriers: Life, Health or both),
  * Status, Start, End. Dates are formatted from the stored string, never
  * through Date, so the server and the browser agree.
  *
@@ -23,7 +23,7 @@ import { US_STATE_NAMES } from "@/lib/us-states";
 type StateLicensesPanelProps = {
   /** The owner's rows, in ID order. */
   licenses: StateLicense[];
-  /** Show the Lines column: the agent profile, whose rows record Life / Health. */
+  /** Show the Lines column: the agent and carrier profiles, whose rows record Life / Health. */
   showLines?: boolean;
   /** Shown at the right of the panel title, e.g. an Add button. */
   action?: ReactNode;

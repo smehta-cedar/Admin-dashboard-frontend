@@ -170,7 +170,7 @@ function AgencyContractForm({
             {carrierOptions.map((carrier) => (
               <option key={carrier.id} value={carrier.id}>
                 {carrier.name}
-                {carrier.status === "inactive" ? " (inactive)" : ""}
+                {carrier.status !== "active" ? ` (${carrier.status})` : ""}
               </option>
             ))}
           </select>

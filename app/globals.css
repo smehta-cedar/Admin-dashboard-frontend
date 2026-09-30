@@ -247,3 +247,38 @@ html.dark {
     overflow: hidden;
   }
 }
+
+/* HR calendar detail: a modal dialog pinned to the right edge. The UA
+   stylesheet centers dialogs, so this class wins on position and size. */
+dialog.hr-drawer {
+  position: fixed;
+  inset: 0 0 0 auto;
+  width: min(22rem, 100vw);
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid var(--color-line);
+  border-radius: 0;
+  background: var(--color-surface);
+  color: var(--color-fg);
+  box-shadow: -12px 0 32px var(--color-scrim);
+}
+
+dialog.hr-drawer[open] {
+  animation: hr-drawer-in 200ms ease-out;
+}
+
+dialog.hr-drawer::backdrop {
+  background: var(--color-scrim);
+}
+
+@keyframes hr-drawer-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}

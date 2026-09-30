@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { PRIMARY_BUTTON_CLASS, ROW_BUTTON_CLASS } from "@/components/classes";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { EditIcon } from "@/components/edit-icon";
@@ -10,19 +10,11 @@ import { PageHeader } from "@/components/page-header";
 import { StatusBadge, statusRank } from "@/components/status-badge";
 import type { CarrierRecord } from "@/lib/carriers";
 import { rowNumbers } from "@/lib/row-numbers";
-import { byName } from "@/lib/text";
 import { US_STATE_NAMES, stateSummary } from "@/lib/us-states";
-import { saveCarrier } from "./actions";
-import {
-  CarrierDialog,
-  type CarrierEditor,
-  type CarrierError,
-  type CarrierValues,
-} from "./carrier-dialog";
 
 /*
- * Carriers table with add and edit through the shared CarrierDialog
- * (./carrier-dialog.tsx), which a carrier's profile opens too. Saves go to
+ * Carriers table. Add carrier goes to /carriers/new and a row's Edit to
+ * /carriers/[id]/edit (./carrier-form.tsx), which come back here. Saves go to
  * the API through the saveCarrier server action; the API records a note of
  * what changed, read on the profile. The table sorts by header and filters
  * by search. A name links to the carrier's profile, which shows its aliases
@@ -30,18 +22,15 @@ import {
  * one of the two ceilings on an agent appointment (Contracts), the other
  * being the agent's own licensedStates.
  *
- * The list is server-loaded and kept in state so a save shows at once; the
- * action also revalidates the page, so the next render agrees.
+ * The list is server-loaded; the save action revalidates it, so coming back
+ * from the form page shows the change.
  */
 
 type CarriersViewProps = {
-  initialCarriers: CarrierRecord[];
+  carriers: CarrierRecord[];
 };
 
-export function CarriersView({ initialCarriers }: CarriersViewProps) {
-  const [carriers, setCarriers] = useState(initialCarriers);
-  const [editor, setEditor] = useState<CarrierEditor | null>(null);
-
+export function CarriersView({ carriers }: CarriersViewProps) {
   // The ID shown is the carrier's place in the name-sorted list, 1…n, not the
   // API's UUID (that only appears in the profile URL). It moves when a name
   // sorts elsewhere, so it is a row number, not a key.
@@ -55,16 +44,14 @@ export function CarriersView({ initialCarriers }: CarriersViewProps) {
         id: "actions",
         header: "Action",
         cell: (carrier) => (
-          <button
-            type="button"
-            onClick={() => setEditor({ mode: "edit", carrier })}
+          <Link
+            href={`/carriers/${carrier.id}/edit?from=list`}
+            aria-label={`Edit ${carrier.name}`}
             className={`inline-flex items-center gap-1.5 ${ROW_BUTTON_CLASS}`}
           >
             <EditIcon className="size-3.5 shrink-0" />
-            <span className="sr-only"> {carrier.name}</span>
-          </button>
+          </Link>
         ),
-       
       },
       {
         id: "number",
@@ -120,26 +107,10 @@ export function CarriersView({ initialCarriers }: CarriersViewProps) {
     [numbers],
   );
 
-  /** Adds or edits a carrier through the API. Resolves with the dialog's errors, if any. */
-  const handleSave = async (values: CarrierValues): Promise<CarrierError[]> => {
-    const editing = editor?.mode === "edit" ? editor.carrier : undefined;
-    const result = await saveCarrier(values, editing?.id);
-    if (!result.ok) return result.errors;
-
-    const saved = result.carrier;
-    setCarriers((current) =>
-      (editing
-        ? current.map((carrier) => (carrier.id === saved.id ? saved : carrier))
-        : [...current, saved]
-      ).sort(byName),
-    );
-    return [];
-  };
-
   const addButton = (
-    <button type="button" onClick={() => setEditor({ mode: "add" })} className={PRIMARY_BUTTON_CLASS}>
+    <Link href="/carriers/new" className={PRIMARY_BUTTON_CLASS}>
       Add carrier
-    </button>
+    </Link>
   );
 
   return (
@@ -160,8 +131,6 @@ export function CarriersView({ initialCarriers }: CarriersViewProps) {
           unit={["carrier", "carriers"]}
         />
       )}
-
-      <CarrierDialog editor={editor} onSave={handleSave} onClose={() => setEditor(null)} />
     </>
   );
 }

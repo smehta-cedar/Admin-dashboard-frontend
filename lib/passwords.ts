@@ -84,7 +84,7 @@ export type PasswordNote = {
 export type ApiPassword = {
   id: string;
   agent: { id: string; name: string; is_active: boolean };
-  carrier: { id: string; name: string; is_active: boolean };
+  carrier: { id: string; name: string; status: string; is_active: boolean };
   username: string;
   portal_password: string;
   status: string;

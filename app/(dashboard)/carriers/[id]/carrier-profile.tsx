@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { EditIcon } from "@/components/edit-icon";
 import { HydratedNoteList } from "@/components/hydrated-note-list";
@@ -20,6 +21,7 @@ import {
   type ProfilePassword,
 } from "@/components/profile-shell";
 import { ROW_BUTTON_CLASS } from "@/components/classes";
+import { StateLicensesPanel } from "@/components/state-licenses-panel";
 import { StatusBadge } from "@/components/status-badge";
 import type { AgentStatus } from "@/lib/agents";
 import type { CarrierPolicyRecord } from "@/lib/carrier-policies";
@@ -27,14 +29,7 @@ import type { CarrierNote, CarrierRecord } from "@/lib/carriers";
 import type { PolicyTypeRecord } from "@/lib/policy-types";
 import { byName } from "@/lib/text";
 import { writableStates } from "@/lib/us-states";
-import { saveCarrier } from "../actions";
-import {
-  CARRIER_FIELD_LABELS,
-  CarrierDialog,
-  type CarrierEditor,
-  type CarrierError,
-  type CarrierValues,
-} from "../carrier-dialog";
+import { CARRIER_FIELD_LABELS } from "../carrier-form";
 import { saveCarrierPolicy } from "../policy-actions";
 import {
   CarrierPolicyDialog,
@@ -48,9 +43,9 @@ import {
  * one ceiling on its appointments), then everything linked to it — contracted
  * agents, its policies, passwords, and change notes. An agent row shows the
  * states they can actually write here: their appointment narrowed to their
- * own licences (Agents) and this carrier's footprint. Edit opens the same
- * CarrierDialog as the Carriers list and saves through the same server
- * action. Agent names link to their profiles.
+ * own licences (Agents) and this carrier's footprint. Edit opens
+ * /carriers/[id]/edit (../carrier-form.tsx), which comes back here with the
+ * saved carrier. Agent names link to their profiles.
  *
  * Policies live here and nowhere else: the Policies panel lists the carrier's
  * named policies (name, policy type, available states, status) and opens the
@@ -61,13 +56,14 @@ import {
  * Same layout as the agent profile, built from the shared pieces in
  * components/profile-shell.tsx: the name row (initials, name, status, Edit)
  * over one header card holding the carrier's details beside its available
- * states, then panels: Agents beside Notes, and Policies and Passwords full
- * width under them.
+ * states, then panels: State licences (each state's licence #, lines,
+ * status and dates) full width, Agents beside Notes, and Policies and
+ * Passwords full width under them.
  *
- * The carrier and its policies are kept in state so an edit shows at once;
- * the notes come from the server (the API writes them), and the action's
- * revalidation brings the new one in. page.tsx keys this component by
- * carrier ID, so switching carriers starts that state again.
+ * The policies are kept in state so a policy edit shows at once; the carrier
+ * and the notes come from the server (the API writes the notes), and the
+ * save actions' revalidation brings changes in. page.tsx keys this component
+ * by carrier ID, so switching carriers starts that state again.
  */
 
 type AgentRow = {
@@ -81,7 +77,7 @@ type AgentRow = {
 };
 
 type CarrierProfileProps = {
-  initialCarrier: CarrierRecord;
+  carrier: CarrierRecord;
   /** The carrier's place in the name-sorted list, 1…n, as the Carriers page shows it. */
   number: number;
   /** Contracted agents, sorted by name. */
@@ -100,7 +96,7 @@ const AGENT_COLUMNS = ["Agent", "Writing number", "Writable states", "Status"];
 const POLICY_COLUMNS = ["Action", "Name", "Policy type", "Available states", "Status"];
 
 export function CarrierProfile({
-  initialCarrier,
+  carrier,
   number,
   agents,
   initialPolicies,
@@ -108,8 +104,7 @@ export function CarrierProfile({
   passwords,
   notes,
 }: CarrierProfileProps) {
-  const [carrier, setCarrier] = useState(initialCarrier);
-  const [editor, setEditor] = useState<CarrierEditor | null>(null);
+  const router = useRouter();
   const [policies, setPolicies] = useState(initialPolicies);
   const [policyEditor, setPolicyEditor] = useState<CarrierPolicyEditor | null>(null);
 
@@ -119,14 +114,6 @@ export function CarrierProfile({
     ...agent,
     writable: writableStates(agent.appointedStates, agent.licensedStates, carrier.availableStates),
   }));
-
-  /** Edits this carrier through the API. Resolves with the dialog's errors, if any. */
-  const saveCarrierEdit = async (values: CarrierValues): Promise<CarrierError[]> => {
-    const result = await saveCarrier(values, carrier.id);
-    if (!result.ok) return result.errors;
-    setCarrier(result.carrier);
-    return [];
-  };
 
   /** Adds or edits one of this carrier's policies through the API. Resolves with the dialog's errors, if any. */
   const savePolicy = async (values: CarrierPolicyValues): Promise<CarrierPolicyError[]> => {
@@ -144,7 +131,7 @@ export function CarrierProfile({
       <ProfileNameRow
         name={carrier.name}
         status={carrier.status}
-        onEdit={() => setEditor({ mode: "edit", carrier })}
+        onEdit={() => router.push(`/carriers/${carrier.id}/edit?from=profile`)}
       />
 
       <ProfileHeader
@@ -154,6 +141,18 @@ export function CarrierProfile({
               <span className="font-mono">#{number}</span>
             </Detail>
             <Detail label="Aliases">{carrier.aliases.join(", ")}</Detail>
+            <Detail label="Link">
+              {carrier.link ? (
+                <a
+                  href={carrier.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`break-all ${PROFILE_LINK_CLASS}`}
+                >
+                  {carrier.link}
+                </a>
+              ) : null}
+            </Detail>
             <Detail label="Lines of business">
               {carrier.linesOfBusiness.length > 0 ? (
                 <ul className="flex flex-wrap gap-1.5">
@@ -188,6 +187,8 @@ export function CarrierProfile({
       </ProfileHeader>
 
       <div className="mt-5 grid items-start gap-5 xl:grid-cols-2">
+        <StateLicensesPanel licenses={carrier.licenses} showLines className="xl:col-span-2" />
+
         <Panel title="Agents" count={agentRows.length}>
           {agentRows.length === 0 ? (
             <PanelEmpty>No contracted agents.</PanelEmpty>
@@ -281,8 +282,6 @@ export function CarrierProfile({
 
         <PasswordsPanel passwords={passwords} partyHeading="Agent" className="xl:col-span-2" />
       </div>
-
-      <CarrierDialog editor={editor} onSave={saveCarrierEdit} onClose={() => setEditor(null)} />
 
       <CarrierPolicyDialog
         editor={policyEditor}

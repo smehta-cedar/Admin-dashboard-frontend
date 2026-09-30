@@ -91,7 +91,7 @@ export type CarrierContractNote = {
 export type ApiContract = {
   id: string;
   agent: { id: string; name: string; is_active: boolean };
-  carrier: { id: string; name: string; is_active: boolean };
+  carrier: { id: string; name: string; status: string; is_active: boolean };
   writing_number: string;
   appointed_states: string[];
   created_at: string;

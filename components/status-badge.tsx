@@ -1,7 +1,7 @@
 /**
- * Every status a badge can show. Agents and carriers use active/inactive;
- * passwords add pending; state licences add review, applied, expired,
- * cancelled and jit.
+ * Every status a badge can show. Agents use active/inactive; carriers add
+ * applied, pending and expired; passwords add pending; state licences add
+ * review, applied, expired, cancelled and jit.
  */
 type Status = "active" | "review" | "pending" | "applied" | "expired" | "cancelled" | "jit" | "inactive";
 

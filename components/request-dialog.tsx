@@ -67,7 +67,7 @@ function PartyOptions({ parties, placeholder }: { parties: RequestParty[]; place
       {parties.map((party) => (
         <option key={party.id} value={party.id}>
           {party.name}
-          {party.status === "inactive" ? " (inactive)" : ""}
+          {party.status !== "active" ? ` (${party.status})` : ""}
         </option>
       ))}
     </>

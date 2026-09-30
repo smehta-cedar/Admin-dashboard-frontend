@@ -8,10 +8,15 @@ import "server-only";
  * changed something.
  *
  * A carrier is listed once however many lines of business it writes (e.g.
- * HealthSpring is both MAPD and Supp/Ancillary). Writing numbers are not
+ * HealthSpring is both MAPD and Ancillary). Writing numbers are not
  * stored on carriers; they live on carrier contracts in
  * lib/carrier-contracts.ts. Portal username and password live with
  * Passwords in lib/passwords.ts.
+ *
+ * licenses are the carrier's state rows, recorded like an agent's licences
+ * (number, status, start and expiration dates, Life / Health). Every row
+ * counts as an available state whatever its status: the API keeps
+ * availableStates equal to the rows' states.
  *
  * availableStates is the carrier's footprint for the agency: one of the two
  * ceilings on every appointment with it (lib/carrier-contracts.ts), the other
@@ -28,12 +33,14 @@ import "server-only";
  */
 
 import { apiFetch, apiGet, apiGetAll, ApiError } from "@/lib/api-server";
+import { toCarrierStatus, type CarrierStatus } from "@/lib/carrier-statuses";
 import type { FieldChange } from "@/lib/change-notes";
 import { LINES_OF_BUSINESS, type LineOfBusiness } from "@/lib/lines-of-business";
+import { STATE_LICENSE_STATUSES, type StateLicense, type StateLicenseStatus } from "@/lib/state-licenses";
 
 export type { LineOfBusiness } from "@/lib/lines-of-business";
 
-export type CarrierStatus = "active" | "inactive";
+export type { CarrierStatus } from "@/lib/carrier-statuses";
 
 export type CarrierRecord = {
   /** The API's UUID. Not a carrier code. */
@@ -44,12 +51,19 @@ export type CarrierRecord = {
   aliases: string[];
   /** At least one, in LINES_OF_BUSINESS order. */
   linesOfBusiness: LineOfBusiness[];
+  /** The carrier's site or agent portal, a full URL. Empty when none. */
+  link: string;
   /**
    * US state codes from lib/us-states.ts the carrier is available in for the
    * agency, unique and in code order. Empty when none yet (not "all states").
    */
   availableStates: string[];
-  /** The API's is_active. Defaults to "active" when adding. */
+  /** One row per available state, in state-code order. */
+  licenses: StateLicense[];
+  /**
+   * The API's status, one of CARRIER_STATUSES (lib/carrier-statuses.ts).
+   * Defaults to "active" when adding. Only "active" is in force.
+   */
   status: CarrierStatus;
   /**
    * The API's agent_accessible: true only when the agency's live contract with
@@ -60,11 +74,26 @@ export type CarrierRecord = {
   agentAccessible: boolean;
 };
 
-/** Carrier fields a note can record. The ID never changes. */
-export type CarrierField = Exclude<keyof CarrierRecord, "id" | "agentAccessible">;
+/** Carrier fields a note can record, in form order. The ID never changes. */
+export type CarrierField =
+  | "name"
+  | "aliases"
+  | "linesOfBusiness"
+  | "link"
+  | "status"
+  | "availableStates"
+  | "licenseNumbers"
+  | "licenseStatuses"
+  | "licenseLines"
+  | "licenseDates";
 
-/** What the add / edit form submits: every field but the ID and the derived flag. */
-export type CarrierValues = Omit<CarrierRecord, "id" | "agentAccessible">;
+/** One state row as the form edits it: everything but the row's ID. */
+export type CarrierLicenseValues = Omit<StateLicense, "id">;
+
+/** What the add / edit form submits. The available states come from the rows. */
+export type CarrierValues = Pick<CarrierRecord, "name" | "aliases" | "linesOfBusiness" | "link" | "status"> & {
+  licenses: CarrierLicenseValues[];
+};
 
 /** A save error, shown under the field it names, or under the form for `form`. */
 export type CarrierError = { field: CarrierField | "form"; message: string };
@@ -93,11 +122,27 @@ export type ApiCarrier = {
   name: string;
   aliases: string[];
   lines_of_business: string[];
+  link: string;
   available_states: string[];
+  licenses: ApiCarrierLicense[];
   agent_accessible: boolean;
+  status: string;
+  /** True only when status is "active". */
   is_active: boolean;
   created_at: string;
   updated_at: string;
+};
+
+/** A state row as the API serialises it (CarrierLicenseSerializer). */
+type ApiCarrierLicense = {
+  id: string;
+  state: string;
+  license_number: string;
+  status: string;
+  start_date: string | null;
+  end_date: string | null;
+  life: boolean;
+  health: boolean;
 };
 
 /** A note as the API serialises it (CarrierNoteSerializer). */
@@ -115,7 +160,12 @@ const NOTE_FIELDS: Record<string, CarrierField> = {
   name: "name",
   aliases: "aliases",
   lines_of_business: "linesOfBusiness",
+  link: "link",
   available_states: "availableStates",
+  license_numbers: "licenseNumbers",
+  license_statuses: "licenseStatuses",
+  license_lines: "licenseLines",
+  license_dates: "licenseDates",
   status: "status",
 };
 
@@ -132,9 +182,31 @@ export function toCarrierRecord(carrier: ApiCarrier): CarrierRecord {
     name: carrier.name,
     aliases: carrier.aliases,
     linesOfBusiness: LINES_OF_BUSINESS.filter((line) => carrier.lines_of_business.includes(line)),
+    link: carrier.link,
     availableStates: [...new Set(carrier.available_states)].sort(),
-    status: carrier.is_active ? "active" : "inactive",
+    licenses: carrier.licenses
+      .map((row) => toStateLicense(row, carrier.name))
+      .sort((a, b) => a.state.localeCompare(b.state)),
+    status: toCarrierStatus(carrier.status, carrier.is_active, carrier.name),
     agentAccessible: carrier.agent_accessible,
+  };
+}
+
+/** A state row as the app holds it. An unknown status reads as "active" with a console warning. */
+function toStateLicense(row: ApiCarrierLicense, carrierName: string): StateLicense {
+  const knownStatus = STATE_LICENSE_STATUSES.includes(row.status);
+  if (!knownStatus) {
+    console.warn(`Carrier ${carrierName} has ${row.state} status ${JSON.stringify(row.status)}; treating it as "active".`);
+  }
+  return {
+    id: row.id,
+    state: row.state,
+    licenseNumber: row.license_number,
+    status: knownStatus ? (row.status as StateLicenseStatus) : "active",
+    startDate: row.start_date ?? "",
+    endDate: row.end_date ?? "",
+    life: row.life,
+    health: row.health,
   };
 }
 

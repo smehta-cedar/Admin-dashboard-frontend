@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useId, type ReactNode } from "react";
+import { useId, type ComponentProps, type ReactNode } from "react";
 import { CredentialValue } from "@/components/credential-value";
 import { EditIcon } from "@/components/edit-icon";
 import { LicenseNumber } from "@/components/license-number";
@@ -47,7 +47,7 @@ export function ProfileAvatar({ name }: { name: string }) {
 
 type ProfileNameRowProps = {
   name: string;
-  status: "active" | "inactive";
+  status: ComponentProps<typeof StatusBadge>["status"];
   /** Small caps line over the name, e.g. "Agency". */
   eyebrow?: string;
   /** Opens the entity's edit dialog. Left off when the row is only for viewing. */

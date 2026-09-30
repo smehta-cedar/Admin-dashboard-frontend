@@ -308,8 +308,8 @@ export function CarrierContractsView({
                                   >
                                     {carrier.name}
                                   </Link>
-                                  {carrier.status === "inactive" ? (
-                                    <span className="shrink-0 text-xs font-normal text-fg-faint">inactive</span>
+                                  {carrier.status !== "active" ? (
+                                    <span className="shrink-0 text-xs font-normal text-fg-faint">{carrier.status}</span>
                                   ) : null}
                                 </h3>
                                 {carrier.linesOfBusiness.length > 0 ? (
@@ -422,8 +422,8 @@ export function CarrierContractsView({
                         <Link href={`/carriers/${carrier.id}`} className="hover:underline">
                           {carrier.name}
                         </Link>
-                        {carrier.status === "inactive" ? (
-                          <span className="text-fg-faint"> (inactive)</span>
+                        {carrier.status !== "active" ? (
+                          <span className="text-fg-faint"> ({carrier.status})</span>
                         ) : null}
                         <button
                           type="button"

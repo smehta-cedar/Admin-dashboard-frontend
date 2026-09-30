@@ -9,5 +9,5 @@ export const metadata: Metadata = {
 export default async function CarriersPage() {
   const carriers = await getCarriers();
 
-  return <CarriersView initialCarriers={carriers} />;
+  return <CarriersView carriers={carriers} />;
 }

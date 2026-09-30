@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { fileRequest, setRequestStatus } from "@/app/(dashboard)/hr/actions";
+import type { CarrierStatus } from "@/lib/carrier-statuses";
 import { refreshNotificationsSoon } from "@/lib/notifications";
 import { checkRequestValues, type RequestError, type RequestValues } from "@/lib/request-options";
 import type { RequestRecord, RequestStatus } from "@/lib/requests";
@@ -19,7 +20,8 @@ import type { RequestRecord, RequestStatus } from "@/lib/requests";
  * the HR page's names, so neither has to load them again.
  */
 
-export type RequestParty = { id: string; name: string; status: "active" | "inactive" };
+/** Agents are active or inactive; a carrier can also be applied, pending or expired. */
+export type RequestParty = { id: string; name: string; status: CarrierStatus };
 
 type RequestsStore = {
   requests: RequestRecord[];

@@ -362,8 +362,16 @@ audit; see the table in §2. Still copied per view (small, and may diverge):
 the name toggle button with chevron and the aliases section.
 
 Carriers ([app/(dashboard)/carriers/carriers-view.tsx](../app/(dashboard)/carriers/carriers-view.tsx))
-uses the shared `CarrierDialog` (same component the carrier profile opens).
-Two variations on the Agents form: a required checkbox group (`<fieldset>` +
+adds and edits on pages, like Agents: `/carriers/new` and
+`/carriers/[id]/edit` both render `CarrierFormPage`
+([carrier-form.tsx](../app/(dashboard)/carriers/carrier-form.tsx)) — an
+Identity card (name, aliases, link, lines of business; the status select in
+the header), an Available states card (states added one at a time like an
+agent's licences: "+ Add state" opens a row with state, licence #, start and
+expiration dates, status and Life / Health; the Added table has Edit and
+Delete) and the sticky button bar, built from
+`FormSection` in `components/producer-form.tsx`. `?from=list` returns to the
+list, otherwise to the profile. Two variations on the Agents form: a required checkbox group (`<fieldset>` +
 `<legend>`, "at least one" checked in the form, error on each checkbox via
 `aria-invalid`/`aria-describedby`), and a name uniqueness check against other
 carriers' names *and* aliases, ignoring case — done by the API (see
@@ -382,13 +390,17 @@ the next entities (Agents, Passwords) follow:
   errors rather than showing an empty table.
 - [lib/carriers.ts](../lib/carriers.ts) keeps the same `CarrierRecord` the
   views always had and maps the API's shape to it (`lines_of_business` →
-  `linesOfBusiness`, `available_states` → `availableStates`, `is_active` →
-  `status`). IDs are the API's UUIDs, used in profile URLs only; the ID
+  `linesOfBusiness`, `licenses` (the state rows as `StateLicense`s; the API
+  keeps `available_states` equal to their states), `link` (optional URL, `""` when none; an external link
+  on the profile), `available_states` → `availableStates`, `status` → `status`: active,
+  applied, pending, expired or inactive (`lib/carrier-statuses.ts`); the API
+  keeps `is_active` true only for active, so `?is_active=` means "in force").
+  IDs are the API's UUIDs, used in profile URLs only; the ID
   column and the profile's "Carrier ID" show the carrier's place in the
   name-sorted list, 1…n (`rowNumbers` in `lib/row-numbers.ts`, a row
   number, not a key). No `nextId`. `getCarriers()` (by name), `getCarrier(id)` (null on 404) and
   `getCarrierNotes(carrierId)` (one carrier's, newest first). `CarrierValues`
-  and `CarrierError` live here too, so the dialog and the action share them.
+  and `CarrierError` live here too, so the form page and the action share them.
 - [app/(dashboard)/carriers/actions.ts](../app/(dashboard)/carriers/actions.ts)
   (`"use server"`): `saveCarrier(values, editingId?)` posts to
   `carriers/create/` or patches `carriers/{id}/` and answers
@@ -397,10 +409,10 @@ the next entities (Agents, Passwords) follow:
   else (403, API down) as a `"form"` error shown under the form; a 401 sends
   the user to sign in. On success it calls `revalidatePath("/", "layout")`,
   since every dashboard page reads carriers (navbar search, request dialog).
-- The dialog's `onSave` is async and resolves with the errors; the form
-  disables its buttons and reads "Saving…" while it waits. The list and the
-  profile update their state from the returned record, so the change shows
-  at once, and the revalidation makes the next render agree.
+- The form page awaits the action; it disables its buttons and reads
+  "Saving…" while it waits, shows the errors on failure, and on success goes
+  back to where it came from. The revalidation means the list and the
+  profile render the saved carrier.
 - **Notes are written by the API**, not the view: an "added" note on create
   (every filled field) and an "edited" note on an update that changed
   something, with `createdBy` (the user's full name). The list page no longer

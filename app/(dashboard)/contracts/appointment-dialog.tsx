@@ -247,7 +247,7 @@ function AppointmentForm({ id, editor, agents, carriers, onSave, close }: Appoin
             {carrierOptions.map((option) => (
               <option key={option.id} value={option.id}>
                 {option.name}
-                {option.status === "inactive" ? " (inactive)" : ""}
+                {option.status !== "active" ? ` (${option.status})` : ""}
               </option>
             ))}
           </select>

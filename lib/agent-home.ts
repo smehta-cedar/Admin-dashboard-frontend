@@ -18,6 +18,7 @@ import { toAgentRecord, toLicenseRecords, type AgentRecord, type ApiAgent } from
 import { apiFetch } from "@/lib/api-server";
 import { toContractRecord, type ApiContract, type CarrierContractRecord } from "@/lib/carrier-contracts";
 import { toPasswordRecord, type ApiPassword, type PasswordRecord } from "@/lib/passwords";
+import { toCarrierStatus } from "@/lib/carrier-statuses";
 import type { CarrierRecord } from "@/lib/carriers";
 import { toCertificationRecord, type ApiCertification, type CertificationRecord } from "@/lib/certifications";
 
@@ -67,7 +68,7 @@ export async function getAgentHome(): Promise<AgentHome | null> {
       .map((contract) => ({
         id: contract.carrier.id,
         name: contract.carrier.name,
-        status: contract.carrier.is_active ? ("active" as const) : ("inactive" as const),
+        status: toCarrierStatus(contract.carrier.status, contract.carrier.is_active, contract.carrier.name),
         availableStates: [...contract.appointed_states],
         agentAccessible: false,
       }))

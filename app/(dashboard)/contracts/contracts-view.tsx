@@ -120,7 +120,7 @@ const COLUMNS: DataTableColumn<AppointmentRow>[] = [
         <Link href={`/carriers/${carrier.id}`} className="text-fg hover:underline">
           {carrier.name}
         </Link>
-        {carrier.status === "inactive" ? <span className="text-fg-faint"> (inactive)</span> : null}
+        {carrier.status !== "active" ? <span className="text-fg-faint"> ({carrier.status})</span> : null}
       </span>
     ),
     sortValue: ({ carrier }) => carrier.name,
@@ -376,7 +376,7 @@ export function ContractsView({
             id: carrier.id,
             href: `/carriers/${carrier.id}`,
             name: carrier.name,
-            inactive: carrier.status === "inactive",
+            inactive: carrier.status !== "active",
             contract,
           })),
         }))
@@ -387,8 +387,8 @@ export function ContractsView({
               <Link href={`/carriers/${item.id}`} className="hover:underline">
                 {item.name}
               </Link>
-              {item.status === "inactive" ? (
-                <span className="font-normal text-fg-faint"> (inactive)</span>
+              {item.status !== "active" ? (
+                <span className="font-normal text-fg-faint"> ({item.status})</span>
               ) : null}
             </>
           ),

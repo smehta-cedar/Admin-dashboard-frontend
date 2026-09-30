@@ -23,8 +23,8 @@ import { HrCalendar, type DayOffMark, type ExpiryMark } from "./hr-calendar";
  * request is listed, whatever its type or status; contracts have no date so
  * the list is the only place they show. Merch orders from the shop
  * (the merch type) list too, with the buyer in the Person column and the
- * shipping and contact details in the row; only day-off requests reach the
- * calendar. Status changes go to the API through the store; one the API
+ * shipping and contact details in the row; only day-off requests that are
+ * not denied reach the calendar. Status changes go to the API through the store; one the API
  * refuses is put back and its message shown above the calendar.
  */
 
@@ -71,7 +71,7 @@ export function HrView({ licenses, today }: HrViewProps) {
   const merchContact = (request: MerchRequestRecord) => [request.address, `${request.email} · ${request.phone}`];
 
   const dayOffs: DayOffMark[] = requests.flatMap((request) =>
-    request.type === "dayOff"
+    request.type === "dayOff" && request.status !== "denied"
       ? [
           {
             key: request.id,
@@ -79,6 +79,7 @@ export function HrView({ licenses, today }: HrViewProps) {
             status: request.status,
             startDate: request.startDate,
             endDate: request.endDate,
+            note: request.note,
           },
         ]
       : [],
@@ -91,6 +92,9 @@ export function HrView({ licenses, today }: HrViewProps) {
       agentName: agentName(license.agentId),
       state: license.state,
       date: license.endDate,
+      startDate: license.startDate,
+      licenseNumber: license.licenseNumber,
+      licenseStatus: license.status,
     }));
 
   const pendingCount = requests.filter((request) => request.status === "pending").length;
@@ -202,6 +206,7 @@ export function HrView({ licenses, today }: HrViewProps) {
         today={today}
         dayOffs={dayOffs}
         expiries={expiries}
+        onStatusChange={setStatus}
       />
 
       <section aria-labelledby="hr-requests-heading" className="mt-8">

@@ -6,7 +6,7 @@
  * API checks the name against every other carrier's name and aliases, needs
  * at least one line of business, and records the change note.
  *
- * What the API answers, and what the dialog shows for it:
+ * What the API answers, and what the form page shows for it:
  *
  *   400 invalid             a field's message under that field
  *   401 token_not_valid     the session is gone            -> back to sign in
@@ -38,8 +38,10 @@ const ERROR_FIELDS: Record<string, CarrierError["field"]> = {
   name: "name",
   aliases: "aliases",
   lines_of_business: "linesOfBusiness",
-  available_states: "availableStates",
-  is_active: "status",
+  link: "link",
+  // The state rows sit under Available states on the form.
+  licenses: "availableStates",
+  status: "status",
 };
 
 /** Adds a carrier, or edits the one with `editingId`. */
@@ -48,8 +50,17 @@ export async function saveCarrier(values: CarrierValues, editingId?: string): Pr
     name: values.name,
     aliases: values.aliases,
     lines_of_business: values.linesOfBusiness,
-    available_states: values.availableStates,
-    is_active: values.status === "active",
+    link: values.link,
+    licenses: values.licenses.map((row) => ({
+      state: row.state,
+      license_number: row.licenseNumber,
+      status: row.status,
+      start_date: row.startDate || null,
+      end_date: row.endDate || null,
+      life: row.life,
+      health: row.health,
+    })),
+    status: values.status,
   };
   const result = editingId
     ? await apiFetch<ApiCarrier>(`/carriers/${encodeURIComponent(editingId)}/`, { method: "PATCH", body })
