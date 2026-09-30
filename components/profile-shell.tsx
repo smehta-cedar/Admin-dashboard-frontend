@@ -61,9 +61,7 @@ export function ProfileNameRow({ name, status, eyebrow, onEdit }: ProfileNameRow
       <div className="flex min-w-0 items-center gap-3.5">
         <ProfileAvatar name={name} />
         <div className="min-w-0">
-          {eyebrow ? (
-            <p className="text-xs font-medium uppercase tracking-wide text-fg-subtle">{eyebrow}</p>
-          ) : null}
+          {eyebrow ? <p className="text-xs font-medium uppercase tracking-wide text-fg-subtle">{eyebrow}</p> : null}
           <h1 className="text-xl font-semibold tracking-tight text-fg">{name}</h1>
           <div className="mt-0.5 flex">
             <StatusBadge status={status} />
@@ -92,13 +90,7 @@ type ProfileHeaderProps = {
 };
 
 /** The header card: contact details beside one titled aside. Stacks below `lg`. */
-export function ProfileHeader({
-  details,
-  asideTitle,
-  asideCount,
-  asideTooltip,
-  children,
-}: ProfileHeaderProps) {
+export function ProfileHeader({ details, asideTitle, asideCount, asideTooltip, children }: ProfileHeaderProps) {
   const headingId = useId();
 
   return (
@@ -107,15 +99,8 @@ export function ProfileHeader({
         {details}
       </dl>
 
-      <section
-        aria-labelledby={headingId}
-        className="min-w-0 border-t border-line px-5 py-4 lg:border-l lg:border-t-0"
-      >
-        <h2
-          id={headingId}
-          title={asideTooltip}
-          className="flex items-center gap-2 text-sm font-semibold text-fg"
-        >
+      <section aria-labelledby={headingId} className="min-w-0 border-t border-line px-5 py-4 lg:border-l lg:border-t-0">
+        <h2 id={headingId} title={asideTooltip} className="flex items-center gap-2 text-sm font-semibold text-fg">
           {asideTitle}
           <Count value={asideCount} />
         </h2>
@@ -217,9 +202,7 @@ export function Detail({ label, children }: { label: string; children: ReactNode
   return (
     <div className="contents">
       <dt className={PROFILE_LABEL_CLASS}>{label}</dt>
-      <dd className="min-w-0 break-words text-sm text-fg">
-        {children || <span className="text-fg-subtle">—</span>}
-      </dd>
+      <dd className="min-w-0 break-words text-sm text-fg">{children || <span className="text-fg-subtle">—</span>}</dd>
     </div>
   );
 }
@@ -275,8 +258,7 @@ type ProfileTableProps<T> = {
  * `table-fixed` keeps columns evenly spaced; the caller renders the cells.
  */
 export function ProfileTable<T>({ columns, rows, rowKey, children }: ProfileTableProps<T>) {
-  const { pageItems, start, pageSize, setPageSize, currentPage, pageCount, setPage } =
-    useTablePagination(rows);
+  const { pageItems, start, pageSize, setPageSize, currentPage, pageCount, setPage } = useTablePagination(rows);
 
   return (
     <div>
@@ -341,7 +323,8 @@ export function StateChipCell({ codes, label, empty }: StateChipCellProps) {
 /** A password row on a profile, with the other party (carrier or agent) resolved to a link. */
 export type ProfilePassword = PasswordRecord & {
   partyName: string;
-  partyHref: string;
+  /** Unset on an agent's own profile: the name shows unlinked. */
+  partyHref?: string;
 };
 
 type PasswordsPanelProps = {
@@ -354,11 +337,7 @@ type PasswordsPanelProps = {
 };
 
 /** The Passwords panel: the other party, portal username, password and status. */
-export function PasswordsPanel({
-  passwords,
-  partyHeading,
-  className,
-}: PasswordsPanelProps) {
+export function PasswordsPanel({ passwords, partyHeading, className }: PasswordsPanelProps) {
   return (
     <Panel title="Passwords" count={passwords.length} className={className}>
       {passwords.length === 0 ? (
@@ -372,9 +351,13 @@ export function PasswordsPanel({
           {(record) => (
             <>
               <td className="min-w-24 whitespace-nowrap px-3 py-2.5">
-                <Link href={record.partyHref} className={PROFILE_LINK_CLASS}>
-                  {record.partyName}
-                </Link>
+                {record.partyHref ? (
+                  <Link href={record.partyHref} className={PROFILE_LINK_CLASS}>
+                    {record.partyName}
+                  </Link>
+                ) : (
+                  record.partyName
+                )}
               </td>
               <td className="px-3 py-2.5 text-fg-muted">
                 <CredentialValue value={record.username} label="username" />

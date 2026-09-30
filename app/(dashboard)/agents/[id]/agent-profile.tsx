@@ -113,6 +113,8 @@ import { AGENT_FIELD_LABELS } from "../agent-dialog";
  * carrier names unlinked, and no Pending (it is staff's to-do list). Passwords
  * and Notes are null there, as the agent's payload has neither, and a null
  * section stays out of the list, like Certifications for a role without it.
+ * `hiddenSections` leaves out the rest the agent's role doesn't grant, and the
+ * page then opens on the first section left.
  */
 
 type CarrierOption = Pick<CarrierRecord, "id" | "name" | "status" | "availableStates" | "agentAccessible">;
@@ -135,6 +137,8 @@ type AgentProfileProps = {
   notes: AgentNote[] | null;
   /** The agent's own view: nothing edits and nothing links into the staff app. */
   readOnly?: boolean;
+  /** Sections to leave out of the list: on the agent's own view, those their role doesn't grant. */
+  hiddenSections?: SectionKey[];
 };
 
 const CARRIER_COLUMNS = ["Carrier", "Writing number", "Writable states", "Status"];
@@ -297,7 +301,7 @@ function pendingItems({ agent, agentCarriers, passwords }: PendingInput): Pendin
   return items;
 }
 
-type SectionKey = "details" | "pending" | "carriers" | "licences" | "certifications" | "passwords" | "notes";
+export type SectionKey = "details" | "pending" | "carriers" | "licences" | "certifications" | "passwords" | "notes";
 
 /** One item of the section list: its label and the count its panel shows. */
 type Section = { key: SectionKey; label: string; count: number };
@@ -312,6 +316,7 @@ export function AgentProfile({
   passwords,
   notes,
   readOnly = false,
+  hiddenSections = [],
 }: AgentProfileProps) {
   const agent = initialAgent;
   const licenses = initialLicenses;
@@ -319,7 +324,7 @@ export function AgentProfile({
   const router = useRouter();
   const [certificationEditor, setCertificationEditor] = useState<CertificationEditor | null>(null);
   // Which section the panel shows. Carriers first: it is what the page is opened for.
-  const [section, setSection] = useState<SectionKey>("carriers");
+  const [section, setSection] = useState<SectionKey | null>(null);
   // Appointments added here are for this agent only.
   const { contracts, editor, setEditor, saveContract } = useAppointments({
     initialContracts,
@@ -441,7 +446,7 @@ export function AgentProfile({
   ];
   const filledCount = details.filter((row) => row.filled).length;
 
-  const sections: Section[] = [
+  const allSections: Section[] = [
     { key: "details", label: "Details", count: filledCount },
     ...(readOnly ? [] : [{ key: "pending" as const, label: "Pending", count: pending.length }]),
     { key: "carriers", label: "Carriers", count: agentCarriers.length },
@@ -467,6 +472,13 @@ export function AgentProfile({
       : []),
     ...(notes ? [{ key: "notes" as const, label: "Notes", count: notes.length }] : []),
   ];
+  const sections = allSections.filter((item) => !hiddenSections.includes(item.key));
+  // The chosen section while it is listed; before a choice, Carriers or else the first one.
+  const shown =
+    sections.find((item) => item.key === section)?.key ??
+    sections.find((item) => item.key === "carriers")?.key ??
+    sections[0]?.key ??
+    null;
 
   /** Adds or edits one of this agent's certifications through the API. Resolves with the dialog's errors, if any. */
   const saveAgentCertification = async (values: CertificationValues): Promise<CertificationError[]> => {
@@ -497,7 +509,7 @@ export function AgentProfile({
         <nav aria-label="Profile sections">
           <ul className="flex flex-wrap gap-1 lg:flex-col">
             {sections.map((item) => {
-              const active = item.key === section;
+              const active = item.key === shown;
               return (
                 <li key={item.key}>
                   <button
@@ -516,11 +528,11 @@ export function AgentProfile({
         </nav>
 
         <div className="min-w-0">
-          {section === "details" ? (
+          {shown === "details" ? (
             <Panel title="Details" count={filledCount}>
               <DetailsTable rows={details} />
             </Panel>
-          ) : section === "pending" ? (
+          ) : shown === "pending" ? (
             <Panel title="Pending" count={pending.length}>
               {pending.length === 0 ? (
                 <PanelEmpty>Nothing is pending.</PanelEmpty>
@@ -545,7 +557,7 @@ export function AgentProfile({
                 </ul>
               )}
             </Panel>
-          ) : section === "carriers" ? (
+          ) : shown === "carriers" ? (
             <Panel
               title="Carriers"
               count={agentCarriers.length}
@@ -597,9 +609,9 @@ export function AgentProfile({
                 </ProfileTable>
               )}
             </Panel>
-          ) : section === "licences" ? (
+          ) : shown === "licences" ? (
             <StateLicensesPanel licenses={licenses} showLines />
-          ) : section === "certifications" && certifications ? (
+          ) : shown === "certifications" && certifications ? (
             <Panel
               title="Certifications"
               count={certifications.length}
@@ -636,15 +648,17 @@ export function AgentProfile({
                 />
               )}
             </Panel>
-          ) : section === "passwords" && passwords ? (
+          ) : shown === "passwords" && passwords ? (
             <PasswordsPanel passwords={passwords} partyHeading="Carrier" />
-          ) : section === "notes" && notes ? (
+          ) : shown === "notes" && notes ? (
             <Panel title="Notes" count={notes.length}>
               {/* Cancels NoteList's own top margin; the panel body already pads. */}
               <div className="-mt-2">
                 <HydratedNoteList notes={notes} labels={AGENT_FIELD_LABELS} />
               </div>
             </Panel>
+          ) : shown === null ? (
+            <PanelEmpty>Nothing is shared with you yet. Ask the office.</PanelEmpty>
           ) : null}
         </div>
       </div>
