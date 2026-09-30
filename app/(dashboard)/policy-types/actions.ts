@@ -4,7 +4,8 @@
  * Add or edit a policy type, run on the Next server so the access token stays
  * in its HttpOnly cookie. POST /policy-types/create/ or PATCH
  * /policy-types/{id}/; the API checks the name against every other live
- * policy type (ignoring case) and records the change note.
+ * policy type (ignoring case), checks that a per-carrier type has carriers
+ * with an agency contract, and records the change note.
  *
  * What the API answers, and what the dialog shows for it:
  *
@@ -35,7 +36,8 @@ export type SavePolicyTypeResult =
 /** API field name -> form field, for a 400's errors. Anything else goes under the form. */
 const ERROR_FIELDS: Record<string, PolicyTypeError["field"]> = {
   name: "name",
-  certification_required: "certificationRequired",
+  certification_scope: "certificationScope",
+  certification_carriers: "certificationCarriers",
   is_active: "status",
 };
 
@@ -46,7 +48,9 @@ export async function savePolicyType(
 ): Promise<SavePolicyTypeResult> {
   const body = {
     name: values.name,
-    certification_required: values.certificationRequired,
+    certification_scope: values.certificationScope,
+    // Other scopes clear them; sending [] says the same thing.
+    certification_carriers: values.certificationScope === "per_carrier" ? values.certificationCarrierIds : [],
     is_active: values.status === "active",
   };
   const result = editingId

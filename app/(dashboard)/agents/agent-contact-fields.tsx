@@ -27,7 +27,7 @@ import { formatPhone } from "@/lib/phone";
  * digits, typed into a masked input like a password.
  */
 
-/** The section's fields, exactly as AgentRecord holds them. */
+/** The section's fields, as AgentRecord holds them. */
 export type AgentContact = Pick<
   AgentRecord,
   "personalEmail" | "personalPhone" | "address" | "dateOfBirth" | "joinDate" | "startDate" | "ssnLast4"

@@ -1,4 +1,5 @@
 import type { CertificationRecord, CertificationStatus } from "@/lib/certifications";
+import type { CarrierRef } from "@/lib/policy-types";
 
 /*
  * The certificate rows the agent form page edits. A plain module, not a
@@ -11,6 +12,8 @@ export type CertificateDraft = {
   id: string;
   policyTypeId: string;
   policyTypeName: string;
+  /** Carriers covered, in name order; empty unless the type is certified per carrier. */
+  carriers: CarrierRef[];
   startDate: string;
   endDate: string;
   isVerified: boolean;
@@ -27,6 +30,7 @@ export function draftFromCertification(certification: CertificationRecord): Cert
     id: certification.id,
     policyTypeId: certification.policyTypeId,
     policyTypeName: certification.policyTypeName,
+    carriers: certification.carriers,
     startDate: certification.startDate,
     endDate: certification.endDate,
     isVerified: certification.isVerified,

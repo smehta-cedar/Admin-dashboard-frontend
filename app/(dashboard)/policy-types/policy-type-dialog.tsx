@@ -1,10 +1,13 @@
 "use client";
 
 import { useId, useState, type FormEvent } from "react";
+import { CarrierCheckboxes } from "@/components/carrier-checkboxes";
 import { GHOST_BUTTON_CLASS, INPUT_CLASS, PRIMARY_BUTTON_CLASS } from "@/components/classes";
 import { Field } from "@/components/field";
 import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
 import type {
+  CarrierRef,
+  CertificationScope,
   PolicyTypeError,
   PolicyTypeField,
   PolicyTypeRecord,
@@ -13,8 +16,11 @@ import type {
 
 /*
  * The one Add / Edit policy type dialog: name, status and the certification
- * required flag. The Policy types page opens it from Add policy type and a
- * row's Edit.
+ * scope (Not required / Single / Per carrier). Per carrier shows a box for
+ * each carrier with an agency contract; checked ones need the certification.
+ * A carrier the type already requires stays listed (checked) even when its
+ * contract is gone, so the edit shows what is stored; the API then names it.
+ * The Policy types page opens it from Add policy type and a row's Edit.
  *
  * The view passes `onSave`, which calls the savePolicyType server action
  * (./actions.ts) and updates its own state from the saved record. The API
@@ -31,37 +37,48 @@ export type { PolicyTypeError, PolicyTypeValues } from "@/lib/policy-types";
 /** Also the order changes are listed in on a note. */
 export const POLICY_TYPE_FIELD_LABELS: Record<PolicyTypeField, string> = {
   name: "Name",
-  certificationRequired: "Certification required",
+  certificationScope: "Certification",
+  certificationCarriers: "Certification carriers",
   status: "Status",
 };
 
-/** The form's values, read off the submitted FormData. */
-export function readPolicyTypeForm(data: FormData): PolicyTypeValues {
-  const text = (field: PolicyTypeField) => String(data.get(field) ?? "").trim();
-  return {
-    name: text("name"),
-    certificationRequired: data.get("certificationRequired") === "yes",
-    status: text("status") === "inactive" ? "inactive" : "active",
-  };
+export const CERTIFICATION_SCOPE_LABELS: Record<CertificationScope, string> = {
+  none: "Not required",
+  single: "Single",
+  per_carrier: "Per carrier",
+};
+
+function toScope(value: string): CertificationScope {
+  return value === "single" || value === "per_carrier" ? value : "none";
 }
 
 type PolicyTypeDialogProps = {
   /** Null keeps the dialog closed. */
   editor: PolicyTypeEditor | null;
+  /** Carriers with an agency contract, by name; null when the role can't see agency contracts. */
+  contractedCarriers: CarrierRef[] | null;
   /** Saves the values; resolves with the errors to show instead of closing. */
   onSave: (values: PolicyTypeValues) => Promise<PolicyTypeError[]>;
   /** Runs for every close: Cancel, Escape, backdrop click, or a save. */
   onClose: () => void;
 };
 
-export function PolicyTypeDialog({ editor, onSave, onClose }: PolicyTypeDialogProps) {
+export function PolicyTypeDialog({ editor, contractedCarriers, onSave, onClose }: PolicyTypeDialogProps) {
   const { dialogRef, close } = useModalDialog(editor !== null);
   const id = useId();
 
   // Clearing the editor unmounts the form, which resets it.
   return (
     <ModalDialog dialogRef={dialogRef} labelledBy={`${id}-title`} onClose={onClose}>
-      {editor ? <PolicyTypeForm id={id} editor={editor} onSave={onSave} close={close} /> : null}
+      {editor ? (
+        <PolicyTypeForm
+          id={id}
+          editor={editor}
+          contractedCarriers={contractedCarriers}
+          onSave={onSave}
+          close={close}
+        />
+      ) : null}
     </ModalDialog>
   );
 }
@@ -73,10 +90,21 @@ type PolicyTypeFormProps = Omit<PolicyTypeDialogProps, "editor" | "onClose"> & {
 };
 
 /** The dialog's form. Mounted per open, so its errors start clear each time. */
-function PolicyTypeForm({ id, editor, onSave, close }: PolicyTypeFormProps) {
+function PolicyTypeForm({ id, editor, contractedCarriers, onSave, close }: PolicyTypeFormProps) {
   const editing = editor.mode === "edit" ? editor.policyType : undefined;
   const [errors, setErrors] = useState<PolicyTypeError[]>([]);
   const [saving, setSaving] = useState(false);
+  const [scope, setScope] = useState<CertificationScope>(editing?.certificationScope ?? "none");
+  const [carrierIds, setCarrierIds] = useState<string[]>(
+    editing?.certificationCarriers.map((carrier) => carrier.id) ?? [],
+  );
+
+  // Contracted carriers, plus any the type already requires that are no longer contracted.
+  const carrierOptions = [...(contractedCarriers ?? [])];
+  for (const carrier of editing?.certificationCarriers ?? []) {
+    if (!carrierOptions.some((option) => option.id === carrier.id)) carrierOptions.push(carrier);
+  }
+  carrierOptions.sort((a, b) => a.name.localeCompare(b.name));
 
   const messageFor = (field: PolicyTypeError["field"]) =>
     errors.find((error) => error.field === field)?.message ?? null;
@@ -84,13 +112,29 @@ function PolicyTypeForm({ id, editor, onSave, close }: PolicyTypeFormProps) {
     setErrors((current) => current.filter((error) => error.field !== field));
 
   const nameError = messageFor("name");
-  const certificationError = messageFor("certificationRequired");
+  const scopeError = messageFor("certificationScope");
+  const carriersError = messageFor("certificationCarriers");
   const formError = messageFor("form") ?? messageFor("status");
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (saving) return;
-    const values = readPolicyTypeForm(new FormData(event.currentTarget));
+    const data = new FormData(event.currentTarget);
+    // Only boxes still on offer count; any other scope sends none.
+    const checkedIds =
+      scope === "per_carrier"
+        ? carrierIds.filter((carrierId) => carrierOptions.some((carrier) => carrier.id === carrierId))
+        : [];
+    if (scope === "per_carrier" && checkedIds.length === 0) {
+      setErrors([{ field: "certificationCarriers", message: "Choose at least one carrier." }]);
+      return;
+    }
+    const values: PolicyTypeValues = {
+      name: String(data.get("name") ?? "").trim(),
+      certificationScope: scope,
+      certificationCarrierIds: checkedIds,
+      status: String(data.get("status")) === "inactive" ? "inactive" : "active",
+    };
     setSaving(true);
     try {
       const saveErrors = await onSave(values);
@@ -110,7 +154,7 @@ function PolicyTypeForm({ id, editor, onSave, close }: PolicyTypeFormProps) {
         {editing ? `Edit ${editing.name}` : "Add policy type"}
       </h2>
 
-      {/* Name full width; status (left) and the certification flag (right) share a row. */}
+      {/* Name full width; status (left) and the certification scope (right) share a row; carriers below. */}
       <div className="mt-5 grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)]">
         <Field
           label="Name"
@@ -147,26 +191,48 @@ function PolicyTypeForm({ id, editor, onSave, close }: PolicyTypeFormProps) {
             <option value="inactive">Inactive</option>
           </select>
         </Field>
-        <div className="flex min-w-0 flex-col justify-end">
-          <label className="flex items-center gap-2 py-2 text-sm text-fg">
-            <input
-              type="checkbox"
-              name="certificationRequired"
-              value="yes"
-              defaultChecked={editing?.certificationRequired ?? false}
-              aria-invalid={certificationError ? true : undefined}
-              aria-describedby={certificationError ? `${id}-certification-error` : undefined}
-              onChange={() => clear("certificationRequired")}
-              className="size-4 accent-brand-strong"
-            />
-            Certification required
-          </label>
-          {certificationError ? (
-            <p id={`${id}-certification-error`} className="mt-1 text-xs text-danger">
-              {certificationError}
-            </p>
-          ) : null}
-        </div>
+        <Field
+          label="Certification"
+          htmlFor={`${id}-scope`}
+          hint={scopeError ?? undefined}
+          hintId={`${id}-scope-error`}
+          error
+        >
+          <select
+            id={`${id}-scope`}
+            name="certificationScope"
+            value={scope}
+            aria-invalid={scopeError ? true : undefined}
+            aria-describedby={scopeError ? `${id}-scope-error` : undefined}
+            onChange={(event) => {
+              setScope(toScope(event.target.value));
+              clear("certificationScope");
+              clear("certificationCarriers");
+            }}
+            className={INPUT_CLASS}
+          >
+            {(Object.keys(CERTIFICATION_SCOPE_LABELS) as CertificationScope[]).map((value) => (
+              <option key={value} value={value}>
+                {CERTIFICATION_SCOPE_LABELS[value]}
+              </option>
+            ))}
+          </select>
+        </Field>
+        {scope === "per_carrier" ? (
+          <CarrierCheckboxes
+            legend="Carriers requiring certification"
+            carriers={carrierOptions}
+            checkedIds={carrierIds}
+            onChange={(next) => {
+              setCarrierIds(next);
+              clear("certificationCarriers");
+            }}
+            emptyText="No carriers have an agency contract yet."
+            error={carriersError}
+            errorId={`${id}-carriers-error`}
+            className="sm:col-span-2"
+          />
+        ) : null}
       </div>
 
       {/* Errors about the attempt itself (no permission, API down), not one field. */}

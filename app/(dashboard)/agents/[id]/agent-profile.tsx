@@ -69,8 +69,8 @@ import { AGENT_FIELD_LABELS } from "../agent-dialog";
  *                     rail's link classes (components/sidebar.tsx) so the
  *                     active mark, spacing and type match it
  *
- * Details is a two-column table of eleven fields — the four work ones (NPN,
- * email with mailto, phone with tel, aliases), the three personal contact
+ * Details is a two-column table of twelve fields — the work ones (NPN,
+ * email with mailto, whether a login code is set, phone with tel, aliases), the three personal contact
  * ones (personal email, personal phone, address), then date of birth, join
  * date, start date (dated like licences) and the SSN's last four, masked
  * until its eye button shows it. Every row is
@@ -107,6 +107,12 @@ import { AGENT_FIELD_LABELS } from "../agent-dialog";
  * /agents/[id]/edit; coming back loads the saved agent. Appointments save through
  * the appointments hook. page.tsx keys this component by agent ID, so
  * switching agents starts that state again.
+ *
+ * `readOnly` is the same profile for an agent signed in as themselves
+ * (app/agent/page.tsx): no Edit, Add carrier or certification editing,
+ * carrier names unlinked, and no Pending (it is staff's to-do list). Passwords
+ * and Notes are null there, as the agent's payload has neither, and a null
+ * section stays out of the list, like Certifications for a role without it.
  */
 
 type CarrierOption = Pick<CarrierRecord, "id" | "name" | "status" | "availableStates" | "agentAccessible">;
@@ -123,10 +129,12 @@ type AgentProfileProps = {
   initialCertifications: CertificationRecord[] | null;
   /** Every policy type, for the certification dialog's select. */
   policyTypes: CertificationOption[];
-  /** This agent's passwords, the carrier as the party, sorted by carrier name. */
-  passwords: ProfilePassword[];
-  /** This agent's notes, newest first. */
-  notes: AgentNote[];
+  /** This agent's passwords, the carrier as the party, sorted by carrier name; null hides the section. */
+  passwords: ProfilePassword[] | null;
+  /** This agent's notes, newest first; null hides the section. */
+  notes: AgentNote[] | null;
+  /** The agent's own view: nothing edits and nothing links into the staff app. */
+  readOnly?: boolean;
 };
 
 const CARRIER_COLUMNS = ["Carrier", "Writing number", "Writable states", "Status"];
@@ -162,16 +170,23 @@ function DetailsTable({ rows }: { rows: DetailRow[] }) {
 
 /** "Humana", "Humana and UHC", "Humana, UHC and WellCare". */
 function listText(items: string[]) {
-  return items.length < 2
-    ? items.join("")
-    : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+  return items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
 
-type PendingItem = { key: string; title: string; detail: string; href?: string; linkLabel?: string };
+type PendingItem = {
+  key: string;
+  title: string;
+  detail: string;
+  href?: string;
+  linkLabel?: string;
+};
 
 type PendingInput = {
   agent: AgentRecord;
-  agentCarriers: (CarrierOption & { writable: string[]; writingNumber: string })[];
+  agentCarriers: (CarrierOption & {
+    writable: string[];
+    writingNumber: string;
+  })[];
   passwords: ProfilePassword[];
 };
 
@@ -249,10 +264,7 @@ function pendingItems({ agent, agentCarriers, passwords }: PendingInput): Pendin
       key: "no-password",
       title: `Add ${withoutPassword.length === 1 ? "a password" : "passwords"} for ${listText(withoutPassword.map((carrier) => carrier.name))}`,
       detail: "Contracted, but no portal password recorded.",
-      href:
-        withoutPassword.length === 1
-          ? `/passwords?carrier=${withoutPassword[0].id}`
-          : "/passwords",
+      href: withoutPassword.length === 1 ? `/passwords?carrier=${withoutPassword[0].id}` : "/passwords",
       linkLabel: "Passwords",
     });
   }
@@ -269,8 +281,7 @@ function pendingItems({ agent, agentCarriers, passwords }: PendingInput): Pendin
 
   for (const record of passwords) {
     if (record.status === "pending") {
-      const writingNumber =
-        agentCarriers.find((carrier) => carrier.id === record.carrierId)?.writingNumber ?? "";
+      const writingNumber = agentCarriers.find((carrier) => carrier.id === record.carrierId)?.writingNumber ?? "";
       items.push({
         key: `pending-${record.id}`,
         title: `${record.partyName} password is pending`,
@@ -300,6 +311,7 @@ export function AgentProfile({
   policyTypes,
   passwords,
   notes,
+  readOnly = false,
 }: AgentProfileProps) {
   const agent = initialAgent;
   const licenses = initialLicenses;
@@ -328,11 +340,7 @@ export function AgentProfile({
         ? [
             {
               ...carrier,
-              writable: writableStates(
-                contract.appointedStates,
-                agent.licensedStates,
-                carrier.availableStates,
-              ),
+              writable: writableStates(contract.appointedStates, agent.licensedStates, carrier.availableStates),
               writingNumber: contract.writingNumber,
             },
           ]
@@ -340,8 +348,7 @@ export function AgentProfile({
     })
     .sort(byName);
 
-  const pending = pendingItems({ agent, agentCarriers, passwords });
-
+  const pending = readOnly ? [] : pendingItems({ agent, agentCarriers, passwords: passwords ?? [] });
 
   // Detail rows: always all four work fields, then all the personal ones,
   // so the table keeps its shape; an empty field shows "—".
@@ -436,15 +443,29 @@ export function AgentProfile({
 
   const sections: Section[] = [
     { key: "details", label: "Details", count: filledCount },
-    { key: "pending", label: "Pending", count: pending.length },
+    ...(readOnly ? [] : [{ key: "pending" as const, label: "Pending", count: pending.length }]),
     { key: "carriers", label: "Carriers", count: agentCarriers.length },
     { key: "licences", label: "State licences", count: licenses.length },
     // Hidden for a role without certifications view (the list came back as a 403).
     ...(certifications
-      ? [{ key: "certifications" as const, label: "Certifications", count: certifications.length }]
+      ? [
+          {
+            key: "certifications" as const,
+            label: "Certifications",
+            count: certifications.length,
+          },
+        ]
       : []),
-    { key: "passwords", label: "Passwords", count: passwords.length },
-    { key: "notes", label: "Notes", count: notes.length },
+    ...(passwords
+      ? [
+          {
+            key: "passwords" as const,
+            label: "Passwords",
+            count: passwords.length,
+          },
+        ]
+      : []),
+    ...(notes ? [{ key: "notes" as const, label: "Notes", count: notes.length }] : []),
   ];
 
   /** Adds or edits one of this agent's certifications through the API. Resolves with the dialog's errors, if any. */
@@ -453,8 +474,8 @@ export function AgentProfile({
     const result = await saveCertification(values, "agent", editingId);
     if (!result.ok) return result.errors;
     setCertifications((current) =>
-      [...(current ?? []).filter((row) => row.id !== result.certification.id), result.certification].sort(
-        (a, b) => a.policyTypeName.localeCompare(b.policyTypeName),
+      [...(current ?? []).filter((row) => row.id !== result.certification.id), result.certification].sort((a, b) =>
+        a.policyTypeName.localeCompare(b.policyTypeName),
       ),
     );
     return [];
@@ -465,7 +486,7 @@ export function AgentProfile({
       <ProfileNameRow
         name={agent.name}
         status={agent.status}
-        onEdit={() => router.push(`/agents/${agent.id}/edit?from=profile`)}
+        onEdit={readOnly ? undefined : () => router.push(`/agents/${agent.id}/edit?from=profile`)}
       />
 
       {/*
@@ -529,7 +550,7 @@ export function AgentProfile({
               title="Carriers"
               count={agentCarriers.length}
               action={
-                carriers.length > 0 ? (
+                !readOnly && carriers.length > 0 ? (
                   <button
                     type="button"
                     onClick={() => setEditor({ mode: "add", agentId: agent.id })}
@@ -544,17 +565,17 @@ export function AgentProfile({
               {agentCarriers.length === 0 ? (
                 <PanelEmpty>Not contracted with any carriers.</PanelEmpty>
               ) : (
-                <ProfileTable
-                  columns={CARRIER_COLUMNS}
-                  rows={agentCarriers}
-                  rowKey={(carrier) => carrier.id}
-                >
+                <ProfileTable columns={CARRIER_COLUMNS} rows={agentCarriers} rowKey={(carrier) => carrier.id}>
                   {(carrier) => (
                     <>
                       <td className="min-w-0 truncate px-3 py-2.5 align-middle sm:whitespace-nowrap">
-                        <Link href={`/carriers/${carrier.id}`} className={PROFILE_LINK_CLASS}>
-                          {carrier.name}
-                        </Link>
+                        {readOnly ? (
+                          carrier.name
+                        ) : (
+                          <Link href={`/carriers/${carrier.id}`} className={PROFILE_LINK_CLASS}>
+                            {carrier.name}
+                          </Link>
+                        )}
                       </td>
                       <td className="min-w-0 px-3 py-2.5 align-middle">
                         <CopyableNumber
@@ -583,14 +604,16 @@ export function AgentProfile({
               title="Certifications"
               count={certifications.length}
               action={
-                <button
-                  type="button"
-                  onClick={() => setCertificationEditor({ mode: "add" })}
-                  className={PROFILE_BUTTON_CLASS}
-                >
-                  <span aria-hidden="true">+ </span>Add certification
-                  <span className="sr-only"> for {agent.name}</span>
-                </button>
+                readOnly ? null : (
+                  <button
+                    type="button"
+                    onClick={() => setCertificationEditor({ mode: "add" })}
+                    className={PROFILE_BUTTON_CLASS}
+                  >
+                    <span aria-hidden="true">+ </span>Add certification
+                    <span className="sr-only"> for {agent.name}</span>
+                  </button>
+                )
               }
             >
               {certifications.length === 0 ? (
@@ -599,42 +622,61 @@ export function AgentProfile({
                 <CertificationsTable
                   certifications={certifications}
                   leading="policyType"
-                  onEdit={(certification) => setCertificationEditor({ mode: "edit", certification })}
+                  onEdit={
+                    readOnly
+                      ? undefined
+                      : (certification) =>
+                          setCertificationEditor({
+                            mode: "edit",
+                            certification,
+                          })
+                  }
+                  // The download needs certifications access, which an agent's sign-in doesn't have.
+                  fileLinks={!readOnly}
                 />
               )}
             </Panel>
-          ) : section === "passwords" ? (
+          ) : section === "passwords" && passwords ? (
             <PasswordsPanel passwords={passwords} partyHeading="Carrier" />
-          ) : (
+          ) : section === "notes" && notes ? (
             <Panel title="Notes" count={notes.length}>
               {/* Cancels NoteList's own top margin; the panel body already pads. */}
               <div className="-mt-2">
                 <HydratedNoteList notes={notes} labels={AGENT_FIELD_LABELS} />
               </div>
             </Panel>
-          )}
+          ) : null}
         </div>
       </div>
 
-      {/* Agent fixed to this profile; the form picks the policy type. */}
-      <CertificationDialog
-        editor={certificationEditor}
-        fixed={{ kind: "agent", agent: { id: agent.id, name: agent.name } }}
-        options={policyTypes}
-        onSave={saveAgentCertification}
-        onClose={() => setCertificationEditor(null)}
-      />
+      {readOnly ? null : (
+        <>
+          {/* Agent fixed to this profile; the form picks the policy type. */}
+          <CertificationDialog
+            editor={certificationEditor}
+            fixed={{ kind: "agent", agent: { id: agent.id, name: agent.name } }}
+            options={policyTypes}
+            onSave={saveAgentCertification}
+            onClose={() => setCertificationEditor(null)}
+          />
 
-      {/* Agent locked to this profile: the only option, already chosen. */}
-      <AppointmentDialog
-        editor={editor}
-        agents={[
-          { id: agent.id, name: agent.name, status: agent.status, licensedStates: agent.licensedStates },
-        ]}
-        carriers={carriers}
-        onSave={saveContract}
-        onClose={() => setEditor(null)}
-      />
+          {/* Agent locked to this profile: the only option, already chosen. */}
+          <AppointmentDialog
+            editor={editor}
+            agents={[
+              {
+                id: agent.id,
+                name: agent.name,
+                status: agent.status,
+                licensedStates: agent.licensedStates,
+              },
+            ]}
+            carriers={carriers}
+            onSave={saveContract}
+            onClose={() => setEditor(null)}
+          />
+        </>
+      )}
     </div>
   );
 }

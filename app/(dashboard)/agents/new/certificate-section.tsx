@@ -2,6 +2,7 @@
 
 import { useState, type KeyboardEvent } from "react";
 import { certificationFileProblem } from "@/app/(dashboard)/certifications/certification-dialog";
+import { CarrierCheckboxes } from "@/components/carrier-checkboxes";
 import { GHOST_BUTTON_CLASS, INPUT_CLASS, PRIMARY_BUTTON_CLASS, ROW_BUTTON_CLASS } from "@/components/classes";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DeleteIcon } from "@/components/delete-icon";
@@ -9,6 +10,7 @@ import { EditIcon } from "@/components/edit-icon";
 import { Field } from "@/components/field";
 import { PROFILE_BUTTON_CLASS, PROFILE_LINK_CLASS } from "@/components/profile-shell";
 import { StatusBadge } from "@/components/status-badge";
+import type { CertifiablePolicyType } from "@/lib/certification-options";
 import type { CertificationStatus } from "@/lib/certifications";
 import type { CertificateDraft } from "./certificate-draft";
 import { formatLicenceDate } from "@/lib/state-licenses";
@@ -19,17 +21,19 @@ import { formatLicenceDate } from "@/lib/state-licenses";
  * each one for that agent. The entry row is hidden until Add certification,
  * the same way licences are, and the list is what gets saved.
  *
+ * A policy type certified per carrier shows a box per carrier the row can
+ * cover (the type's carriers with an agency contract) and needs at least
+ * one; other types have no carriers.
+ *
  * Each row may carry a PDF and the Verified flag. A picked PDF stays in the
  * browser until the save sends it; a row that already has a stored file
  * keeps it unless another is picked.
  */
 
-type PolicyTypeOption = { id: string; name: string; status: "active" | "inactive" };
-
 type CertificateSectionProps = {
   /** Prefix for element IDs, the agent form's id. */
   idPrefix: string;
-  policyTypes: PolicyTypeOption[];
+  policyTypes: CertifiablePolicyType[];
   drafts: CertificateDraft[];
   onChange: (drafts: CertificateDraft[]) => void;
   /**
@@ -41,6 +45,8 @@ type CertificateSectionProps = {
 
 type Entry = {
   policyTypeId: string;
+  /** Checked carriers; only the chosen type's are kept on Add. */
+  carrierIds: string[];
   startDate: string;
   endDate: string;
   isVerified: boolean;
@@ -51,6 +57,7 @@ type Entry = {
 
 const EMPTY_ENTRY: Entry = {
   policyTypeId: "",
+  carrierIds: [],
   startDate: "",
   endDate: "",
   isVerified: false,
@@ -77,6 +84,8 @@ export function CertificateSection({ idPrefix, policyTypes, drafts, onChange, on
     .filter((type) => type.status === "active" || type.id === entry.policyTypeId)
     .slice()
     .sort((a, b) => a.name.localeCompare(b.name));
+  const chosenType = choices.find((type) => type.id === entry.policyTypeId);
+  const perCarrier = chosenType?.certificationScope === "per_carrier";
 
   const closeEntry = (restore: CertificateDraft | null) => {
     if (restore) onChange([...drafts, restore]);
@@ -113,10 +122,17 @@ export function CertificateSection({ idPrefix, policyTypes, drafts, onChange, on
       setError(`${policyType.name} is already in the list. Delete it to enter it again.`);
       return;
     }
+    // In the type's order (by name); boxes of another type don't count.
+    const carriers = policyType.carriers.filter((carrier) => entry.carrierIds.includes(carrier.id));
+    if (policyType.certificationScope === "per_carrier" && carriers.length === 0) {
+      setError("Choose at least one carrier.");
+      return;
+    }
     const draft: CertificateDraft = {
       id: held?.id ?? `new-${++nextDraftId}`,
       policyTypeId: policyType.id,
       policyTypeName: policyType.name,
+      carriers,
       startDate: entry.startDate,
       endDate: entry.endDate,
       isVerified: entry.isVerified,
@@ -137,6 +153,7 @@ export function CertificateSection({ idPrefix, policyTypes, drafts, onChange, on
     setHeld(draft);
     resetEntry({
       policyTypeId: draft.policyTypeId,
+      carrierIds: draft.carriers.map((carrier) => carrier.id),
       startDate: draft.startDate,
       endDate: draft.endDate,
       isVerified: draft.isVerified,
@@ -195,6 +212,9 @@ export function CertificateSection({ idPrefix, policyTypes, drafts, onChange, on
                       Policy type
                     </th>
                     <th scope="col" className="px-3 py-2 font-medium">
+                      Carriers
+                    </th>
+                    <th scope="col" className="px-3 py-2 font-medium">
                       Start date
                     </th>
                     <th scope="col" className="px-3 py-2 font-medium">
@@ -234,6 +254,9 @@ export function CertificateSection({ idPrefix, policyTypes, drafts, onChange, on
                         </button>
                       </td>
                       <td className="px-3 py-2">{draft.policyTypeName}</td>
+                      <td className="px-3 py-2">
+                        {draft.carriers.length > 0 ? draft.carriers.map((carrier) => carrier.name).join(", ") : "—"}
+                      </td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         {draft.startDate ? formatLicenceDate(draft.startDate) : "—"}
                       </td>
@@ -325,6 +348,17 @@ export function CertificateSection({ idPrefix, policyTypes, drafts, onChange, on
                   <option value="inactive">Inactive</option>
                 </select>
               </Field>
+              {perCarrier ? (
+                <CarrierCheckboxes
+                  legend="Carriers"
+                  carriers={chosenType.carriers}
+                  checkedIds={entry.carrierIds}
+                  onChange={(carrierIds) => update({ carrierIds })}
+                  emptyText="No contracted carriers need this certification."
+                  errorId={`${id}-error`}
+                  className="col-span-4"
+                />
+              ) : null}
               <Field
                 label="Document"
                 htmlFor={`${id}-file`}

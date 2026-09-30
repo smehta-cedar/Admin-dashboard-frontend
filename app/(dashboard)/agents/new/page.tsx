@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { getContractedCarriers } from "@/lib/agency-contracts";
 import { allowForbidden } from "@/lib/api-server";
+import { certifiablePolicyType } from "@/lib/certification-options";
 import { getPolicyTypes } from "@/lib/policy-types";
 import { NewAgentView } from "./new-agent-view";
 
@@ -16,11 +18,14 @@ export const metadata: Metadata = {
  */
 export default async function NewAgentPage() {
   // Null for a role without policy types view: the page then hides certifications.
-  const policyTypes = await allowForbidden(getPolicyTypes());
+  const [policyTypes, contractedCarriers] = await Promise.all([
+    allowForbidden(getPolicyTypes()),
+    allowForbidden(getContractedCarriers()),
+  ]);
 
   return (
     <NewAgentView
-      policyTypes={policyTypes?.map(({ id, name, status }) => ({ id, name, status })) ?? null}
+      policyTypes={policyTypes?.map((policyType) => certifiablePolicyType(policyType, contractedCarriers)) ?? null}
     />
   );
 }

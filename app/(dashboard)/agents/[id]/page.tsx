@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getAgent, getAgentNotes, getAgentWithLicenses } from "@/lib/agents";
+import { getContractedCarriers } from "@/lib/agency-contracts";
 import { allowForbidden } from "@/lib/api-server";
 import { getCarrierContracts } from "@/lib/carrier-contracts";
 import { getCarriers } from "@/lib/carriers";
+import { certifiablePolicyType } from "@/lib/certification-options";
 import { getCertifications } from "@/lib/certifications";
 import { getPasswords } from "@/lib/passwords";
 import { getPolicyTypes } from "@/lib/policy-types";
@@ -22,7 +24,8 @@ export default async function AgentProfilePage(props: PageProps<"/agents/[id]">)
   if (!loaded) notFound();
   const { agent, licenses } = loaded;
 
-  const [notes, carrierContracts, passwords, carriers, certifications, policyTypes] = await Promise.all([
+  const [notes, carrierContracts, passwords, carriers, certifications, policyTypes, contractedCarriers] =
+    await Promise.all([
     getAgentNotes(id),
     getCarrierContracts(),
     getPasswords(),
@@ -30,6 +33,8 @@ export default async function AgentProfilePage(props: PageProps<"/agents/[id]">)
     // Null for a role without certifications view: the profile then hides the section.
     allowForbidden(getCertifications({ agentId: id })),
     allowForbidden(getPolicyTypes()),
+    // Narrows a per-carrier type's carriers to contracted ones; null when the role can't see agency contracts.
+    allowForbidden(getContractedCarriers()),
   ]);
 
   return (
@@ -53,7 +58,7 @@ export default async function AgentProfilePage(props: PageProps<"/agents/[id]">)
       initialContracts={carrierContracts}
       initialLicenses={licenses}
       initialCertifications={certifications}
-      policyTypes={(policyTypes ?? []).map(({ id, name, status }) => ({ id, name, status }))}
+      policyTypes={(policyTypes ?? []).map((policyType) => certifiablePolicyType(policyType, contractedCarriers))}
       passwords={passwords
         .filter((record) => record.agentId === id)
         .map((record) => ({

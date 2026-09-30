@@ -23,11 +23,31 @@ import type { ApiUser } from "@/lib/auth-user";
 
 /** Messages for the form: one per field where the API named it, otherwise one for the whole form. */
 export type LoginState = {
-  fieldErrors: { email?: string; password?: string };
+  fieldErrors: { email?: string; password?: string; code?: string };
   error: string | null;
 };
 
 const NO_ERRORS: LoginState = { fieldErrors: {}, error: null };
+
+/** The agent form's first step. `sentTo` is set once the API took the request. */
+export type AgentCodeState = { sentTo: string | null; emailError?: string; error: string | null };
+
+/**
+ * Asks the API to email a new one-time code to the agent's work Gmail. The
+ * API answers the same whether or not a code went out, so this moves the
+ * form on to the code box either way.
+ */
+export async function requestAgentCode(_previous: AgentCodeState, formData: FormData): Promise<AgentCodeState> {
+  const email = String(formData.get("email") ?? "").trim();
+  if (!email) return { sentTo: null, emailError: "Enter your work Gmail.", error: null };
+
+  const result = await apiRequest("/auth/agent-code/", { method: "POST", body: { email } });
+  if (!result.ok) {
+    const emailError = result.code === "invalid" ? result.errors?.email?.[0] : undefined;
+    return { sentTo: null, emailError, error: emailError ? null : result.message };
+  }
+  return { sentTo: email, error: null };
+}
 
 export async function login(_previous: LoginState, formData: FormData): Promise<LoginState> {
   const email = String(formData.get("email") ?? "").trim();
@@ -63,7 +83,45 @@ export async function login(_previous: LoginState, formData: FormData): Promise<
   }
 
   setAuthCookies(await cookies(), { access: result.data.access, refresh: result.data.refresh });
-  redirect("/overview");
+  redirect(result.data.user.agent_id ? "/agent" : "/overview");
+}
+
+/**
+ * Agent sign-in: work email and the code from the email. No password.
+ * Same cookies as staff sign-in, then the agent's own view at /agent.
+ */
+export async function agentLogin(_previous: LoginState, formData: FormData): Promise<LoginState> {
+  const email = String(formData.get("email") ?? "").trim();
+  const code = String(formData.get("code") ?? "").trim();
+  if (!email || !code) {
+    return {
+      ...NO_ERRORS,
+      fieldErrors: {
+        email: email ? undefined : "Enter your work Gmail.",
+        code: code ? undefined : "Enter your code.",
+      },
+    };
+  }
+
+  const result = await apiRequest<TokenPair & { user: ApiUser }>("/auth/agent-login/", {
+    method: "POST",
+    body: { email, code },
+  });
+
+  if (!result.ok) {
+    if (result.code === "invalid" && result.errors) {
+      const { email: emailErrors, code: codeErrors, ...rest } = result.errors;
+      const other = Object.values(rest).flat()[0];
+      return {
+        fieldErrors: { email: emailErrors?.[0], code: codeErrors?.[0] },
+        error: other ?? (emailErrors?.length || codeErrors?.length ? null : result.message),
+      };
+    }
+    return { ...NO_ERRORS, error: result.message };
+  }
+
+  setAuthCookies(await cookies(), { access: result.data.access, refresh: result.data.refresh });
+  redirect("/agent");
 }
 
 /**

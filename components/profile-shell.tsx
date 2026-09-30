@@ -50,8 +50,8 @@ type ProfileNameRowProps = {
   status: "active" | "inactive";
   /** Small caps line over the name, e.g. "Agency". */
   eyebrow?: string;
-  /** Opens the entity's edit dialog. */
-  onEdit: () => void;
+  /** Opens the entity's edit dialog. Left off when the row is only for viewing. */
+  onEdit?: () => void;
 };
 
 /** The name row: avatar, name with its status badge, and Edit on the right. */
@@ -70,10 +70,12 @@ export function ProfileNameRow({ name, status, eyebrow, onEdit }: ProfileNameRow
           </div>
         </div>
       </div>
-      <button type="button" onClick={onEdit} className={PROFILE_BUTTON_CLASS}>
-        <EditIcon className="size-3.5 shrink-0" />
-        Edit<span className="sr-only"> {name}</span>
-      </button>
+      {onEdit ? (
+        <button type="button" onClick={onEdit} className={PROFILE_BUTTON_CLASS}>
+          <EditIcon className="size-3.5 shrink-0" />
+          Edit<span className="sr-only"> {name}</span>
+        </button>
+      ) : null}
     </div>
   );
 }

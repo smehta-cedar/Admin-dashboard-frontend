@@ -549,17 +549,31 @@ Same pattern as Carriers; the differences:
 - **Policy types** ([lib/policy-types.ts](../lib/policy-types.ts),
   `/api/v1/policy-types/`, `backend/apps/policies`, route `/policy-types`):
   the catalog of policy kinds, an entity of its own that is not a carrier's
-  line of business. `PolicyTypeRecord` is `{ id, name, certificationRequired,
-  status }`; the API's `certification_required` is the board's "certification
-  required" flag and `is_active` maps to `status`. The table shows name,
-  certification required (Yes / No) and status; the dialog is name (required),
-  status and a "Certification required" checkbox. `savePolicyType`
-  (`policy-types/actions.ts`) posts or patches and maps a 400's
-  `name` (a duplicate, ignoring case) under the name field, everything else
-  under the form. Notes are written by the API (`getPolicyTypeNotes`), the
-  flag recorded as "yes" / "no"; there is no profile page yet. Policies,
-  state and county availability, agency contracts and agent certifications
-  are not built; they will point at this catalog.
+  line of business. `PolicyTypeRecord` is `{ id, name, certificationScope,
+  certificationCarriers, status }`; the scope is `none`, `single` (one
+  certification covers the type) or `per_carrier` (certified against the
+  carriers in `certificationCarriers`, each with a live agency contract when
+  saved), and `is_active` maps to `status`. The table shows name,
+  certification ("No" / "Single" / "Per carrier (N)", faint when No) and
+  status; the dialog is name (required), status and a Certification select
+  (Not required / Single / Per carrier). Per carrier shows a checkbox per
+  contracted carrier (`getContractedCarriers` in lib/agency-contracts.ts,
+  `allowForbidden` on the page) and needs at least one. `savePolicyType`
+  (`policy-types/actions.ts`) posts or patches and maps a 400's `name`,
+  `certification_scope` and `certification_carriers` under their fields,
+  everything else under the form. Notes are written by the API
+  (`getPolicyTypeNotes`), the scope as "none" / "single" / "per carrier" and
+  the carriers by name; there is no profile page. Nothing blocks a sale on
+  the scope.
+- **Certification carriers.** A certification on a per-carrier type records
+  the carriers it covers (`CertificationRecord.carriers`, one row can cover
+  several; still one row per agent and type). Every form that certifies an
+  agent (the policy type row's dialog, the agent profile's dialog, the agent
+  form's Certifications card) gets its policy types as `CertifiablePolicyType`
+  (lib/certification-options.ts): the scope plus the type's carriers that are
+  still contracted. Per carrier shows those as checkboxes (`CarrierCheckboxes`)
+  and needs one; other scopes show none and send `[]`. `CertificationsTable`
+  has a Carriers column ("—" when none).
 
 ### Contracts
 
@@ -879,7 +893,8 @@ agents list; `?from=profile` returns to the profile. It is not a dialog.
   Add (Update while editing) on the right.
 - **Another list is another card**, same button and list-then-form arrangement.
   Certifications is that card after Licences: Policy type, Start date, End
-  date, Status, then Cancel and Add. It is queued on the page and saved after
+  date, Status, then (per-carrier types only) the carrier checkboxes, then
+  Document, Verified, Cancel and Add. It is queued on the page and saved after
   the agent exists. A role that cannot see policy types does not get the card.
 
 ### Agents: Add agent page and section store

@@ -23,7 +23,9 @@ import "server-only";
  * form edits those rows through the API (`licenses` on save), which derives
  * the two fields the same way.
  *
- * Email and phone are the agent's work contact. personalEmail, personalPhone
+ * Email and phone are the agent's work contact. An agent signs in with that
+ * work email and a one-time code the API emails to it.
+ * personalEmail, personalPhone
  * and address are their own contact details, all optional and agent-only (the
  * agency, which shares the producer form, has none of them). dateOfBirth,
  * joinDate (joined the agency) and startDate (employment start, not a
@@ -92,7 +94,7 @@ export type AgentRecord = {
   licenseDates: Record<string, LicenceDates>;
   /** National Producer Number. Unique across agents. */
   npn: string;
-  /** Work email. */
+  /** Work email. What the agent types to sign in, with their code. */
   email: string;
   /** Work phone, "(555)010-4410" (formatPhone); other lengths stay as entered. */
   phone: string;
@@ -114,7 +116,7 @@ export type AgentRecord = {
 /** Agent fields a note can record. The ID never changes. */
 export type AgentField = Exclude<keyof AgentRecord, "id">;
 
-/** What the add / edit form submits: every field but the ID. */
+/** What the add / edit form submits. */
 export type AgentValues = Omit<AgentRecord, "id">;
 
 export type AgentChange = FieldChange<AgentField>;

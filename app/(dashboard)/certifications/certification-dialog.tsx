@@ -1,9 +1,11 @@
 "use client";
 
 import { useId, useState, type FormEvent } from "react";
+import { CarrierCheckboxes } from "@/components/carrier-checkboxes";
 import { GHOST_BUTTON_CLASS, INPUT_CLASS, PRIMARY_BUTTON_CLASS } from "@/components/classes";
 import { Field } from "@/components/field";
 import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
+import type { CertifiablePolicyType } from "@/lib/certification-options";
 import type {
   CertificationError,
   CertificationField,
@@ -19,7 +21,12 @@ import type {
  *   policy types table — the policy type is fixed; the form picks the agent
  *
  * The other fields are the same: start date, end date, status, a PDF and
- * the Verified box. The file input is empty on every open; leaving it empty
+ * the Verified box. When the policy type is certified per carrier the form
+ * also shows a box per carrier the certification can cover (the type's
+ * carriers that have an agency contract) and needs at least one; for any
+ * other type there are no carrier boxes and none are sent.
+ *
+ * The file input is empty on every open; leaving it empty
  * keeps the stored file, whose name the edit dialog shows. The select
  * offers the active options plus the edited row's own choice when that is
  * inactive (or gone), so an edit never silently moves the row.
@@ -43,6 +50,7 @@ export type { CertificationError, CertificationValues } from "@/lib/certificatio
 export const CERTIFICATION_FIELD_LABELS: Record<CertificationField, string> = {
   agent: "Agent",
   policyType: "Policy type",
+  carriers: "Carriers",
   startDate: "Start date",
   endDate: "End date",
   isVerified: "Verified",
@@ -60,13 +68,15 @@ export function certificationFileProblem(file: File): string | null {
   return null;
 }
 
-/** One choice for the select: an agent or a policy type. */
-export type CertificationOption = { id: string; name: string; status: "active" | "inactive" };
+/** One choice for the select: an agent, or a policy type with its scope and carriers. */
+export type CertificationOption =
+  | { id: string; name: string; status: "active" | "inactive" }
+  | CertifiablePolicyType;
 
-/** The side of the pair the page fixes, with its name for the title. */
+/** The side of the pair the page fixes, with its name for the title (and scope, for a policy type). */
 export type CertificationFixedSide =
   | { kind: "agent"; agent: { id: string; name: string } }
-  | { kind: "policyType"; policyType: { id: string; name: string } };
+  | { kind: "policyType"; policyType: CertifiablePolicyType };
 
 type CertificationDialogProps = {
   /** Null keeps the dialog closed. */
@@ -105,6 +115,7 @@ function CertificationForm({ id, editor, fixed, options, onSave, close }: Certif
   const [saving, setSaving] = useState(false);
   const [startDate, setStartDate] = useState(editing?.startDate ?? "");
   const [endDate, setEndDate] = useState(editing?.endDate ?? "");
+  const [carrierIds, setCarrierIds] = useState<string[]>(editing?.carriers.map((carrier) => carrier.id) ?? []);
 
   // The side the form picks, and what the edited row currently has there.
   const picking = fixed.kind === "agent" ? "policyType" : "agent";
@@ -113,6 +124,15 @@ function CertificationForm({ id, editor, fixed, options, onSave, close }: Certif
       ? { id: editing.agentId, name: editing.agentName }
       : { id: editing.policyTypeId, name: editing.policyTypeName }
     : undefined;
+  const [pickedId, setPickedId] = useState(current?.id ?? "");
+
+  // The policy type in play, fixed or picked, for its certification scope and carriers.
+  const policyType =
+    fixed.kind === "policyType"
+      ? fixed.policyType
+      : options.find((option): option is CertifiablePolicyType => option.id === pickedId && "carriers" in option);
+  const perCarrier = policyType?.certificationScope === "per_carrier";
+  const carrierOptions = perCarrier ? policyType.carriers : [];
 
   // Active options, plus the edited row's own choice when it is inactive or gone.
   const choices = options
@@ -128,6 +148,7 @@ function CertificationForm({ id, editor, fixed, options, onSave, close }: Certif
     setErrors((existing) => existing.filter((error) => error.field !== field));
 
   const pickError = messageFor(picking);
+  const carriersError = messageFor("carriers");
   const startError = messageFor("startDate");
   const endError = messageFor("endDate");
   const fileError = messageFor("file");
@@ -146,9 +167,16 @@ function CertificationForm({ id, editor, fixed, options, onSave, close }: Certif
       setErrors([{ field: "file", message: problem }]);
       return;
     }
+    // Only boxes on offer for this type count; a type that is not per carrier sends none.
+    const checkedIds = carrierIds.filter((carrierId) => carrierOptions.some((carrier) => carrier.id === carrierId));
+    if (perCarrier && checkedIds.length === 0) {
+      setErrors([{ field: "carriers", message: "Choose at least one carrier." }]);
+      return;
+    }
     const values: CertificationValues = {
       agentId: fixed.kind === "agent" ? fixed.agent.id : picked,
       policyTypeId: fixed.kind === "policyType" ? fixed.policyType.id : picked,
+      carrierIds: checkedIds,
       startDate,
       endDate,
       isVerified: data.get("isVerified") === "yes",
@@ -181,7 +209,10 @@ function CertificationForm({ id, editor, fixed, options, onSave, close }: Certif
         {title}
       </h2>
 
-      {/* The pick and status share the first row, the two dates the second, the PDF and Verified the third. */}
+      {/*
+        The pick and status share the first row, then the carriers (per-carrier
+        types only), the two dates, and the PDF with Verified.
+      */}
       <div className="mt-5 grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto]">
         <Field
           label={picking === "agent" ? "Agent" : "Policy type"}
@@ -198,7 +229,11 @@ function CertificationForm({ id, editor, fixed, options, onSave, close }: Certif
             defaultValue={current?.id ?? ""}
             aria-invalid={pickError ? true : undefined}
             aria-describedby={pickError ? `${id}-picked-error` : undefined}
-            onChange={() => clear(picking)}
+            onChange={(event) => {
+              setPickedId(event.target.value);
+              clear(picking);
+              clear("carriers");
+            }}
             className={INPUT_CLASS}
           >
             <option value="" disabled>
@@ -222,6 +257,21 @@ function CertificationForm({ id, editor, fixed, options, onSave, close }: Certif
             <option value="inactive">Inactive</option>
           </select>
         </Field>
+        {perCarrier ? (
+          <CarrierCheckboxes
+            legend="Carriers"
+            carriers={carrierOptions}
+            checkedIds={carrierIds}
+            onChange={(next) => {
+              setCarrierIds(next);
+              clear("carriers");
+            }}
+            emptyText="No contracted carriers need this certification."
+            error={carriersError}
+            errorId={`${id}-carriers-error`}
+            className="sm:col-span-2"
+          />
+        ) : null}
         <Field
           label="Start date"
           htmlFor={`${id}-start`}

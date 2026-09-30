@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getAgentWithLicenses } from "@/lib/agents";
+import { getContractedCarriers } from "@/lib/agency-contracts";
 import { allowForbidden } from "@/lib/api-server";
+import { certifiablePolicyType } from "@/lib/certification-options";
 import { getCertifications } from "@/lib/certifications";
 import { getPolicyTypes } from "@/lib/policy-types";
 import { AgentFormPage } from "../../agent-form-page";
@@ -28,9 +30,10 @@ export default async function EditAgentPage(props: EditAgentPageProps) {
   const loaded = await getAgentWithLicenses(id);
   if (!loaded) notFound();
 
-  const [policyTypes, certifications] = await Promise.all([
+  const [policyTypes, certifications, contractedCarriers] = await Promise.all([
     allowForbidden(getPolicyTypes()),
     allowForbidden(getCertifications({ agentId: id })),
+    allowForbidden(getContractedCarriers()),
   ]);
   const canCertify = policyTypes != null && certifications != null;
 
@@ -38,7 +41,7 @@ export default async function EditAgentPage(props: EditAgentPageProps) {
     <AgentFormPage
       agent={loaded.agent}
       policyTypes={
-        canCertify ? policyTypes.map(({ id: typeId, name, status }) => ({ id: typeId, name, status })) : null
+        canCertify ? policyTypes.map((policyType) => certifiablePolicyType(policyType, contractedCarriers)) : null
       }
       initialCertificates={
         canCertify

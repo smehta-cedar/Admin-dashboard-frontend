@@ -9,7 +9,7 @@ import { LoginForm } from "./login-form";
  * Sign-in, outside the dashboard group so there is no sidebar or navbar.
  * The form posts to the `login` server action (./actions.ts), which asks the
  * API for a token pair and stores it in HttpOnly cookies. Already signed in?
- * Straight to the CRM home at /overview.
+ * Staff go to the CRM home at /overview; an agent goes to their view at /agent.
  */
 
 export const metadata: Metadata = {
@@ -17,7 +17,8 @@ export const metadata: Metadata = {
 };
 
 export default async function LoginPage() {
-  if (await getSessionUser()) redirect("/overview");
+  const user = await getSessionUser();
+  if (user) redirect(user.agentId ? "/agent" : "/overview");
 
   return (
     <div className="flex min-h-screen flex-col bg-canvas">

@@ -8,9 +8,11 @@ import "server-only";
  * edit that changed something.
  *
  * A policy type is a catalog entry of its own (e.g. "Medicare Advantage"),
- * not a carrier's line of business (lib/lines-of-business.ts). Policies,
- * state and county availability, agency contracts and agent certifications
- * are not built yet; they will point at this catalog.
+ * not a carrier's line of business (lib/lines-of-business.ts). Its
+ * certification scope says how agents get certified on it (lib/certifications.ts):
+ * not at all, once for the type, or per carrier, against the carriers in
+ * certificationCarriers (each with an agency contract when saved). Nothing
+ * blocks a sale on it; it is recorded for the catalog only.
  */
 
 import { apiFetch, apiGet, apiGetAll, ApiError } from "@/lib/api-server";
@@ -18,13 +20,21 @@ import type { FieldChange } from "@/lib/change-notes";
 
 export type PolicyTypeStatus = "active" | "inactive";
 
+/** none: no certification; single: one certification covers the type; per_carrier: certified per carrier. */
+export type CertificationScope = "none" | "single" | "per_carrier";
+
+/** A carrier as a policy type or certification names it. */
+export type CarrierRef = { id: string; name: string };
+
 export type PolicyTypeRecord = {
   /** The API's UUID. */
   id: string;
   /** Unique among policy types, ignoring case. */
   name: string;
-  /** The board's "certification required": an agent needs a certification on this type to sell it. */
-  certificationRequired: boolean;
+  /** How an agent is certified on this type. */
+  certificationScope: CertificationScope;
+  /** Carriers that need the certification, in name order. Empty unless the scope is per_carrier. */
+  certificationCarriers: CarrierRef[];
   /** The API's is_active. Defaults to "active" when adding. */
   status: PolicyTypeStatus;
 };
@@ -32,8 +42,11 @@ export type PolicyTypeRecord = {
 /** Policy type fields a note can record. The ID never changes. */
 export type PolicyTypeField = Exclude<keyof PolicyTypeRecord, "id">;
 
-/** What the add / edit form submits: every field but the ID. */
-export type PolicyTypeValues = Omit<PolicyTypeRecord, "id">;
+/** What the add / edit form submits: every field but the ID, the carriers by ID. */
+export type PolicyTypeValues = Omit<PolicyTypeRecord, "id" | "certificationCarriers"> & {
+  /** Sent only for per_carrier; any other scope clears them. */
+  certificationCarrierIds: string[];
+};
 
 /** A save error, shown under the field it names, or under the form for `form`. */
 export type PolicyTypeError = { field: PolicyTypeField | "form"; message: string };
@@ -52,7 +65,7 @@ export type PolicyTypeNote = {
   createdAt: string;
   /** Full name of who made the change, or null when unknown. */
   createdBy: string | null;
-  /** Only the fields that changed, in form order. The flag reads "yes" / "no". */
+  /** Only the fields that changed, in form order. The scope reads "none" / "single" / "per carrier", carriers by name. */
   changes: PolicyTypeChange[];
 };
 
@@ -60,7 +73,8 @@ export type PolicyTypeNote = {
 export type ApiPolicyType = {
   id: string;
   name: string;
-  certification_required: boolean;
+  certification_scope: CertificationScope;
+  certification_carriers: { id: string; name: string; is_active: boolean }[];
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -79,7 +93,8 @@ type ApiPolicyTypeNote = {
 /** API field name -> PolicyTypeRecord field, for a note's changes. */
 const NOTE_FIELDS: Record<string, PolicyTypeField> = {
   name: "name",
-  certification_required: "certificationRequired",
+  certification_scope: "certificationScope",
+  certification_carriers: "certificationCarriers",
   status: "status",
 };
 
@@ -88,7 +103,8 @@ export function toPolicyTypeRecord(policyType: ApiPolicyType): PolicyTypeRecord 
   return {
     id: policyType.id,
     name: policyType.name,
-    certificationRequired: policyType.certification_required,
+    certificationScope: policyType.certification_scope,
+    certificationCarriers: policyType.certification_carriers.map(({ id, name }) => ({ id, name })),
     status: policyType.is_active ? "active" : "inactive",
   };
 }

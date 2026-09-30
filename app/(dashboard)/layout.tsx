@@ -81,6 +81,8 @@ export default async function DashboardLayout({
   // already refreshed an expiring token by this point.
   const user = await getSessionUser();
   if (!user) redirect("/login");
+  // Agents have their own view, outside this shell.
+  if (user.agentId) redirect("/agent");
 
   // After the gate: the index holds record data, so only a signed-in user gets it.
   // The requests and the dialog's agent and carrier options load here too:

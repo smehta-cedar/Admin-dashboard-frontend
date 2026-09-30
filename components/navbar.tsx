@@ -107,9 +107,11 @@ export function Navbar({
             page keeps a visually hidden <h1> (PageHeader) for screen readers. */}
         <p className="min-w-0 flex-1 truncate text-lg font-semibold tracking-tight text-fg">{pageTitle}</p>
         {/* From `md`; narrower screens get the row under the bar instead. */}
-        <NavbarSearch scopes={searchScopes} index={searchIndex} className="hidden w-64 shrink-0 md:flex lg:w-80" />
+        {searchScopes.length > 0 ? (
+          <NavbarSearch scopes={searchScopes} index={searchIndex} className="hidden w-64 shrink-0 md:flex lg:w-80" />
+        ) : null}
         <div className="ml-auto flex items-center justify-end gap-1 md:ml-0 md:flex-1">
-          <CreateRequestButton />
+          {user.agentId ? null : <CreateRequestButton />}
           <ThemeToggle />
           <NotificationsMenu buttonClassName={ICON_BUTTON_CLASS} />
           <UserMenu user={user} />
@@ -243,24 +245,26 @@ function UserMenu({ user }: { user: SessionUser }) {
           </div>
           <div className="border-b border-line py-1">
             <Link
-              href="/profile"
+              href={user.agentId ? "/agent" : "/profile"}
               role="menuitem"
               onClick={() => setOpen(false)}
               className={MENU_ITEM_CLASS}
             >
               View profile
             </Link>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setOpen(false);
-                setChangingPassword(true);
-              }}
-              className={MENU_ITEM_CLASS}
-            >
-              Change password
-            </button>
+            {user.agentId ? null : (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  setChangingPassword(true);
+                }}
+                className={MENU_ITEM_CLASS}
+              >
+                Change password
+              </button>
+            )}
           </div>
           <div className="py-1">
             <button type="button" role="menuitem" onClick={signOut} className={MENU_ITEM_CLASS}>

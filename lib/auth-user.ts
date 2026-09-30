@@ -14,6 +14,8 @@ export type ApiUser = {
   designation: { id: string; name: string } | null;
   is_active: boolean;
   is_superuser: boolean;
+  /** Set when this account signs in as an agent. Null for staff. */
+  agent_id: string | null;
   last_login: string | null;
   created_at: string;
   updated_at: string;
@@ -28,6 +30,8 @@ export type SessionUser = {
   role: string | null;
   designation: string | null;
   isSuperuser: boolean;
+  /** The agent this account signs in as. Null for staff. */
+  agentId: string | null;
 };
 
 export function toSessionUser(user: ApiUser): SessionUser {
@@ -38,5 +42,6 @@ export function toSessionUser(user: ApiUser): SessionUser {
     role: user.role?.name ?? null,
     designation: user.designation?.name ?? null,
     isSuperuser: user.is_superuser,
+    agentId: user.agent_id,
   };
 }

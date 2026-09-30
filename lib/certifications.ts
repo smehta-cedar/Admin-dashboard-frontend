@@ -11,12 +11,13 @@ import "server-only";
  * One row is one agent certified for one policy type (lib/policy-types.ts).
  * The same rows are added from the agent profile (agent fixed, type chosen)
  * and from the policy types table (type fixed, agent chosen); there is no
- * Certifications page. Dates are optional. A row may carry one PDF, kept
+ * Certifications page. A policy type certified per carrier also records which
+ * of its carriers the row covers (one row can cover several; still one row
+ * per agent and type); other types have none. Dates are optional. A row may carry one PDF, kept
  * privately by the API and downloaded through the route handler at
  * /certifications/{id}/file (app/(dashboard)/certifications/[id]/file);
- * is_verified is set by hand. Carrier-policy certificates,
- * agency contracts, commissions and any rule that blocks a sale are not
- * modelled here.
+ * is_verified is set by hand. Carrier-policy certificates, commissions and
+ * any rule that blocks a sale are not modelled here.
  *
  * Reads throw on failure like every data module; a page that shows
  * certifications beside another entity wraps the call in allowForbidden
@@ -26,6 +27,7 @@ import "server-only";
 
 import { apiGet, apiGetAll } from "@/lib/api-server";
 import type { FieldChange } from "@/lib/change-notes";
+import type { CarrierRef } from "@/lib/policy-types";
 
 export type CertificationStatus = "active" | "inactive";
 
@@ -38,6 +40,8 @@ export type CertificationRecord = {
   policyTypeId: string;
   policyTypeName: string;
   policyTypeStatus: "active" | "inactive";
+  /** Carriers covered, in name order. Empty unless the policy type is certified per carrier. */
+  carriers: CarrierRef[];
   /** "YYYY-MM-DD", or "" when unset. */
   startDate: string;
   /** "YYYY-MM-DD", or "" when unset. On or after startDate when both are set. */
@@ -54,6 +58,8 @@ export type CertificationRecord = {
 export type CertificationValues = {
   agentId: string;
   policyTypeId: string;
+  /** Carriers covered; only for a per-carrier policy type, then at least one. */
+  carrierIds: string[];
   startDate: string;
   endDate: string;
   /** Left out by forms without the box (the agent form's certificate rows), so the stored flag stays. */
@@ -67,6 +73,7 @@ export type CertificationValues = {
 export type CertificationErrorField =
   | "agent"
   | "policyType"
+  | "carriers"
   | "startDate"
   | "endDate"
   | "isVerified"
@@ -78,7 +85,15 @@ export type CertificationErrorField =
 export type CertificationError = { field: CertificationErrorField; message: string };
 
 /** Certification fields a note can record, in the order a note lists them. */
-export type CertificationField = "agent" | "policyType" | "startDate" | "endDate" | "isVerified" | "status" | "file";
+export type CertificationField =
+  | "agent"
+  | "policyType"
+  | "carriers"
+  | "startDate"
+  | "endDate"
+  | "isVerified"
+  | "status"
+  | "file";
 
 export type CertificationChange = FieldChange<CertificationField>;
 
@@ -95,7 +110,7 @@ export type CertificationNote = {
   /** Full name of who made the change, or null when unknown. */
   createdBy: string | null;
   /**
-   * Only the fields that changed: agent and type by name, dates as YYYY-MM-DD
+   * Only the fields that changed: agent, type and carriers by name, dates as YYYY-MM-DD
    * or blank, verified as "yes" / "no", the PDF by file name (blank before the first).
    */
   changes: CertificationChange[];
@@ -106,6 +121,7 @@ export type ApiCertification = {
   id: string;
   agent: { id: string; name: string; is_active: boolean };
   policy_type: { id: string; name: string; is_active: boolean };
+  carriers: { id: string; name: string; is_active: boolean }[];
   start_date: string | null;
   end_date: string | null;
   is_verified: boolean;
@@ -129,6 +145,7 @@ type ApiCertificationNote = {
 const NOTE_FIELDS: Record<string, CertificationField> = {
   agent: "agent",
   policy_type: "policyType",
+  carriers: "carriers",
   start_date: "startDate",
   end_date: "endDate",
   is_verified: "isVerified",
@@ -146,6 +163,7 @@ export function toCertificationRecord(certification: ApiCertification): Certific
     policyTypeId: certification.policy_type.id,
     policyTypeName: certification.policy_type.name,
     policyTypeStatus: certification.policy_type.is_active ? "active" : "inactive",
+    carriers: certification.carriers.map(({ id, name }) => ({ id, name })),
     startDate: certification.start_date ?? "",
     endDate: certification.end_date ?? "",
     isVerified: certification.is_verified,

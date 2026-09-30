@@ -91,6 +91,18 @@ export function toAgencyContractRecord(contract: ApiAgencyContract): AgencyContr
   };
 }
 
+/**
+ * Every carrier with a live agency contract (any status, with or without a
+ * number), sorted by name: the carriers a policy type can require
+ * certification for.
+ */
+export async function getContractedCarriers(): Promise<{ id: string; name: string }[]> {
+  const contracts = await apiGetAll<ApiAgencyContract>("/agency-contracts/");
+  return contracts
+    .map(({ carrier }) => ({ id: carrier.id, name: carrier.name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 /** One agency's contracts, active and inactive, sorted by carrier name. */
 export async function getAgencyContracts(agencyId: string): Promise<AgencyContractRecord[]> {
   const contracts = await apiGetAll<ApiAgencyContract>("/agency-contracts/", { agency: agencyId });

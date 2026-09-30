@@ -4,6 +4,7 @@ import { useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import type { AgentRecord } from "@/lib/agents";
+import type { CertifiablePolicyType } from "@/lib/certification-options";
 import { deleteCertification, saveCertification } from "../certifications/actions";
 import { saveAgentLicenses } from "./actions";
 import { AgentForm, type AgentError, type AgentValues } from "./agent-dialog";
@@ -21,11 +22,9 @@ import { CertificateSection } from "./new/certificate-section";
  * updates the same agent.
  */
 
-type PolicyTypeOption = { id: string; name: string; status: "active" | "inactive" };
-
 type AgentFormPageProps = {
   /** Null when the role can't see policy types: the certifications card is left out. */
-  policyTypes: PolicyTypeOption[] | null;
+  policyTypes: CertifiablePolicyType[] | null;
   /** Set on Edit. Leave out for an empty Add form. */
   agent?: AgentRecord;
   /** Certifications already on the agent. Ignored when `policyTypes` is null. */
@@ -37,6 +36,7 @@ type AgentFormPageProps = {
 function sameCertificate(a: CertificateDraft, b: CertificateDraft) {
   return (
     a.policyTypeId === b.policyTypeId &&
+    a.carriers.map((carrier) => carrier.id).join() === b.carriers.map((carrier) => carrier.id).join() &&
     a.startDate === b.startDate &&
     a.endDate === b.endDate &&
     a.isVerified === b.isVerified &&
@@ -88,6 +88,7 @@ export function AgentFormPage({
       const valuesFor = {
         agentId: result.agent.id,
         policyTypeId: draft.policyTypeId,
+        carrierIds: draft.carriers.map((carrier) => carrier.id),
         startDate: draft.startDate,
         endDate: draft.endDate,
         isVerified: draft.isVerified,

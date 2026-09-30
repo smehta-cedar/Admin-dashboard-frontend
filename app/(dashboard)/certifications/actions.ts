@@ -4,7 +4,8 @@
  * Add or edit a certification, run on the Next server so the access token
  * stays in its HttpOnly cookie. POST /certifications/create/ or PATCH
  * /certifications/{id}/; the API keeps one live row per agent and policy
- * type, checks the dates, and records the change note.
+ * type, checks the dates and the carriers (per-carrier types only), and
+ * records the change note.
  *
  * The same action serves both places a certification is edited: the agent
  * profile (agent fixed, `fixed: "agent"`) and the policy types table (type
@@ -55,6 +56,7 @@ function errorFields(fixed: CertificationFixed): Record<string, CertificationErr
   return {
     agent: chosen,
     policy_type: chosen,
+    carriers: "carriers",
     start_date: "startDate",
     end_date: "endDate",
     is_verified: "isVerified",
@@ -63,11 +65,15 @@ function errorFields(fixed: CertificationFixed): Record<string, CertificationErr
   };
 }
 
-/** `fields` as multipart form data with `file` alongside; a null date goes as "" (cleared). */
-function toFormData(fields: Record<string, string | boolean | null | undefined>, file: File): FormData {
+/**
+ * `fields` as multipart form data with `file` alongside; a null date goes as
+ * "" (cleared), a list as one entry per item (an empty list sends nothing).
+ */
+function toFormData(fields: Record<string, string | string[] | boolean | null | undefined>, file: File): FormData {
   const data = new FormData();
   for (const [name, value] of Object.entries(fields)) {
-    if (value !== undefined) data.set(name, value === null ? "" : String(value));
+    if (Array.isArray(value)) for (const item of value) data.append(name, item);
+    else if (value !== undefined) data.set(name, value === null ? "" : String(value));
   }
   data.set("file", file);
   return data;
@@ -80,6 +86,7 @@ export async function saveCertification(
   editingId?: string,
 ): Promise<SaveCertificationResult> {
   const details = {
+    carriers: values.carrierIds,
     start_date: values.startDate || null,
     end_date: values.endDate || null,
     // Undefined keys drop out of the JSON body and are skipped in the multipart one.
