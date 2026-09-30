@@ -336,7 +336,7 @@ type PasswordsPanelProps = {
   className?: string;
 };
 
-/** The Passwords panel: the other party, portal username, password and status. */
+/** The Passwords panel: the other party, portal username, password, link and status. */
 export function PasswordsPanel({ passwords, partyHeading, className }: PasswordsPanelProps) {
   return (
     <Panel title="Passwords" count={passwords.length} className={className}>
@@ -344,7 +344,7 @@ export function PasswordsPanel({ passwords, partyHeading, className }: Passwords
         <PanelEmpty>No passwords recorded.</PanelEmpty>
       ) : (
         <ProfileTable
-          columns={[partyHeading, "Portal username", "Password", "Status"]}
+          columns={[partyHeading, "Portal username", "Password", "Link", "Status"]}
           rows={passwords}
           rowKey={(record) => record.id}
         >
@@ -364,6 +364,19 @@ export function PasswordsPanel({ passwords, partyHeading, className }: Passwords
               </td>
               <td className="px-3 py-2.5 text-fg-muted">
                 <CredentialValue value={record.portalPassword} label="password" secret />
+              </td>
+              <td className="px-3 py-2.5">
+                {record.link ? (
+                  <a
+                    href={record.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={record.link}
+                    className={`block max-w-48 truncate ${PROFILE_LINK_CLASS}`}
+                  >
+                    {record.link}
+                  </a>
+                ) : null}
               </td>
               <td className="px-3 py-2.5">
                 <StatusBadge status={record.status} />

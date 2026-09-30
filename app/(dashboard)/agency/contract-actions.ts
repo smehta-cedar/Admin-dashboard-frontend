@@ -4,9 +4,8 @@
  * Add or edit one of the agency's carrier contracts, run on the Next server
  * so the access token stays in its HttpOnly cookie. POST
  * /agency-contracts/create/ or PATCH /agency-contracts/{id}/; the API keeps
- * one live contract per carrier, checks every policy belongs to the
- * carrier and that username and password are both blank or both set, and
- * records the change note (never the password).
+ * one live contract per carrier, checks the policy types exist, and records
+ * the change note.
  *
  * What the API answers, and what the dialog shows for it:
  *
@@ -39,9 +38,7 @@ export type SaveAgencyContractResult =
 const ERROR_FIELDS: Record<string, AgencyContractError["field"]> = {
   carrier: "carrierId",
   contract_number: "contractNumber",
-  policies: "policyIds",
-  username: "username",
-  password: "password",
+  policy_types: "policyTypeIds",
   is_active: "status",
 };
 
@@ -54,9 +51,7 @@ export async function saveAgencyContract(
   const body = {
     carrier: values.carrierId,
     contract_number: values.contractNumber,
-    policies: values.policyIds,
-    username: values.username,
-    password: values.password,
+    policy_types: values.policyTypeIds,
     is_active: values.status === "active",
   };
   const result = editingId

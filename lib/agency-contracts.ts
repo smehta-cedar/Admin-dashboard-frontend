@@ -6,11 +6,12 @@ import "server-only";
  * user. Adds and edits go through the server action in
  * app/(dashboard)/agency/contract-actions.ts, which posts to the same API;
  * the API records a change note on every add and every edit that changed
- * something (never the password).
+ * something.
  *
- * An agency contract ties the agency to one carrier: the contracting number,
- * the carrier's policies it covers (lib/carrier-policies.ts) and the
- * agency's login at that carrier. One live contract per carrier. It lives on
+ * An agency contract ties the agency to one carrier: the contracting number
+ * and the policy types it covers (lib/policy-types.ts). The
+ * agency's login at the carrier is an agency password (lib/passwords.ts),
+ * kept on the Passwords page. One live contract per carrier. It lives on
  * the agency profile: there is no page of its own. A carrier is open to
  * agents (appointments, portal passwords) only once its contract has a
  * number; the API reports that on the carrier as agentAccessible
@@ -30,11 +31,8 @@ export type AgencyContractRecord = {
   carrierName: string;
   /** The contracting number. Blank until the carrier assigns one. */
   contractNumber: string;
-  /** Covered policies, in name order. Empty means none. */
-  policies: { id: string; name: string }[];
-  /** The agency's login at the carrier: both blank or both set. */
-  username: string;
-  password: string;
+  /** Covered policy types, in name order. Empty means none. */
+  policyTypes: { id: string; name: string }[];
   /** The API's is_active. Defaults to "active" when adding. */
   status: AgencyContractStatus;
 };
@@ -43,9 +41,7 @@ export type AgencyContractRecord = {
 export type AgencyContractValues = {
   carrierId: string;
   contractNumber: string;
-  policyIds: string[];
-  username: string;
-  password: string;
+  policyTypeIds: string[];
   status: AgencyContractStatus;
 };
 
@@ -53,9 +49,7 @@ export type AgencyContractValues = {
 export type AgencyContractErrorField =
   | "carrierId"
   | "contractNumber"
-  | "policyIds"
-  | "username"
-  | "password"
+  | "policyTypeIds"
   | "status"
   | "form";
 
@@ -68,9 +62,7 @@ export type ApiAgencyContract = {
   agency: { id: string; name: string; is_active: boolean };
   carrier: { id: string; name: string; is_active: boolean };
   contract_number: string;
-  policies: { id: string; name: string; is_active: boolean }[];
-  username: string;
-  password: string;
+  policy_types: { id: string; name: string; is_active: boolean }[];
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -84,9 +76,7 @@ export function toAgencyContractRecord(contract: ApiAgencyContract): AgencyContr
     carrierId: contract.carrier.id,
     carrierName: contract.carrier.name,
     contractNumber: contract.contract_number,
-    policies: contract.policies.map(({ id, name }) => ({ id, name })),
-    username: contract.username,
-    password: contract.password,
+    policyTypes: contract.policy_types.map(({ id, name }) => ({ id, name })),
     status: contract.is_active ? "active" : "inactive",
   };
 }

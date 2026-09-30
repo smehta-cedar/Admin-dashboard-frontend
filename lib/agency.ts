@@ -14,8 +14,9 @@ import "server-only";
  * the API returns its licence rows (`licenses`) and licensedStates /
  * licenseNumbers / licenseStatuses / licenseDates are derived from them
  * here, the same way an agent's are (lib/agents.ts). It is the org
- * identity, licence footprint and roster only: it is not a participant in
- * carrier contracts or passwords, which stay on individual agents.
+ * identity, licence footprint and roster only. Its carrier contracts live in
+ * lib/agency-contracts.ts and its own portal logins are agency passwords
+ * (lib/passwords.ts).
  *
  * The profile's Edit dialog changes the agency's own fields (AgencyValues);
  * the licence rows are added, edited and removed one at a time from the

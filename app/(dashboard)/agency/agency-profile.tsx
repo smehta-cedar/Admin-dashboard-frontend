@@ -59,7 +59,7 @@ import { AgencyLicenseDialog, type AgencyLicenseEditor, type AgencyLicenseValues
  * list of them.
  *
  * A full-width Contracts panel, under State licences, lists the agency's
- * contract with each carrier (carrier, contract number, policies, status)
+ * contract with each carrier (carrier, contract number, policy types, status)
  * and opens AgencyContractDialog from Add contract and a row's Edit, saved
  * through saveAgencyContract. A carrier whose contract has no number yet
  * shows "No number yet": agents can't be given that carrier until it has
@@ -81,12 +81,12 @@ type AgencyProfileProps = {
   initialContracts: AgencyContractRecord[] | null;
   /** Every carrier, for the contract dialog's select. */
   carriers: ComponentProps<typeof AgencyContractDialog>["carriers"];
-  /** Every carrier's policies, for the contract dialog's boxes. */
-  policies: ComponentProps<typeof AgencyContractDialog>["policies"];
+  /** Every policy type, for the contract dialog's boxes. */
+  policyTypes: ComponentProps<typeof AgencyContractDialog>["policyTypes"];
 };
 
 const AGENT_COLUMNS = ["Agent", "Licensed states", "Status"];
-const CONTRACT_COLUMNS = ["Action", "Carrier", "Contract number", "Policies", "Status"];
+const CONTRACT_COLUMNS = ["Action", "Carrier", "Contract number", "Policy types", "Status"];
 
 export function AgencyProfile({
   initialAgency,
@@ -95,7 +95,7 @@ export function AgencyProfile({
   agents,
   initialContracts,
   carriers,
-  policies,
+  policyTypes,
 }: AgencyProfileProps) {
   const [agency, setAgency] = useState(initialAgency);
   const [licenses, setLicenses] = useState(initialLicenses);
@@ -231,8 +231,8 @@ export function AgencyProfile({
                       )}
                     </td>
                     <td className="min-w-0 px-3 py-2.5 align-middle text-fg-muted">
-                      {contract.policies.length > 0 ? (
-                        contract.policies.map((policy) => policy.name).join(", ")
+                      {contract.policyTypes.length > 0 ? (
+                        contract.policyTypes.map((policyType) => policyType.name).join(", ")
                       ) : (
                         <span className="text-fg-subtle">None</span>
                       )}
@@ -302,7 +302,7 @@ export function AgencyProfile({
           editor={contractEditor}
           carriers={carriers}
           contractedCarrierIds={contracts.map((contract) => contract.carrierId)}
-          policies={policies}
+          policyTypes={policyTypes}
           onSave={saveContract}
           onClose={() => setContractEditor(null)}
         />

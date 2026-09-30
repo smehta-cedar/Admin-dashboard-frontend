@@ -67,7 +67,7 @@ export default async function CarrierProfilePage(props: PageProps<"/carriers/[id
         .map((record) => ({
           ...record,
           partyName: record.agentName,
-          partyHref: `/agents/${record.agentId}`,
+          partyHref: record.agencyId ? "/agency" : `/agents/${record.agentId}`,
         }))
         .sort((a, b) => a.partyName.localeCompare(b.partyName))}
       // The policies live on this carrier; the dialog picks their type from the catalog.

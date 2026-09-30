@@ -84,7 +84,10 @@ export async function getSearchIndex(): Promise<SearchIndex> {
       ),
     ),
     "/passwords": passwords.map((password) => {
-      const agent = agentsById.get(password.agentId)?.name ?? `Agent ${password.agentId}`;
+      // The agency's own password has no agent: its name comes with the record.
+      const agent = password.agentId
+        ? (agentsById.get(password.agentId)?.name ?? `Agent ${password.agentId}`)
+        : password.agentName;
       const carrier = carriersById.get(password.carrierId)?.name ?? `Carrier ${password.carrierId}`;
       return entry(
         listHref("/passwords", agent, carrier),

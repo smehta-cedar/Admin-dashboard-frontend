@@ -35,21 +35,26 @@ export type SavePasswordResult =
 /** API field name -> form field, for a 400's errors. Anything else goes under the form. */
 const ERROR_FIELDS: Record<string, PasswordError["field"]> = {
   agent_id: "agentId",
+  agency_id: "agentId",
   carrier_id: "carrierId",
   // "Add a contract number before an agent can use this carrier."
   carrier: "carrierId",
   username: "username",
   portal_password: "portalPassword",
+  link: "link",
   status: "status",
 };
 
 /** Adds a password, or edits the one with `editingId`. */
 export async function savePassword(values: PasswordValues, editingId?: string): Promise<SavePasswordResult> {
   const body = {
+    // One of the two is null: an agent's password, or the agency's.
     agent_id: values.agentId,
+    agency_id: values.agencyId,
     carrier_id: values.carrierId,
     username: values.username,
     portal_password: values.portalPassword,
+    link: values.link,
     status: values.status,
   };
   const result = editingId

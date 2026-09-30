@@ -8,6 +8,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DeleteIcon } from "@/components/delete-icon";
 import { EditIcon } from "@/components/edit-icon";
 import { Field } from "@/components/field";
+import { PdfUpload } from "@/components/pdf-upload";
 import { PROFILE_BUTTON_CLASS, PROFILE_LINK_CLASS } from "@/components/profile-shell";
 import { StatusBadge } from "@/components/status-badge";
 import type { CertifiablePolicyType } from "@/lib/certification-options";
@@ -367,19 +368,16 @@ export function CertificateSection({ idPrefix, policyTypes, drafts, onChange, on
                 hintId={`${id}-file-error`}
                 error
               >
-                <input
+                <PdfUpload
                   key={fileInputKey}
                   id={`${id}-file`}
-                  type="file"
-                  accept=".pdf,application/pdf"
-                  aria-invalid={fileError ? true : undefined}
-                  aria-describedby={fileError ? `${id}-file-error` : undefined}
-                  onChange={(event) => {
-                    const file = event.target.files?.[0] ?? null;
+                  fileName={entry.file?.name}
+                  invalid={fileError ? true : undefined}
+                  describedBy={fileError ? `${id}-file-error` : undefined}
+                  onChange={(file) => {
                     setFileError(file ? certificationFileProblem(file) : null);
                     setEntry((current) => ({ ...current, file }));
                   }}
-                  className={INPUT_CLASS}
                 />
                 {currentFileName ? (
                   <p className="mt-1 truncate text-xs text-fg-muted">Current: {currentFileName}</p>

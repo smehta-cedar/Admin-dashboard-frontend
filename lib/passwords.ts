@@ -7,9 +7,9 @@ import "server-only";
  * change note on every add and every edit that changed something, with the
  * password itself only ever noted as "set" or "changed".
  *
- * A password is one agent's portal access at one carrier: the portal
- * username and password. An agent has at most one password per carrier
- * (the API enforces it). The writing number (producer ID) lives on the
+ * A password is one portal login at one carrier: the portal username and
+ * password. It belongs to an agent or to the agency itself. Each agent, and
+ * the agency, has at most one password per carrier (the API enforces it). The writing number (producer ID) lives on the
  * carrier contract in lib/carrier-contracts.ts.
  *
  * Distinct from app/login (sign-in to this app). Passwords are carrier
@@ -38,8 +38,11 @@ const PASSWORD_STATUSES: readonly string[] = [
 export type PasswordRecord = {
   /** The API's UUID. */
   id: string;
-  agentId: AgentRecord["id"];
-  /** The agent's name as of the read, for display without another lookup. */
+  /** Null on the agency's own password. */
+  agentId: AgentRecord["id"] | null;
+  /** Set only on the agency's own password. */
+  agencyId: string | null;
+  /** The agent's (or the agency's) name as of the read, for display without another lookup. */
   agentName: string;
   /** Unique per agent: one password for each agent at each carrier. */
   carrierId: CarrierRecord["id"];
@@ -48,6 +51,8 @@ export type PasswordRecord = {
   username: string;
   /** Carrier portal password, exactly as entered (not trimmed). */
   portalPassword: string;
+  /** The carrier portal's sign-in page, or "" when none. */
+  link: string;
   /** Defaults to "active" when adding. */
   status: PasswordStatus;
 };
@@ -83,10 +88,13 @@ export type PasswordNote = {
 /** A password as the API serialises it (PasswordSerializer). */
 export type ApiPassword = {
   id: string;
-  agent: { id: string; name: string; is_active: boolean };
+  /** One of agent and agency is set, the other null. */
+  agent: { id: string; name: string; is_active: boolean } | null;
+  agency: { id: string; name: string; is_active: boolean } | null;
   carrier: { id: string; name: string; status: string; is_active: boolean };
   username: string;
   portal_password: string;
+  link: string;
   status: string;
   created_at: string;
   updated_at: string;
@@ -108,6 +116,7 @@ const NOTE_FIELDS: Record<string, PasswordField> = {
   carrier: "carrierId",
   username: "username",
   password: "portalPassword",
+  link: "link",
   status: "status",
 };
 
@@ -121,12 +130,14 @@ export function toPasswordRecord(password: ApiPassword): PasswordRecord {
   }
   return {
     id: password.id,
-    agentId: password.agent.id,
-    agentName: password.agent.name,
+    agentId: password.agent?.id ?? null,
+    agencyId: password.agency?.id ?? null,
+    agentName: (password.agent ?? password.agency)?.name ?? "",
     carrierId: password.carrier.id,
     carrierName: password.carrier.name,
     username: password.username,
     portalPassword: password.portal_password,
+    link: password.link,
     status: knownStatus ? (password.status as PasswordStatus) : "active",
   };
 }

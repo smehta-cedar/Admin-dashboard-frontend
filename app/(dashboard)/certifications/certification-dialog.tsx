@@ -5,6 +5,7 @@ import { CarrierCheckboxes } from "@/components/carrier-checkboxes";
 import { GHOST_BUTTON_CLASS, INPUT_CLASS, PRIMARY_BUTTON_CLASS } from "@/components/classes";
 import { Field } from "@/components/field";
 import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
+import { PdfUpload } from "@/components/pdf-upload";
 import type { CertifiablePolicyType } from "@/lib/certification-options";
 import type {
   CertificationError,
@@ -116,6 +117,7 @@ function CertificationForm({ id, editor, fixed, options, onSave, close }: Certif
   const [startDate, setStartDate] = useState(editing?.startDate ?? "");
   const [endDate, setEndDate] = useState(editing?.endDate ?? "");
   const [carrierIds, setCarrierIds] = useState<string[]>(editing?.carriers.map((carrier) => carrier.id) ?? []);
+  const [chosenFileName, setChosenFileName] = useState<string | null>(null);
 
   // The side the form picks, and what the edited row currently has there.
   const picking = fixed.kind === "agent" ? "policyType" : "agent";
@@ -321,15 +323,16 @@ function CertificationForm({ id, editor, fixed, options, onSave, close }: Certif
           hintId={`${id}-file-error`}
           error
         >
-          <input
+          <PdfUpload
             id={`${id}-file`}
-            type="file"
             name="file"
-            accept=".pdf,application/pdf"
-            aria-invalid={fileError ? true : undefined}
-            aria-describedby={fileError ? `${id}-file-error` : undefined}
-            onChange={() => clear("file")}
-            className={INPUT_CLASS}
+            fileName={chosenFileName}
+            invalid={fileError ? true : undefined}
+            describedBy={fileError ? `${id}-file-error` : undefined}
+            onChange={(file) => {
+              setChosenFileName(file?.name ?? null);
+              clear("file");
+            }}
           />
           {editing?.fileName ? (
             <p className="mt-1 truncate text-xs text-fg-muted">Current: {editing.fileName}</p>
