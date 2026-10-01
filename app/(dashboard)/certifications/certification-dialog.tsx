@@ -1,45 +1,37 @@
 "use client";
 
 import { useId, useState, type FormEvent } from "react";
-import { CarrierCheckboxes } from "@/components/carrier-checkboxes";
 import { GHOST_BUTTON_CLASS, INPUT_CLASS, PRIMARY_BUTTON_CLASS } from "@/components/classes";
 import { Field } from "@/components/field";
 import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
 import { PdfUpload } from "@/components/pdf-upload";
-import type { CertifiablePolicyType } from "@/lib/certification-options";
+import { linesFor, type CertifiableCarrier } from "@/lib/certification-options";
 import type {
   CertificationError,
   CertificationField,
   CertificationRecord,
   CertificationValues,
 } from "@/lib/certifications";
+import { certificationLabel } from "./certifications-table";
 
 /*
- * The one Add / Edit certification dialog, used from two places with one
- * side of the pair fixed:
+ * The one Add / Edit certification dialog, opened from the agent profile
+ * with the agent fixed. Every field is optional: carrier, line of business
+ * (the carrier's own lines, or every line when no carrier is chosen), due
+ * date (left blank on a new row, the API sets the next deadline), start and
+ * end dates, status, a PDF and the Verified box. Nothing is checked but the
+ * PDF: a certification is an add-on.
  *
- *   agent profile      — the agent is fixed; the form picks the policy type
- *   policy types table — the policy type is fixed; the form picks the agent
- *
- * The other fields are the same: start date, end date, status, a PDF and
- * the Verified box. When the policy type is certified per carrier the form
- * also shows a box per carrier the certification can cover (the type's
- * carriers that have an agency contract) and needs at least one; for any
- * other type there are no carrier boxes and none are sent.
- *
- * The file input is empty on every open; leaving it empty
- * keeps the stored file, whose name the edit dialog shows. The select
- * offers the active options plus the edited row's own choice when that is
- * inactive (or gone), so an edit never silently moves the row.
+ * The file input is empty on every open; leaving it empty keeps the stored
+ * file, whose name the edit dialog shows. The carrier select offers the
+ * active carriers plus the edited row's own carrier when that is inactive
+ * (or gone), so an edit never silently moves the row.
  *
  * The view passes `onSave`, which calls the saveCertification server action
- * (./actions.ts) and updates its own state from the saved record. The API
- * keeps one live row per agent and policy type and checks the dates; a
- * duplicate comes back as the API's message under the field the user chose,
- * an end before the start under the end date, a file that is not a PDF or
- * is over 10 MB under the file (checked here first, then by the API, so a
- * large file is not sent at all). While the save is in flight
- * the buttons are disabled.
+ * (./actions.ts) and updates its own state from the saved record. A file
+ * that is not a PDF or is over 10 MB is named under the file (checked here
+ * first, then by the API, so a large file is not sent at all). While the
+ * save is in flight the buttons are disabled.
  */
 
 /** Which dialog is open. Edit holds the row as it was when the dialog opened. */
@@ -50,8 +42,9 @@ export type { CertificationError, CertificationValues } from "@/lib/certificatio
 /** Also the order changes are listed in on a note. */
 export const CERTIFICATION_FIELD_LABELS: Record<CertificationField, string> = {
   agent: "Agent",
-  policyType: "Policy type",
-  carriers: "Carriers",
+  carrier: "Carrier",
+  lineOfBusiness: "Line of business",
+  dueDate: "Due date",
   startDate: "Start date",
   endDate: "End date",
   isVerified: "Verified",
@@ -69,22 +62,27 @@ export function certificationFileProblem(file: File): string | null {
   return null;
 }
 
-/** One choice for the select: an agent, or a policy type with its scope and carriers. */
-export type CertificationOption =
-  | { id: string; name: string; status: "active" | "inactive" }
-  | CertifiablePolicyType;
-
-/** The side of the pair the page fixes, with its name for the title (and scope, for a policy type). */
-export type CertificationFixedSide =
-  | { kind: "agent"; agent: { id: string; name: string } }
-  | { kind: "policyType"; policyType: CertifiablePolicyType };
+/**
+ * The carriers a form offers: the active ones plus `current` (a row's own
+ * carrier) when it is inactive or gone, by name.
+ */
+export function carrierChoices(
+  carriers: CertifiableCarrier[],
+  current?: { id: string; name: string },
+): { id: string; name: string }[] {
+  const choices = carriers
+    .filter((carrier) => carrier.status === "active" || carrier.id === current?.id)
+    .map(({ id, name }) => ({ id, name }));
+  if (current?.id && !choices.some((carrier) => carrier.id === current.id)) choices.push(current);
+  return choices.sort((a, b) => a.name.localeCompare(b.name));
+}
 
 type CertificationDialogProps = {
   /** Null keeps the dialog closed. */
   editor: CertificationEditor | null;
-  fixed: CertificationFixedSide;
-  /** Every option for the side the form picks; the select shows the active ones. */
-  options: CertificationOption[];
+  agent: { id: string; name: string };
+  /** Every carrier with its lines; the select shows the active ones. */
+  carriers: CertifiableCarrier[];
   /** Saves the values; resolves with the errors to show instead of closing. */
   onSave: (values: CertificationValues) => Promise<CertificationError[]>;
   /** Runs for every close: Cancel, Escape, backdrop click, or a save. */
@@ -109,58 +107,34 @@ type CertificationFormProps = Omit<CertificationDialogProps, "editor" | "onClose
   close: () => void;
 };
 
-/** The dialog's form. Mounted per open, so its errors and dates start fresh each time. */
-function CertificationForm({ id, editor, fixed, options, onSave, close }: CertificationFormProps) {
+/** The dialog's form. Mounted per open, so its errors and fields start fresh each time. */
+function CertificationForm({ id, editor, agent, carriers, onSave, close }: CertificationFormProps) {
   const editing = editor.mode === "edit" ? editor.certification : undefined;
   const [errors, setErrors] = useState<CertificationError[]>([]);
   const [saving, setSaving] = useState(false);
-  const [startDate, setStartDate] = useState(editing?.startDate ?? "");
-  const [endDate, setEndDate] = useState(editing?.endDate ?? "");
-  const [carrierIds, setCarrierIds] = useState<string[]>(editing?.carriers.map((carrier) => carrier.id) ?? []);
+  const [carrierId, setCarrierId] = useState(editing?.carrierId ?? "");
+  const [lineOfBusiness, setLineOfBusiness] = useState(editing?.lineOfBusiness ?? "");
   const [chosenFileName, setChosenFileName] = useState<string | null>(null);
 
-  // The side the form picks, and what the edited row currently has there.
-  const picking = fixed.kind === "agent" ? "policyType" : "agent";
-  const current = editing
-    ? picking === "agent"
-      ? { id: editing.agentId, name: editing.agentName }
-      : { id: editing.policyTypeId, name: editing.policyTypeName }
-    : undefined;
-  const [pickedId, setPickedId] = useState(current?.id ?? "");
-
-  // The policy type in play, fixed or picked, for its certification scope and carriers.
-  const policyType =
-    fixed.kind === "policyType"
-      ? fixed.policyType
-      : options.find((option): option is CertifiablePolicyType => option.id === pickedId && "carriers" in option);
-  const perCarrier = policyType?.certificationScope === "per_carrier";
-  const carrierOptions = perCarrier ? policyType.carriers : [];
-
-  // Active options, plus the edited row's own choice when it is inactive or gone.
-  const choices = options
-    .filter((option) => option.status === "active" || option.id === current?.id)
-    .map((option) => ({ id: option.id, name: option.name }));
-  if (current && !choices.some((option) => option.id === current.id)) {
-    choices.unshift(current);
-  }
+  const choices = carrierChoices(
+    carriers,
+    editing?.carrierId ? { id: editing.carrierId, name: editing.carrierName } : undefined,
+  );
+  const lines = linesFor(carriers, carrierId, editing?.lineOfBusiness);
 
   const messageFor = (field: CertificationError["field"]) =>
     errors.find((error) => error.field === field)?.message ?? null;
   const clear = (field: CertificationError["field"]) =>
     setErrors((existing) => existing.filter((error) => error.field !== field));
 
-  const pickError = messageFor(picking);
-  const carriersError = messageFor("carriers");
-  const startError = messageFor("startDate");
-  const endError = messageFor("endDate");
   const fileError = messageFor("file");
-  const formError = messageFor("form") ?? messageFor("status") ?? messageFor("isVerified");
+  // Anything else the API says goes under the form.
+  const formError = errors.find((error) => error.field !== "file")?.message ?? null;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (saving) return;
     const data = new FormData(event.currentTarget);
-    const picked = String(data.get("picked") ?? "").trim();
     // An empty file input still submits an empty File; that means "keep the current one".
     const chosen = data.get("file");
     const file = chosen instanceof File && chosen.size > 0 ? chosen : null;
@@ -169,18 +143,13 @@ function CertificationForm({ id, editor, fixed, options, onSave, close }: Certif
       setErrors([{ field: "file", message: problem }]);
       return;
     }
-    // Only boxes on offer for this type count; a type that is not per carrier sends none.
-    const checkedIds = carrierIds.filter((carrierId) => carrierOptions.some((carrier) => carrier.id === carrierId));
-    if (perCarrier && checkedIds.length === 0) {
-      setErrors([{ field: "carriers", message: "Choose at least one carrier." }]);
-      return;
-    }
     const values: CertificationValues = {
-      agentId: fixed.kind === "agent" ? fixed.agent.id : picked,
-      policyTypeId: fixed.kind === "policyType" ? fixed.policyType.id : picked,
-      carrierIds: checkedIds,
-      startDate,
-      endDate,
+      agentId: agent.id,
+      carrierId,
+      lineOfBusiness,
+      dueDate: String(data.get("dueDate") ?? ""),
+      startDate: String(data.get("startDate") ?? ""),
+      endDate: String(data.get("endDate") ?? ""),
       isVerified: data.get("isVerified") === "yes",
       file,
       status: String(data.get("status")) === "inactive" ? "inactive" : "active",
@@ -198,12 +167,7 @@ function CertificationForm({ id, editor, fixed, options, onSave, close }: Certif
     }
   };
 
-  const fixedName = fixed.kind === "agent" ? fixed.agent.name : fixed.policyType.name;
-  const title = editing
-    ? `Edit ${editing.agentName} · ${editing.policyTypeName}`
-    : fixed.kind === "agent"
-      ? `Certify ${fixedName}`
-      : `Add certification for ${fixedName}`;
+  const title = editing ? `Edit ${agent.name} · ${certificationLabel(editing)}` : `Certify ${agent.name}`;
 
   return (
     <form onSubmit={handleSubmit} className="px-6 py-4">
@@ -211,44 +175,53 @@ function CertificationForm({ id, editor, fixed, options, onSave, close }: Certif
         {title}
       </h2>
 
-      {/*
-        The pick and status share the first row, then the carriers (per-carrier
-        types only), the two dates, and the PDF with Verified.
-      */}
-      <div className="mt-5 grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto]">
-        <Field
-          label={picking === "agent" ? "Agent" : "Policy type"}
-          htmlFor={`${id}-picked`}
-          required
-          hint={pickError ?? undefined}
-          hintId={`${id}-picked-error`}
-          error
-        >
+      {/* Carrier and line, then due date and status, the two dates, and the PDF with Verified. */}
+      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <Field label="Carrier" htmlFor={`${id}-carrier`}>
           <select
-            id={`${id}-picked`}
-            name="picked"
-            required
-            defaultValue={current?.id ?? ""}
-            aria-invalid={pickError ? true : undefined}
-            aria-describedby={pickError ? `${id}-picked-error` : undefined}
+            id={`${id}-carrier`}
+            value={carrierId}
             onChange={(event) => {
-              setPickedId(event.target.value);
-              clear(picking);
-              clear("carriers");
+              const next = event.target.value;
+              setCarrierId(next);
+              // A line the new carrier doesn't write goes back to none.
+              if (!linesFor(carriers, next, editing?.lineOfBusiness).includes(lineOfBusiness)) setLineOfBusiness("");
             }}
             className={INPUT_CLASS}
           >
-            <option value="" disabled>
-              {picking === "agent" ? "Choose an agent" : "Choose a policy type"}
-            </option>
-            {choices.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.name}
+            <option value="">None</option>
+            {choices.map((carrier) => (
+              <option key={carrier.id} value={carrier.id}>
+                {carrier.name}
               </option>
             ))}
           </select>
         </Field>
-        <Field label="Status" htmlFor={`${id}-status`} className="sm:w-40">
+        <Field label="Line of business" htmlFor={`${id}-line`}>
+          <select
+            id={`${id}-line`}
+            value={lineOfBusiness}
+            onChange={(event) => setLineOfBusiness(event.target.value)}
+            className={INPUT_CLASS}
+          >
+            <option value="">None</option>
+            {lines.map((line) => (
+              <option key={line} value={line}>
+                {line}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Due date" htmlFor={`${id}-due`}>
+          <input
+            id={`${id}-due`}
+            name="dueDate"
+            type="date"
+            defaultValue={editing?.dueDate ?? ""}
+            className={INPUT_CLASS}
+          />
+        </Field>
+        <Field label="Status" htmlFor={`${id}-status`}>
           <select
             id={`${id}-status`}
             name="status"
@@ -259,60 +232,21 @@ function CertificationForm({ id, editor, fixed, options, onSave, close }: Certif
             <option value="inactive">Inactive</option>
           </select>
         </Field>
-        {perCarrier ? (
-          <CarrierCheckboxes
-            legend="Carriers"
-            carriers={carrierOptions}
-            checkedIds={carrierIds}
-            onChange={(next) => {
-              setCarrierIds(next);
-              clear("carriers");
-            }}
-            emptyText="No contracted carriers need this certification."
-            error={carriersError}
-            errorId={`${id}-carriers-error`}
-            className="sm:col-span-2"
-          />
-        ) : null}
-        <Field
-          label="Start date"
-          htmlFor={`${id}-start`}
-          hint={startError ?? undefined}
-          hintId={`${id}-start-error`}
-          error
-        >
+        <Field label="Completion date" htmlFor={`${id}-start`}>
           <input
             id={`${id}-start`}
+            name="startDate"
             type="date"
-            value={startDate}
-            aria-invalid={startError ? true : undefined}
-            aria-describedby={startError ? `${id}-start-error` : undefined}
-            onChange={(event) => {
-              setStartDate(event.target.value);
-              clear("startDate");
-              clear("endDate");
-            }}
+            defaultValue={editing?.startDate ?? ""}
             className={INPUT_CLASS}
           />
         </Field>
-        <Field
-          label="End date"
-          htmlFor={`${id}-end`}
-          hint={endError ?? undefined}
-          hintId={`${id}-end-error`}
-          error
-        >
+        <Field label="Expiry date" htmlFor={`${id}-end`}>
           <input
             id={`${id}-end`}
+            name="endDate"
             type="date"
-            min={startDate || undefined}
-            value={endDate}
-            aria-invalid={endError ? true : undefined}
-            aria-describedby={endError ? `${id}-end-error` : undefined}
-            onChange={(event) => {
-              setEndDate(event.target.value);
-              clear("endDate");
-            }}
+            defaultValue={editing?.endDate ?? ""}
             className={INPUT_CLASS}
           />
         </Field>
@@ -338,7 +272,7 @@ function CertificationForm({ id, editor, fixed, options, onSave, close }: Certif
             <p className="mt-1 truncate text-xs text-fg-muted">Current: {editing.fileName}</p>
           ) : null}
         </Field>
-        <div className="flex min-w-0 flex-col justify-end sm:w-40">
+        <div className="flex min-w-0 flex-col justify-end">
           <label className="flex items-center gap-2 py-2 text-sm text-fg">
             <input
               type="checkbox"

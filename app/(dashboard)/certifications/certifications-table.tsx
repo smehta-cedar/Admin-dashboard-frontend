@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { ROW_BUTTON_CLASS } from "@/components/classes";
 import { EditIcon } from "@/components/edit-icon";
 import { PROFILE_LINK_CLASS, ProfileTable } from "@/components/profile-shell";
@@ -9,11 +8,9 @@ import type { CertificationRecord } from "@/lib/certifications";
 import { formatLicenceDate } from "@/lib/state-licenses";
 
 /*
- * The rows of one side's certifications: an agent's (leading column the
- * policy type) or a policy type's (leading column the agent, linked to their
- * profile), then Carriers (names joined, "—" for a type that is not per
- * carrier), Start, End, Document (the PDF's name, linking to its
- * download through ./[id]/file), Verified and Status. With onEdit every row
+ * One agent's certifications: Carrier, Line of business (the sub type), Due,
+ * Completion, Expiry, Document (the PDF's name, linking to its download
+ * through ./[id]/file), Verified and Status; "—" for anything unset. With onEdit every row
  * starts with an Edit button; without it (an agent's own read-only profile)
  * there is no Action column. fileLinks false shows the PDF's name unlinked.
  * Dates are formatted from the stored string, never through Date, so the
@@ -23,8 +20,6 @@ import { formatLicenceDate } from "@/lib/state-licenses";
 
 type CertificationsTableProps = {
   certifications: CertificationRecord[];
-  /** Which side the rows are listed under: the other is the leading column. */
-  leading: "policyType" | "agent";
   onEdit?: (certification: CertificationRecord) => void;
   /** Whether the PDF's name links to its download. */
   fileLinks?: boolean;
@@ -57,11 +52,57 @@ function DocumentCell({ certification, link }: { certification: CertificationRec
   );
 }
 
-export function CertificationsTable({ certifications, leading, onEdit, fileLinks = true }: CertificationsTableProps) {
+/** A text cell: the value, or "—" when blank. */
+function TextCell({ text, strong = false }: { text: string; strong?: boolean }) {
+  return (
+    <td className="min-w-0 truncate px-3 py-2.5 align-middle sm:whitespace-nowrap">
+      {text ? (
+        <span className={strong ? "font-medium text-fg" : "text-fg-muted"}>{text}</span>
+      ) : (
+        <span className="text-fg-subtle">—</span>
+      )}
+    </td>
+  );
+}
+
+/** List order: due date (unset last), then carrier name, then line of business. */
+export function compareCertifications(a: CertificationRecord, b: CertificationRecord): number {
+  if (a.dueDate !== b.dueDate) {
+    if (!a.dueDate) return 1;
+    if (!b.dueDate) return -1;
+    return a.dueDate.localeCompare(b.dueDate);
+  }
+  return a.carrierName.localeCompare(b.carrierName) || a.lineOfBusiness.localeCompare(b.lineOfBusiness);
+}
+
+/**
+ * `certifications` split by the year they are due, newest year first, each
+ * in list order; rows with no due date come last under year "".
+ */
+export function certificationsByYear(
+  certifications: CertificationRecord[],
+): { year: string; certifications: CertificationRecord[] }[] {
+  const groups = new Map<string, CertificationRecord[]>();
+  for (const certification of [...certifications].sort(compareCertifications)) {
+    const year = certification.dueDate.slice(0, 4);
+    groups.set(year, [...(groups.get(year) ?? []), certification]);
+  }
+  return [...groups.entries()]
+    .sort(([a], [b]) => (a === "" ? 1 : b === "" ? -1 : b.localeCompare(a)))
+    .map(([year, rows]) => ({ year, certifications: rows }));
+}
+
+/** What a row is called in labels, e.g. "Humana MAPD". */
+export function certificationLabel(certification: CertificationRecord): string {
+  return [certification.carrierName, certification.lineOfBusiness].filter(Boolean).join(" ") || "untitled";
+}
+
+export function CertificationsTable({ certifications, onEdit, fileLinks = true }: CertificationsTableProps) {
   const columns = [
     ...(onEdit ? ["Action"] : []),
-    leading === "agent" ? "Agent" : "Policy type",
-    "Carriers",
+    "Carrier",
+    "Line of business",
+    "Due Date",
     "Completion Date",
     "Expiry Date",
     "Document",
@@ -78,7 +119,7 @@ export function CertificationsTable({ certifications, leading, onEdit, fileLinks
               <button
                 type="button"
                 onClick={() => onEdit(certification)}
-                aria-label={`Edit the ${certification.policyTypeName} certification for ${certification.agentName}`}
+                aria-label={`Edit the ${certificationLabel(certification)} certification`}
                 title="Edit"
                 className={`inline-flex items-center gap-1.5 ${ROW_BUTTON_CLASS}`}
               >
@@ -86,22 +127,9 @@ export function CertificationsTable({ certifications, leading, onEdit, fileLinks
               </button>
             </td>
           ) : null}
-          <td className="min-w-0 truncate px-3 py-2.5 align-middle sm:whitespace-nowrap">
-            {leading === "agent" ? (
-              <Link href={`/agents/${certification.agentId}`} className={PROFILE_LINK_CLASS}>
-                {certification.agentName}
-              </Link>
-            ) : (
-              <span className="font-medium text-fg">{certification.policyTypeName}</span>
-            )}
-          </td>
-          <td className="min-w-0 px-3 py-2.5 align-middle text-fg-muted">
-            {certification.carriers.length > 0 ? (
-              certification.carriers.map((carrier) => carrier.name).join(", ")
-            ) : (
-              <span className="text-fg-subtle">—</span>
-            )}
-          </td>
+          <TextCell text={certification.carrierName} strong />
+          <TextCell text={certification.lineOfBusiness} />
+          <DateCell date={certification.dueDate} />
           <DateCell date={certification.startDate} />
           <DateCell date={certification.endDate} />
           <DocumentCell certification={certification} link={fileLinks} />

@@ -23,6 +23,7 @@ import { StateLicensesPanel } from "@/components/state-licenses-panel";
 import { StatusBadge } from "@/components/status-badge";
 import type { AgentStateLicenseRecord } from "@/lib/agent-state-licenses";
 import type { AgentNote, AgentRecord } from "@/lib/agents";
+import type { CertifiableCarrier } from "@/lib/certification-options";
 import type { CertificationRecord } from "@/lib/certifications";
 import type { CarrierContractRecord } from "@/lib/carrier-contracts";
 import type { CarrierRecord } from "@/lib/carriers";
@@ -30,15 +31,18 @@ import { formatAddress } from "@/lib/address";
 import { formatLicenceDate } from "@/lib/state-licenses";
 import { writableStates } from "@/lib/us-states";
 import { byName } from "@/lib/text";
-import { saveCertification } from "../../certifications/actions";
+import { listAgentCertifications, saveCertification } from "../../certifications/actions";
 import {
   CertificationDialog,
   type CertificationEditor,
   type CertificationError,
-  type CertificationOption,
   type CertificationValues,
 } from "../../certifications/certification-dialog";
-import { CertificationsTable } from "../../certifications/certifications-table";
+import {
+  CertificationsTable,
+  certificationsByYear,
+  compareCertifications,
+} from "../../certifications/certifications-table";
 import { AppointmentDialog } from "../../contracts/appointment-dialog";
 import { useAppointments } from "../../contracts/use-appointments";
 import { AGENT_FIELD_LABELS } from "../agent-dialog";
@@ -127,10 +131,10 @@ type AgentProfileProps = {
   initialContracts: CarrierContractRecord[];
   /** This agent's licence rows, in state-code order. */
   initialLicenses: AgentStateLicenseRecord[];
-  /** This agent's certifications, by policy type name; null when the role can't see certifications. */
+  /** This agent's certifications, by due date; null when the role can't see certifications. */
   initialCertifications: CertificationRecord[] | null;
-  /** Every policy type, for the certification dialog's select. */
-  policyTypes: CertificationOption[];
+  /** Every carrier with its lines, for the certification dialog. */
+  certificationCarriers: CertifiableCarrier[];
   /** This agent's passwords, the carrier as the party, sorted by carrier name; null hides the section. */
   passwords: ProfilePassword[] | null;
   /** This agent's notes, newest first; null hides the section. */
@@ -312,7 +316,7 @@ export function AgentProfile({
   initialContracts,
   initialLicenses,
   initialCertifications,
-  policyTypes,
+  certificationCarriers,
   passwords,
   notes,
   readOnly = false,
@@ -321,6 +325,12 @@ export function AgentProfile({
   const agent = initialAgent;
   const licenses = initialLicenses;
   const [certifications, setCertifications] = useState(initialCertifications);
+  // A fresh server render (refresh, revalidation) brings rows added elsewhere, e.g. by the yearly command.
+  const [loadedCertifications, setLoadedCertifications] = useState(initialCertifications);
+  if (initialCertifications !== loadedCertifications) {
+    setLoadedCertifications(initialCertifications);
+    setCertifications(initialCertifications);
+  }
   const router = useRouter();
   const [certificationEditor, setCertificationEditor] = useState<CertificationEditor | null>(null);
   // Which section the panel shows. Carriers first: it is what the page is opened for.
@@ -330,7 +340,12 @@ export function AgentProfile({
     initialContracts,
     agents: [agent],
     carriers,
-    onSaved: () => {},
+    // A new carrier gives the agent a certification per line of business, so reload them.
+    onSaved: async () => {
+      if (certifications === null) return;
+      const fresh = await listAgentCertifications(agent.id);
+      if (fresh) setCertifications(fresh);
+    },
   });
 
   // This agent's carriers, rebuilt from state so a new appointment shows at once.
@@ -483,11 +498,11 @@ export function AgentProfile({
   /** Adds or edits one of this agent's certifications through the API. Resolves with the dialog's errors, if any. */
   const saveAgentCertification = async (values: CertificationValues): Promise<CertificationError[]> => {
     const editingId = certificationEditor?.mode === "edit" ? certificationEditor.certification.id : undefined;
-    const result = await saveCertification(values, "agent", editingId);
+    const result = await saveCertification(values, editingId);
     if (!result.ok) return result.errors;
     setCertifications((current) =>
-      [...(current ?? []).filter((row) => row.id !== result.certification.id), result.certification].sort((a, b) =>
-        a.policyTypeName.localeCompare(b.policyTypeName),
+      [...(current ?? []).filter((row) => row.id !== result.certification.id), result.certification].sort(
+        compareCertifications,
       ),
     );
     return [];
@@ -631,21 +646,31 @@ export function AgentProfile({
               {certifications.length === 0 ? (
                 <PanelEmpty>No certifications recorded.</PanelEmpty>
               ) : (
-                <CertificationsTable
-                  certifications={certifications}
-                  leading="policyType"
-                  onEdit={
-                    readOnly
-                      ? undefined
-                      : (certification) =>
-                          setCertificationEditor({
-                            mode: "edit",
-                            certification,
-                          })
-                  }
-                  // The download needs certifications access, which an agent's sign-in doesn't have.
-                  fileLinks={!readOnly}
-                />
+                // One table per year due, newest first.
+                <div className="grid gap-6">
+                  {certificationsByYear(certifications).map((group) => (
+                    <section key={group.year || "none"} aria-label={`Certifications due ${group.year || "without a date"}`}>
+                      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-fg-subtle">
+                        {group.year || "No due date"}
+                        <span className="ml-2 font-normal tabular-nums">{group.certifications.length}</span>
+                      </h3>
+                      <CertificationsTable
+                        certifications={group.certifications}
+                        onEdit={
+                          readOnly
+                            ? undefined
+                            : (certification) =>
+                                setCertificationEditor({
+                                  mode: "edit",
+                                  certification,
+                                })
+                        }
+                        // The download needs certifications access, which an agent's sign-in doesn't have.
+                        fileLinks={!readOnly}
+                      />
+                    </section>
+                  ))}
+                </div>
               )}
             </Panel>
           ) : shown === "passwords" && passwords ? (
@@ -665,11 +690,11 @@ export function AgentProfile({
 
       {readOnly ? null : (
         <>
-          {/* Agent fixed to this profile; the form picks the policy type. */}
+          {/* Agent fixed to this profile. */}
           <CertificationDialog
             editor={certificationEditor}
-            fixed={{ kind: "agent", agent: { id: agent.id, name: agent.name } }}
-            options={policyTypes}
+            agent={{ id: agent.id, name: agent.name }}
+            carriers={certificationCarriers}
             onSave={saveAgentCertification}
             onClose={() => setCertificationEditor(null)}
           />

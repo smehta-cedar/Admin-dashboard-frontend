@@ -1,5 +1,4 @@
 import type { CertificationRecord, CertificationStatus } from "@/lib/certifications";
-import type { CarrierRef } from "@/lib/policy-types";
 
 /*
  * The certificate rows the agent form page edits. A plain module, not a
@@ -7,13 +6,16 @@ import type { CarrierRef } from "@/lib/policy-types";
  * rows with draftFromCertification and the client form can use it too.
  */
 
-/** One certification queued for the agent who is about to be created. */
+/** One certification queued for the agent being added or edited. */
 export type CertificateDraft = {
   id: string;
-  policyTypeId: string;
-  policyTypeName: string;
-  /** Carriers covered, in name order; empty unless the type is certified per carrier. */
-  carriers: CarrierRef[];
+  /** "" for none. */
+  carrierId: string;
+  carrierName: string;
+  /** "" for none. */
+  lineOfBusiness: string;
+  /** "" lets the API default it to the next deadline. */
+  dueDate: string;
   startDate: string;
   endDate: string;
   isVerified: boolean;
@@ -28,9 +30,10 @@ export type CertificateDraft = {
 export function draftFromCertification(certification: CertificationRecord): CertificateDraft {
   return {
     id: certification.id,
-    policyTypeId: certification.policyTypeId,
-    policyTypeName: certification.policyTypeName,
-    carriers: certification.carriers,
+    carrierId: certification.carrierId,
+    carrierName: certification.carrierName,
+    lineOfBusiness: certification.lineOfBusiness,
+    dueDate: certification.dueDate,
     startDate: certification.startDate,
     endDate: certification.endDate,
     isVerified: certification.isVerified,

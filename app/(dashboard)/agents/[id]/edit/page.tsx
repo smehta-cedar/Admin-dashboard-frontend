@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getAgentWithLicenses } from "@/lib/agents";
-import { getContractedCarriers } from "@/lib/agency-contracts";
 import { allowForbidden } from "@/lib/api-server";
-import { certifiablePolicyType } from "@/lib/certification-options";
+import { getCarriers } from "@/lib/carriers";
+import { certifiableCarrier } from "@/lib/certification-options";
 import { getCertifications } from "@/lib/certifications";
-import { getPolicyTypes } from "@/lib/policy-types";
 import { AgentFormPage } from "../../agent-form-page";
 import { draftFromCertification } from "../../new/certificate-draft";
 
@@ -30,24 +29,17 @@ export default async function EditAgentPage(props: EditAgentPageProps) {
   const loaded = await getAgentWithLicenses(id);
   if (!loaded) notFound();
 
-  const [policyTypes, certifications, contractedCarriers] = await Promise.all([
-    allowForbidden(getPolicyTypes()),
+  const [carriers, certifications] = await Promise.all([
+    getCarriers(),
+    // Null for a role without certifications view: the page then leaves the card out.
     allowForbidden(getCertifications({ agentId: id })),
-    allowForbidden(getContractedCarriers()),
   ]);
-  const canCertify = policyTypes != null && certifications != null;
 
   return (
     <AgentFormPage
       agent={loaded.agent}
-      policyTypes={
-        canCertify ? policyTypes.map((policyType) => certifiablePolicyType(policyType, contractedCarriers)) : null
-      }
-      initialCertificates={
-        canCertify
-          ? certifications.map(draftFromCertification)
-          : []
-      }
+      carriers={certifications ? carriers.map(certifiableCarrier) : null}
+      initialCertificates={certifications ? certifications.map(draftFromCertification) : []}
       returnTo={from === "list" ? "/agents" : `/agents/${id}`}
     />
   );

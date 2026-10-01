@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
-import { getContractedCarriers } from "@/lib/agency-contracts";
-import { allowForbidden } from "@/lib/api-server";
-import { certifiablePolicyType } from "@/lib/certification-options";
-import { getPolicyTypes } from "@/lib/policy-types";
+import { getCarriers } from "@/lib/carriers";
+import { certifiableCarrier } from "@/lib/certification-options";
 import { NewAgentView } from "./new-agent-view";
 
 export const metadata: Metadata = {
@@ -13,19 +11,10 @@ export const metadata: Metadata = {
  * Add agent as a page rather than a dialog. The static `new` segment wins
  * over the dynamic `[id]` beside it. The form and its save come from the
  * section's store (../agents-store.tsx), so the new agent is in the list on
- * the way back. Policy types feed the certification list; a role that can't
- * see them gets the page without that section.
+ * the way back. Carriers (with their lines of business) feed the
+ * certification rows.
  */
 export default async function NewAgentPage() {
-  // Null for a role without policy types view: the page then hides certifications.
-  const [policyTypes, contractedCarriers] = await Promise.all([
-    allowForbidden(getPolicyTypes()),
-    allowForbidden(getContractedCarriers()),
-  ]);
-
-  return (
-    <NewAgentView
-      policyTypes={policyTypes?.map((policyType) => certifiablePolicyType(policyType, contractedCarriers)) ?? null}
-    />
-  );
+  const carriers = await getCarriers();
+  return <NewAgentView carriers={carriers.map(certifiableCarrier)} />;
 }

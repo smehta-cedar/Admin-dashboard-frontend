@@ -35,7 +35,7 @@ export default async function AgentPage() {
       initialLicenses={home.licenses}
       // Null when the Agent role doesn't grant the section: it stays out of the list.
       initialCertifications={home.certifications}
-      policyTypes={[]}
+      certificationCarriers={[]}
       passwords={home.passwords?.map((record) => ({ ...record, partyName: record.carrierName })) ?? null}
       // Not in the agent's payload.
       notes={null}

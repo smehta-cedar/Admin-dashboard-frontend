@@ -1,39 +1,39 @@
-import type { CarrierRef, CertificationScope, PolicyTypeRecord } from "@/lib/policy-types";
+import type { CarrierRecord } from "@/lib/carriers";
+import { LINES_OF_BUSINESS, type LineOfBusiness } from "@/lib/lines-of-business";
 
 /*
- * What the certification forms offer for a policy type. A plain module, not
- * a server-only or client one, so pages can build the options on the server
- * and the policy types view can rebuild them after a save.
+ * What the certification forms offer: carriers, each with the lines of
+ * business it writes (the certification's sub type). A plain module, not a
+ * server-only or client one, so pages can build the options on the server
+ * and the client forms can use them too.
  */
 
-/** A policy type as a certification form offers it. */
-export type CertifiablePolicyType = {
+/** A carrier as a certification form offers it. */
+export type CertifiableCarrier = {
   id: string;
   name: string;
   status: "active" | "inactive";
-  certificationScope: CertificationScope;
-  /**
-   * Carriers a certification on this type can cover: its certification
-   * carriers that have an agency contract. Empty unless the scope is per_carrier.
-   */
-  carriers: CarrierRef[];
+  linesOfBusiness: LineOfBusiness[];
 };
 
-/**
- * `policyType` as a certification form offers it. `contracted` is every
- * carrier with an agency contract, or null when the role can't see agency
- * contracts; then the type's own carriers are offered and the API checks.
- */
-export function certifiablePolicyType(policyType: PolicyTypeRecord, contracted: CarrierRef[] | null): CertifiablePolicyType {
-  const contractedIds = contracted ? new Set(contracted.map((carrier) => carrier.id)) : null;
+/** `carrier` as a certification form offers it. */
+export function certifiableCarrier(carrier: CarrierRecord): CertifiableCarrier {
   return {
-    id: policyType.id,
-    name: policyType.name,
-    status: policyType.status,
-    certificationScope: policyType.certificationScope,
-    carriers:
-      policyType.certificationScope === "per_carrier"
-        ? policyType.certificationCarriers.filter((carrier) => !contractedIds || contractedIds.has(carrier.id))
-        : [],
+    id: carrier.id,
+    name: carrier.name,
+    status: carrier.status === "active" ? "active" : "inactive",
+    linesOfBusiness: carrier.linesOfBusiness,
   };
+}
+
+/**
+ * The lines a form offers for `carrierId`: that carrier's own lines, or
+ * every line when no carrier is chosen. `current` (the row's stored line)
+ * is kept on offer even when the carrier doesn't write it.
+ */
+export function linesFor(carriers: CertifiableCarrier[], carrierId: string, current = ""): string[] {
+  const carrier = carriers.find((option) => option.id === carrierId);
+  const lines: string[] = carrier ? [...carrier.linesOfBusiness] : [...LINES_OF_BUSINESS];
+  if (current && !lines.includes(current)) lines.push(current);
+  return lines;
 }
