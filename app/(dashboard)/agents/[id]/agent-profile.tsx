@@ -18,7 +18,6 @@ import {
   StateChipCell,
   type ProfilePassword,
 } from "@/components/profile-shell";
-import { LINK_ACTIVE, LINK_BASE, LINK_IDLE } from "@/components/sidebar";
 import { StateLicensesPanel } from "@/components/state-licenses-panel";
 import { StatusBadge } from "@/components/status-badge";
 import type { AgentStateLicenseRecord } from "@/lib/agent-state-licenses";
@@ -56,22 +55,20 @@ import { AGENT_FIELD_LABELS } from "../agent-dialog";
  *
  * Layout, from the shared pieces in components/profile-shell.tsx. The page is
  * capped at the 2xl breakpoint, wider than the list pages. A header that is
- * always there, then a split: a section list beside one panel.
+ * always there, then a row of section cards, then one panel at full width.
  *
  *   name row        — initials, name, status, Edit; not in a card
- *   section list | panel (`13rem` | the rest from `lg`)
- *                   — the list names the sections, each with its
- *                     current count: Details, Pending, Carriers, State
- *                     licences, Certifications (only for a role that can
- *                     see them), Passwords, Notes. Picking one swaps the
- *                     panel beside it; only that section renders, full width
- *                     of the column. The choice is React state on this page
- *                     (`section`), not a route, so the Edit and Add carrier
- *                     dialogs stay mounted across a switch and nothing is
- *                     refetched. The page opens on Carriers, which is what
- *                     a profile is opened for. The items borrow the app
- *                     rail's link classes (components/sidebar.tsx) so the
- *                     active mark, spacing and type match it
+ *   section cards   — a navbar of equal cards under the name, each naming a
+ *                     section and its current count: Details, Pending,
+ *                     Carriers, State licences, Certifications (only for a
+ *                     role that can see them), Passwords, Notes. They stretch
+ *                     across the row and scroll sideways when they cannot.
+ *                     Picking one swaps the panel below; only that section
+ *                     renders, across the full width. The choice is React
+ *                     state on this page (`section`), not a route, so the
+ *                     Edit and Add carrier dialogs stay mounted across a
+ *                     switch and nothing is refetched. The page opens on
+ *                     Carriers, which is what a profile is opened for.
  *
  * Details is a two-column table of twelve fields — the work ones (NPN,
  * email with mailto, whether a login code is set, phone with tel, aliases), the three personal contact
@@ -82,8 +79,8 @@ import { AGENT_FIELD_LABELS } from "../agent-dialog";
  * Pending is a `Panel` too, with an empty state ("Nothing is pending") since
  * it is always in the list.
  *
- * Below `lg` the section list sits above the panel as a wrapping row of the
- * same items; everything else stacks in reading order.
+ * The cards stay a single row; on a narrow screen they scroll sideways
+ * instead of stacking over the panel.
  *
  * States show in two places. The State licences panel is the agent's own
  * licences as rows (lib/agent-state-licenses.ts: number, status, start and end
@@ -96,7 +93,7 @@ import { AGENT_FIELD_LABELS } from "../agent-dialog";
  * combined list across carriers. Carrier names link to their profiles.
  *
  * Pending is worked out from what is on the page, not stored: there are no
- * task records yet. See `pendingItems`. Its count sits on the section list,
+ * task records yet. See `pendingItems`. Its count sits on its section card,
  * like every other section's.
  *
  * "Add carrier" opens the shared AppointmentDialog
@@ -307,7 +304,7 @@ function pendingItems({ agent, agentCarriers, passwords }: PendingInput): Pendin
 
 export type SectionKey = "details" | "pending" | "carriers" | "licences" | "certifications" | "passwords" | "notes";
 
-/** One item of the section list: its label and the count its panel shows. */
+/** One item of the section cards: its label and the count its panel shows. */
 type Section = { key: SectionKey; label: string; count: number };
 
 export function AgentProfile({
@@ -517,32 +514,42 @@ export function AgentProfile({
       />
 
       {/*
-       * The split: the section list, then the one panel it picked. From `lg`
-       * the list is a narrow column on the left; below, a wrapping row above.
+       * Section cards sit under the name and span the row, so the panel
+       * below can use the full width. They scroll sideways when the row
+       * is narrower than the cards' minimum.
        */}
-      <div className="mt-8 grid items-start gap-5 lg:grid-cols-[13rem_minmax(0,1fr)]">
-        <nav aria-label="Profile sections">
-          <ul className="flex flex-wrap gap-1 lg:flex-col">
-            {sections.map((item) => {
-              const active = item.key === shown;
-              return (
-                <li key={item.key}>
-                  <button
-                    type="button"
-                    onClick={() => setSection(item.key)}
-                    aria-current={active ? "true" : undefined}
-                    className={`${LINK_BASE} w-full ${active ? LINK_ACTIVE : LINK_IDLE}`}
+      <nav aria-label="Profile sections" className="mt-6">
+        <ul className="flex gap-2 overflow-x-auto py-1">
+          {sections.map((item) => {
+            const active = item.key === shown;
+            return (
+              <li key={item.key} className="min-w-40 flex-1">
+                <button
+                  type="button"
+                  onClick={() => setSection(item.key)}
+                  aria-current={active ? "page" : undefined}
+                  className={`flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left shadow-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
+                    active
+                      ? "border-brand bg-brand-soft text-brand-ink shadow-[0_1px_2px_0_rgb(0_0_0/0.05),inset_0_-3px_0_var(--color-brand)]"
+                      : "border-line bg-surface text-fg hover:border-brand/40 hover:bg-brand-soft/50"
+                  }`}
+                >
+                  <span className="text-sm font-medium whitespace-nowrap">{item.label}</span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium tabular-nums ${
+                      active ? "bg-surface text-brand-ink" : "bg-brand-soft text-brand-ink"
+                    }`}
                   >
-                    {item.label}
-                    <span className="ml-auto text-xs tabular-nums">{item.count}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
+                    {item.count}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
 
-        <div className="min-w-0">
+      <div className="mt-5 min-w-0">
           {shown === "details" ? (
             <Panel title="Details" count={filledCount}>
               <DetailsTable rows={details} />
@@ -685,7 +692,6 @@ export function AgentProfile({
           ) : shown === null ? (
             <PanelEmpty>Nothing is shared with you yet. Ask the office.</PanelEmpty>
           ) : null}
-        </div>
       </div>
 
       {readOnly ? null : (

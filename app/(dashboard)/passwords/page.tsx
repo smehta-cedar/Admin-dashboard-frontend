@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
+import { NoAccess } from "@/components/no-access";
+import { canViewModule } from "@/lib/access";
 import { getAgency } from "@/lib/agency";
 import { getAgents } from "@/lib/agents";
 import { allowForbidden } from "@/lib/api-server";
@@ -12,6 +14,7 @@ export const metadata: Metadata = {
 };
 
 export default async function PasswordsPage() {
+  if (!(await canViewModule("passwords"))) return <NoAccess title="Passwords" />;
   // The carrier filter (?carrier=) reads search params with useSearchParams.
   // Rendering per request lets the server render the filtered table; a
   // prerendered page would need a Suspense boundary and render the whole table

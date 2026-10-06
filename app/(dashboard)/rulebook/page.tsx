@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
 import { EmptyState } from "@/components/empty-state";
+import { NoAccess } from "@/components/no-access";
 import { PageHeader } from "@/components/page-header";
+import { canViewModule } from "@/lib/access";
 
 export const metadata: Metadata = {
   title: "Rulebook",
 };
 
-export default function RulebookPage() {
+export default async function RulebookPage() {
+  if (!(await canViewModule("dashboard"))) return <NoAccess title="Rulebook" />;
   return (
     <>
       <PageHeader title="Rulebook" description="How payouts are calculated." />

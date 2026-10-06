@@ -4,6 +4,8 @@
  * carries a token or a password.
  */
 
+import type { RolePermissions } from "@/lib/roles";
+
 /** A user as the API serialises them (UserSerializer). */
 export type ApiUser = {
   id: string;
@@ -19,6 +21,11 @@ export type ApiUser = {
   last_login: string | null;
   created_at: string;
   updated_at: string;
+  /**
+   * Module code -> action flags, for modules the role grants anything on.
+   * Only GET /auth/me/ sends it (MeSerializer); user lists leave it out.
+   */
+  permissions?: RolePermissions;
 };
 
 export type SessionUser = {
@@ -26,12 +33,14 @@ export type SessionUser = {
   /** Display name; falls back to the email when the profile has no name. */
   name: string;
   email: string;
-  /** The role's name, or null when none is assigned. Shown, not yet enforced. */
+  /** The role's name, or null when none is assigned. */
   role: string | null;
   designation: string | null;
   isSuperuser: boolean;
   /** The agent this account signs in as. Null for staff. */
   agentId: string | null;
+  /** What the role lets them do, per module. A superuser has every module. */
+  permissions: RolePermissions;
 };
 
 export function toSessionUser(user: ApiUser): SessionUser {
@@ -43,5 +52,11 @@ export function toSessionUser(user: ApiUser): SessionUser {
     designation: user.designation?.name ?? null,
     isSuperuser: user.is_superuser,
     agentId: user.agent_id,
+    permissions: user.permissions ?? {},
   };
+}
+
+/** Whether the role lets this user see `module` (an API module code, e.g. "agents"). */
+export function canView(user: SessionUser, module: string): boolean {
+  return Boolean(user.permissions[module]?.view);
 }

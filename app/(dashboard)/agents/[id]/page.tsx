@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { NoAccess } from "@/components/no-access";
+import { canViewModule } from "@/lib/access";
 import { getAgent, getAgentNotes, getAgentWithLicenses } from "@/lib/agents";
 import { allowForbidden } from "@/lib/api-server";
 import { getCarrierContracts } from "@/lib/carrier-contracts";
@@ -12,11 +14,13 @@ import { AgentProfile } from "./agent-profile";
 
 export async function generateMetadata(props: PageProps<"/agents/[id]">): Promise<Metadata> {
   const { id } = await props.params;
+  if (!(await canViewModule("agents"))) return { title: "No access" };
   const agent = await getAgent(id);
   return { title: agent ? agent.name : "Agent not found" };
 }
 
 export default async function AgentProfilePage(props: PageProps<"/agents/[id]">) {
+  if (!(await canViewModule("agents"))) return <NoAccess title="Agent profile" />;
   const { id } = await props.params;
   const loaded = await getAgentWithLicenses(id);
   if (!loaded) notFound();

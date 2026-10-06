@@ -26,6 +26,12 @@ export type NavItem = {
    * it as a scope and sends the query there as `?q=`.
    */
   searchable?: boolean;
+  /**
+   * The API module whose view flag shows this link (app/(dashboard)/nav.ts
+   * filters on the server). null: every signed-in user. Left out on a
+   * sub-link: shown with its section.
+   */
+  module?: string | null;
 };
 
 type SidebarProps = {
@@ -65,10 +71,7 @@ export function currentNavLabel(items: NavItem[], pathname: string) {
   return undefined;
 }
 
-/*
- * The rail's link classes, exported so an in-page section list (the agent
- * profile's) can look exactly like the rail rather than invent its own.
- */
+/* The rail's link classes. */
 export const LINK_BASE = "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium";
 /* Inset bar on the left edge marks the current page in the logo teal. */
 export const LINK_ACTIVE = "bg-brand-soft text-brand-ink shadow-[inset_3px_0_0_var(--color-brand)]";

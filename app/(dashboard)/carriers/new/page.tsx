@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { NoAccess } from "@/components/no-access";
+import { canViewModule } from "@/lib/access";
 import { CarrierFormPage } from "../carrier-form";
 
 export const metadata: Metadata = {
@@ -10,6 +12,7 @@ export const metadata: Metadata = {
  * over the dynamic `[id]` beside it. Cancel and a successful save return to
  * the list.
  */
-export default function NewCarrierPage() {
+export default async function NewCarrierPage() {
+  if (!(await canViewModule("carriers"))) return <NoAccess title="Add carrier" />;
   return <CarrierFormPage returnTo="/carriers" />;
 }

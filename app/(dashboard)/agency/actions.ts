@@ -1,8 +1,9 @@
 "use server";
 
 /*
- * Edit the agency, run on the Next server so the access token stays in its
- * HttpOnly cookie. Everything is a PATCH /agencies/{id}/: saveAgency sends
+ * Add or edit the agency, run on the Next server so the access token stays in
+ * its HttpOnly cookie. createAgency POSTs /agencies/create/ once, when there is
+ * no agency yet. Every edit is a PATCH /agencies/{id}/: saveAgency sends
  * the agency's own fields (the API checks the name and NPN against other
  * agencies); saveAgencyLicense and removeAgencyLicense send the full set of
  * licence rows with the one change, since the API takes `licenses` as the
@@ -72,7 +73,12 @@ type Patched = Saved | { ok: false; apiField: string | null; message: string };
 
 /** PATCHes the agency and reads the saved agency and its rows back. */
 async function patchAgency(id: string, body: object): Promise<Patched> {
-  const result = await apiFetch<ApiAgency>(`/agencies/${encodeURIComponent(id)}/`, { method: "PATCH", body });
+  return writeAgency(`/agencies/${encodeURIComponent(id)}/`, "PATCH", body);
+}
+
+/** Sends the agency to the API and reads the saved agency and its rows back. */
+async function writeAgency(path: string, method: "POST" | "PATCH", body: object): Promise<Patched> {
+  const result = await apiFetch<ApiAgency>(path, { method, body });
 
   if (!result.ok) {
     // The session is gone (revoked, blocked); the dashboard gate would bounce the next page anyway.
@@ -91,18 +97,34 @@ async function patchAgency(id: string, body: object): Promise<Patched> {
   return { ok: true, agency: toAgencyRecord(result.data), licenses: toAgencyLicenseRecords(result.data) };
 }
 
-/** Edits the agency's own fields. Resolves with the saved agency and its licence rows. */
-export async function saveAgency(values: AgencyValues, id: string): Promise<SaveAgencyResult> {
-  const result = await patchAgency(id, {
+/** The agency's own fields as the API takes them. */
+function toApiAgency(values: AgencyValues) {
+  return {
     name: values.name,
     aliases: values.aliases,
     npn: values.npn,
     email: values.email,
     phone: values.phone,
     is_active: values.status === "active",
-  });
+  };
+}
+
+function toSaveResult(result: Patched): SaveAgencyResult {
   if (result.ok) return result;
   return { ok: false, error: { field: ERROR_FIELDS[result.apiField ?? ""] ?? "form", message: result.message } };
+}
+
+/** Edits the agency's own fields. Resolves with the saved agency and its licence rows. */
+export async function saveAgency(values: AgencyValues, id: string): Promise<SaveAgencyResult> {
+  return toSaveResult(await patchAgency(id, toApiAgency(values)));
+}
+
+/**
+ * Adds the agency when none exists yet (a new install). Licences and
+ * contracts are added afterwards from the profile's panels.
+ */
+export async function createAgency(values: AgencyValues): Promise<SaveAgencyResult> {
+  return toSaveResult(await writeAgency("/agencies/create/", "POST", toApiAgency(values)));
 }
 
 /** One licence as the API takes it. A blank date is sent as null, which keeps a row's date and defaults a new row's. */

@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { NoAccess } from "@/components/no-access";
+import { canViewModule } from "@/lib/access";
 import { getAgentStateLicenses } from "@/lib/agent-state-licenses";
 import { HrView } from "./hr-view";
 
@@ -14,6 +16,7 @@ export const metadata: Metadata = {
  * render agrees with it.
  */
 export default async function HrPage() {
+  if (!(await canViewModule("requests"))) return <NoAccess title="HR" />;
   const licenses = await getAgentStateLicenses();
   const today = new Date().toISOString().slice(0, 10);
 

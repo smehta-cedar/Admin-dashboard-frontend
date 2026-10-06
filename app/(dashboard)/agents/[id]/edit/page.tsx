@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { NoAccess } from "@/components/no-access";
+import { canViewModule } from "@/lib/access";
 import { getAgentWithLicenses } from "@/lib/agents";
 import { allowForbidden } from "@/lib/api-server";
 import { getCarriers } from "@/lib/carriers";
@@ -15,6 +17,7 @@ type EditAgentPageProps = {
 
 export async function generateMetadata(props: EditAgentPageProps): Promise<Metadata> {
   const { id } = await props.params;
+  if (!(await canViewModule("agents"))) return { title: "No access" };
   const loaded = await getAgentWithLicenses(id);
   return { title: loaded ? `Edit ${loaded.agent.name}` : "Agent not found" };
 }
@@ -24,6 +27,7 @@ export async function generateMetadata(props: EditAgentPageProps): Promise<Metad
  * to the agents list; anything else returns to this agent's profile.
  */
 export default async function EditAgentPage(props: EditAgentPageProps) {
+  if (!(await canViewModule("agents"))) return <NoAccess title="Edit agent" />;
   const { id } = await props.params;
   const { from } = await props.searchParams;
   const loaded = await getAgentWithLicenses(id);

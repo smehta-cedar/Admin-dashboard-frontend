@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { NoAccess } from "@/components/no-access";
+import { canViewModule } from "@/lib/access";
 import { getAgents } from "@/lib/agents";
 import { getCarrierContracts } from "@/lib/carrier-contracts";
 import { getCarrierPolicies } from "@/lib/carrier-policies";
@@ -12,11 +14,13 @@ import { CarrierProfile } from "./carrier-profile";
 
 export async function generateMetadata(props: PageProps<"/carriers/[id]">): Promise<Metadata> {
   const { id } = await props.params;
+  if (!(await canViewModule("carriers"))) return { title: "No access" };
   const carrier = await getCarrier(id);
   return { title: carrier ? carrier.name : "Carrier not found" };
 }
 
 export default async function CarrierProfilePage(props: PageProps<"/carriers/[id]">) {
+  if (!(await canViewModule("carriers"))) return <NoAccess title="Carrier profile" />;
   const { id } = await props.params;
   const carrier = await getCarrier(id);
   if (!carrier) notFound();
