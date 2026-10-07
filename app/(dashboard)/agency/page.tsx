@@ -1,29 +1,31 @@
 import type { Metadata } from "next";
-import { EmptyState } from "@/components/empty-state";
+import { NoAccess } from "@/components/no-access";
 import { PageHeader } from "@/components/page-header";
+import { canViewModule } from "@/lib/access";
 import { getAgencyNotes, getAgencyWithLicenses } from "@/lib/agency";
 import { getAgencyContracts } from "@/lib/agency-contracts";
 import { getAgents } from "@/lib/agents";
 import { allowForbidden } from "@/lib/api-server";
 import { getCarriers } from "@/lib/carriers";
 import { getPolicyTypes } from "@/lib/policy-types";
+import { getSessionUser } from "@/lib/session";
 import { AgencyProfile } from "./agency-profile";
+import { NewAgency } from "./new-agency";
 
 export const metadata: Metadata = {
   title: "Agency",
 };
 
 export default async function AgencyPage() {
+  if (!(await canViewModule("agencies"))) return <NoAccess title="Agency" />;
   const [loaded, agents] = await Promise.all([getAgencyWithLicenses(), getAgents()]);
 
   if (!loaded) {
+    const user = await getSessionUser();
     return (
       <>
         <PageHeader title="Agency" />
-        <EmptyState
-          title="No agency yet"
-          description="The API has no agency record. Seed one with `python manage.py seed_agency`, or add it in the Django admin."
-        />
+        <NewAgency canAdd={Boolean(user?.isSuperuser)} />
       </>
     );
   }

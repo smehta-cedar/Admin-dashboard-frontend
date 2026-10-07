@@ -561,6 +561,115 @@ Same pattern as Carriers; the differences:
 - **Policy types** ([lib/policy-types.ts](../lib/policy-types.ts),
   `/api/v1/policy-types/`, `backend/apps/policies`, route `/policy-types`):
   the catalog of policy kinds, an entity of its own that is not a carrier's
+  line of business and has nothing to do with certifications.
+  `PolicyTypeRecord` is `{ id, name, status }`. The table shows name and
+  status; the dialog is name (required) and status. `savePolicyType`
+  (`policy-types/actions.ts`) posts or patches and maps a 400's `name` under
+  its field, everything else under the form. Notes are written by the API
+  (`getPolicyTypeNotes`); there is no profile page.
+- **Certifications** ([lib/certifications.ts](../lib/certifications.ts),
+  `/api/v1/certifications/`): an agent's yearly certification with a carrier
+  for one of its lines of business (the sub type), with a due date the API
+  defaults to the next deadline (Sept 15, set in the backend settings).
+  Only the agent is required and nothing else is checked. The agent profile's
+  dialog and the agent form's Certifications card get carriers as
+  `CertifiableCarrier` (lib/certification-options.ts): each carrier with its
+  lines. The line select offers the chosen carrier's lines (`linesFor`), or
+  every line with no carrier. `CertificationsTable` lists Carrier, Line of
+  business, Due, Completion and Expiry dates, Document, Verified and Status.
+
+### Contracts and Users on the API
+
+- **Contracts** ([lib/carrier-contracts.ts](../lib/carrier-contracts.ts),
+  `/api/v1/contracts/`, `backend/apps/contracts`): `CarrierContractRecord`
+  gained `agentName` and `carrierName`; `AppointmentValues` and
+  `AppointmentError` live in the lib module (`field` includes `"carrierId"`
+  and `"form"`). The pure `saveAppointment` is gone: the API does the
+  duplicate, writing-number and ceiling checks with the same messages
+  (naming the carrier or the agent and the page that fixes it), and records
+  the notes. `useAppointments` keeps contracts and the open editor only, and
+  its `saveContract` calls the `saveAppointment` action
+  (`contracts/actions.ts`). The by-state page reads every contract's notes as
+  a prop (`getCarrierContractNotes()` → `contracts/notes/`); by-carrier and
+  the agent profile read none. No unsaved banners remain on any page.
+- **Users** ([lib/users.ts](../lib/users.ts), `/api/v1/users/` in
+  `backend/apps/accounts`): the Users page now reads the real accounts.
+  `UserRecord` is `{ id, name, email, phone, role: { id, name } | null,
+  status, isSuperuser }`; the role is one of the API's Role rows (`getRoles()`
+  → `roles/`, offered in the dialog) rather than the old `admin | staff`
+  union, and there is no password column since the API never returns one.
+  `saveUser` (`users/actions.ts`) makes up to three calls on an edit: PATCH
+  for name / email / phone / role, block or unblock when the status changed,
+  set-password when a new one was typed (blank keeps it). The API's own rules
+  (only a superuser changes a superuser; nobody blocks themselves or changes
+  their own role) come back as a 403 shown under the form. The users API
+  writes the notes (`users/notes/`), including block / unblock as a status
+  change and a password set as redacted. `data/users.json` seeds accounts
+  through `seed_users` (local dev only).
+- **Agency** ([lib/agency.ts](../lib/agency.ts), `/api/v1/agencies/`,
+  `backend/apps/agency`): `getAgencyWithLicenses()` reads the first agency
+  of the list (the frontend still treats it as a singleton) with its licence
+  rows, or null when none exists, in which case the page shows an empty
+  state pointing at `seed_agency`. `AgencyRecord` gained `id`; `AgencyField`
+  excludes it. The dialog is now thin: `saveAgency` (`agency/actions.ts`)
+  PATCHes the agency with `licenses` built from the checked states, the API
+  keeps the rows in step and records the note, and the profile updates its
+  agency and licence rows from the result with the notes as a prop. No pure
+  save and no unsaved banner remain anywhere; `applyLicenceEdits` in
+  `lib/state-licenses.ts` is unused.
+- **Requests (HR)** ([lib/requests.ts](../lib/requests.ts),
+  `/api/v1/requests/`, `backend/apps/requests`): one model for every type;
+  the API's `day_off` maps to the app's `dayOff`, and agent requests carry
+  `agentName` / `carrierName` so the HR table needs no lookup. The requests
+  store's `addRequest` runs `checkRequestValues` (the client-side half of
+  the old `newRequest`) and then the `fileRequest` action; `setStatus` sets
+  the new status at once, calls `setRequestStatus`, and puts the old one
+  back with `statusError` shown above the calendar if the API refuses. The
+  navbar dialog reads "Saving…" while it waits. No unsaved banner.
+- **Shop orders** go to `POST /requests/merch/` from
+  `app/(dashboard)/storefront/shop/actions.ts` as the signed-in user, the
+  same way HR files every other request (a 401 redirects to sign-in, a 403
+  reads "Your account can't place orders"). The shop used to be public at
+  `/shop` and post as a `Shop` service account (`SHOP_API_EMAIL` /
+  `SHOP_API_PASSWORD`); the frontend no longer needs those variables.
+  `lib/merch-requests.ts` and the writable `data/merch-requests.json` are
+  gone; the file is seed input.
+- **Storefront** ([lib/storefront.ts](../lib/storefront.ts),
+  `/api/v1/storefront/`, `backend/apps/storefront`): the products the shop
+  sells, no longer hard-coded in `lib/shop.ts` (which keeps the types,
+  `colorLabel(product, id)` and `validateOrder(values, product)`). The shop
+  page (`storefront/shop/`, the one sub-link under **Storefront**, navbar
+  title "Shop") reads `getCatalog()` (active products only), offers a
+  product picker when there is more than one, and the shop action re-reads
+  the catalog to validate before posting the order with its `productId`. A
+  merch request carries `productName` and the colour's label. The
+  **Storefront** page itself (`storefront/`, nav item after HR with a
+  shopping-bag icon) lists every product with swatches and notes in the
+  expanded row, links to the shop from its description, and `ProductDialog`
+  edits name, description, section and type, a picture link (with a live
+  thumbnail), price, colours, sizes, the max per order and status through
+  the `saveProduct` action, which also revalidates `/storefront/shop`.
+- Products carry a `category` (Womens, Mens, Maternity, Accessories,
+  Holidays) and a `productType` (Polos, Quarter Zips, Shirts, Pants, Belts,
+  Hats, Backpacks), both optional; `PRODUCT_CATEGORIES` / `PRODUCT_TYPES` in
+  `lib/shop.ts` mirror the API's and give the labels. The shop opens on a
+  **catalog**: a section nav ("All products", then only the sections with
+  products) and a type nav, over a grid of cards (picture or the drawn tee,
+  name, price, colour dots). Picking a card opens the choose step with
+  "← All products" above it.
+- Colours are picked, not typed: `ColorPicker` in the dialog is a grid of
+  `COLOR_PRESETS` (eighteen named colours) where one click adds a colour
+  and another removes it (`aria-pressed`), with a small row under it for a
+  custom colour (name plus a native colour input; id from the label), which
+  then sits in the grid too. `imageUrl` shows in the shop's
+  preview and cards and as a thumbnail on the Storefront table; blank draws
+  the tee.
+
+### Policy types on the API
+
+- **Policy types** ([lib/policy-types.ts](../lib/policy-types.ts),
+  `/api/v1/policy-types/`, `backend/apps/policies`, route `/policy-types`):
+  the catalog of policy kinds, an entity of its own that is not a carrier's
   line of business. `PolicyTypeRecord` is `{ id, name, certificationScope,
   certificationCarriers, status }`; the scope is `none`, `single` (one
   certification covers the type) or `per_carrier` (certified against the
@@ -904,10 +1013,10 @@ agents list; `?from=profile` returns to the profile. It is not a dialog.
   date (`grid-cols-4`). Second: Health and Life on the left, Cancel and
   Add (Update while editing) on the right.
 - **Another list is another card**, same button and list-then-form arrangement.
-  Certifications is that card after Licences: Policy type, Start date, End
-  date, Status, then (per-carrier types only) the carrier checkboxes, then
-  Document, Verified, Cancel and Add. It is queued on the page and saved after
-  the agent exists. A role that cannot see policy types does not get the card.
+  Certifications is that card after Licences: Carrier, Line of business, Due
+  date, Status, then Completion date, Expiry date, Document, Verified, Cancel
+  and Add. It is queued on the page and saved after the agent exists. A role
+  that cannot see certifications does not get the card on Edit.
 
 ### Agents: Add agent page and section store
 

@@ -1,8 +1,13 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { EmptyState } from "@/components/empty-state";
+import { NoAccess } from "@/components/no-access";
 import { PageHeader } from "@/components/page-header";
+import { canView } from "@/lib/auth-user";
 import { getMatrix, type Money, type Month } from "@/lib/commissions";
+import { getSessionUser } from "@/lib/session";
+import { homeFor } from "../nav";
 
 export const metadata: Metadata = {
   title: "Overview",
@@ -26,6 +31,14 @@ function formatMonth(month: Month) {
 }
 
 export default async function OverviewPage() {
+  // Sign-in lands here; a role without the dashboard goes to its first link.
+  const user = await getSessionUser();
+  if (user && !canView(user, "dashboard")) {
+    const home = homeFor(user);
+    if (home) redirect(home);
+    return <NoAccess title="Overview" />;
+  }
+
   // The month comes from the clock, so render per request, not at build time.
   await connection();
 

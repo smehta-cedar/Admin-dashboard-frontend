@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { NoAccess } from "@/components/no-access";
+import { canViewModule } from "@/lib/access";
 import { getAgents } from "@/lib/agents";
 import { getCarrierContracts } from "@/lib/carrier-contracts";
 import { getCarriers } from "@/lib/carriers";
@@ -9,6 +11,7 @@ export const metadata: Metadata = {
 };
 
 export default async function ContractsByCarrierPage() {
+  if (!(await canViewModule("contracts"))) return <NoAccess title="Contracts by carrier" />;
   const [contracts, agents, carriers] = await Promise.all([
     getCarrierContracts(),
     getAgents(),

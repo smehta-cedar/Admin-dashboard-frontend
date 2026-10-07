@@ -18,11 +18,11 @@ import {
   StateChipCell,
   type ProfilePassword,
 } from "@/components/profile-shell";
-import { LINK_ACTIVE, LINK_BASE, LINK_IDLE } from "@/components/sidebar";
 import { StateLicensesPanel } from "@/components/state-licenses-panel";
 import { StatusBadge } from "@/components/status-badge";
 import type { AgentStateLicenseRecord } from "@/lib/agent-state-licenses";
 import type { AgentNote, AgentRecord } from "@/lib/agents";
+import type { CertifiableCarrier } from "@/lib/certification-options";
 import type { CertificationRecord } from "@/lib/certifications";
 import type { CarrierContractRecord } from "@/lib/carrier-contracts";
 import type { CarrierRecord } from "@/lib/carriers";
@@ -30,15 +30,18 @@ import { formatAddress } from "@/lib/address";
 import { formatLicenceDate } from "@/lib/state-licenses";
 import { writableStates } from "@/lib/us-states";
 import { byName } from "@/lib/text";
-import { saveCertification } from "../../certifications/actions";
+import { listAgentCertifications, saveCertification } from "../../certifications/actions";
 import {
   CertificationDialog,
   type CertificationEditor,
   type CertificationError,
-  type CertificationOption,
   type CertificationValues,
 } from "../../certifications/certification-dialog";
-import { CertificationsTable } from "../../certifications/certifications-table";
+import {
+  CertificationsTable,
+  certificationsByYear,
+  compareCertifications,
+} from "../../certifications/certifications-table";
 import { AppointmentDialog } from "../../contracts/appointment-dialog";
 import { useAppointments } from "../../contracts/use-appointments";
 import { AGENT_FIELD_LABELS } from "../agent-dialog";
@@ -52,22 +55,20 @@ import { AGENT_FIELD_LABELS } from "../agent-dialog";
  *
  * Layout, from the shared pieces in components/profile-shell.tsx. The page is
  * capped at the 2xl breakpoint, wider than the list pages. A header that is
- * always there, then a split: a section list beside one panel.
+ * always there, then a row of section cards, then one panel at full width.
  *
  *   name row        — initials, name, status, Edit; not in a card
- *   section list | panel (`13rem` | the rest from `lg`)
- *                   — the list names the sections, each with its
- *                     current count: Details, Pending, Carriers, State
- *                     licences, Certifications (only for a role that can
- *                     see them), Passwords, Notes. Picking one swaps the
- *                     panel beside it; only that section renders, full width
- *                     of the column. The choice is React state on this page
- *                     (`section`), not a route, so the Edit and Add carrier
- *                     dialogs stay mounted across a switch and nothing is
- *                     refetched. The page opens on Carriers, which is what
- *                     a profile is opened for. The items borrow the app
- *                     rail's link classes (components/sidebar.tsx) so the
- *                     active mark, spacing and type match it
+ *   section cards   — a navbar of equal cards under the name, each naming a
+ *                     section and its current count: Details, Pending,
+ *                     Carriers, State licences, Certifications (only for a
+ *                     role that can see them), Passwords, Notes. They stretch
+ *                     across the row and scroll sideways when they cannot.
+ *                     Picking one swaps the panel below; only that section
+ *                     renders, across the full width. The choice is React
+ *                     state on this page (`section`), not a route, so the
+ *                     Edit and Add carrier dialogs stay mounted across a
+ *                     switch and nothing is refetched. The page opens on
+ *                     Carriers, which is what a profile is opened for.
  *
  * Details is a two-column table of twelve fields — the work ones (NPN,
  * email with mailto, whether a login code is set, phone with tel, aliases), the three personal contact
@@ -78,8 +79,8 @@ import { AGENT_FIELD_LABELS } from "../agent-dialog";
  * Pending is a `Panel` too, with an empty state ("Nothing is pending") since
  * it is always in the list.
  *
- * Below `lg` the section list sits above the panel as a wrapping row of the
- * same items; everything else stacks in reading order.
+ * The cards stay a single row; on a narrow screen they scroll sideways
+ * instead of stacking over the panel.
  *
  * States show in two places. The State licences panel is the agent's own
  * licences as rows (lib/agent-state-licenses.ts: number, status, start and end
@@ -92,7 +93,7 @@ import { AGENT_FIELD_LABELS } from "../agent-dialog";
  * combined list across carriers. Carrier names link to their profiles.
  *
  * Pending is worked out from what is on the page, not stored: there are no
- * task records yet. See `pendingItems`. Its count sits on the section list,
+ * task records yet. See `pendingItems`. Its count sits on its section card,
  * like every other section's.
  *
  * "Add carrier" opens the shared AppointmentDialog
@@ -127,10 +128,10 @@ type AgentProfileProps = {
   initialContracts: CarrierContractRecord[];
   /** This agent's licence rows, in state-code order. */
   initialLicenses: AgentStateLicenseRecord[];
-  /** This agent's certifications, by policy type name; null when the role can't see certifications. */
+  /** This agent's certifications, by due date; null when the role can't see certifications. */
   initialCertifications: CertificationRecord[] | null;
-  /** Every policy type, for the certification dialog's select. */
-  policyTypes: CertificationOption[];
+  /** Every carrier with its lines, for the certification dialog. */
+  certificationCarriers: CertifiableCarrier[];
   /** This agent's passwords, the carrier as the party, sorted by carrier name; null hides the section. */
   passwords: ProfilePassword[] | null;
   /** This agent's notes, newest first; null hides the section. */
@@ -303,7 +304,7 @@ function pendingItems({ agent, agentCarriers, passwords }: PendingInput): Pendin
 
 export type SectionKey = "details" | "pending" | "carriers" | "licences" | "certifications" | "passwords" | "notes";
 
-/** One item of the section list: its label and the count its panel shows. */
+/** One item of the section cards: its label and the count its panel shows. */
 type Section = { key: SectionKey; label: string; count: number };
 
 export function AgentProfile({
@@ -312,7 +313,7 @@ export function AgentProfile({
   initialContracts,
   initialLicenses,
   initialCertifications,
-  policyTypes,
+  certificationCarriers,
   passwords,
   notes,
   readOnly = false,
@@ -321,6 +322,12 @@ export function AgentProfile({
   const agent = initialAgent;
   const licenses = initialLicenses;
   const [certifications, setCertifications] = useState(initialCertifications);
+  // A fresh server render (refresh, revalidation) brings rows added elsewhere, e.g. by the yearly command.
+  const [loadedCertifications, setLoadedCertifications] = useState(initialCertifications);
+  if (initialCertifications !== loadedCertifications) {
+    setLoadedCertifications(initialCertifications);
+    setCertifications(initialCertifications);
+  }
   const router = useRouter();
   const [certificationEditor, setCertificationEditor] = useState<CertificationEditor | null>(null);
   // Which section the panel shows. Carriers first: it is what the page is opened for.
@@ -330,7 +337,12 @@ export function AgentProfile({
     initialContracts,
     agents: [agent],
     carriers,
-    onSaved: () => {},
+    // A new carrier gives the agent a certification per line of business, so reload them.
+    onSaved: async () => {
+      if (certifications === null) return;
+      const fresh = await listAgentCertifications(agent.id);
+      if (fresh) setCertifications(fresh);
+    },
   });
 
   // This agent's carriers, rebuilt from state so a new appointment shows at once.
@@ -483,11 +495,11 @@ export function AgentProfile({
   /** Adds or edits one of this agent's certifications through the API. Resolves with the dialog's errors, if any. */
   const saveAgentCertification = async (values: CertificationValues): Promise<CertificationError[]> => {
     const editingId = certificationEditor?.mode === "edit" ? certificationEditor.certification.id : undefined;
-    const result = await saveCertification(values, "agent", editingId);
+    const result = await saveCertification(values, editingId);
     if (!result.ok) return result.errors;
     setCertifications((current) =>
-      [...(current ?? []).filter((row) => row.id !== result.certification.id), result.certification].sort((a, b) =>
-        a.policyTypeName.localeCompare(b.policyTypeName),
+      [...(current ?? []).filter((row) => row.id !== result.certification.id), result.certification].sort(
+        compareCertifications,
       ),
     );
     return [];
@@ -502,32 +514,42 @@ export function AgentProfile({
       />
 
       {/*
-       * The split: the section list, then the one panel it picked. From `lg`
-       * the list is a narrow column on the left; below, a wrapping row above.
+       * Section cards sit under the name and span the row, so the panel
+       * below can use the full width. They scroll sideways when the row
+       * is narrower than the cards' minimum.
        */}
-      <div className="mt-8 grid items-start gap-5 lg:grid-cols-[13rem_minmax(0,1fr)]">
-        <nav aria-label="Profile sections">
-          <ul className="flex flex-wrap gap-1 lg:flex-col">
-            {sections.map((item) => {
-              const active = item.key === shown;
-              return (
-                <li key={item.key}>
-                  <button
-                    type="button"
-                    onClick={() => setSection(item.key)}
-                    aria-current={active ? "true" : undefined}
-                    className={`${LINK_BASE} w-full ${active ? LINK_ACTIVE : LINK_IDLE}`}
+      <nav aria-label="Profile sections" className="mt-6">
+        <ul className="flex gap-2 overflow-x-auto py-1">
+          {sections.map((item) => {
+            const active = item.key === shown;
+            return (
+              <li key={item.key} className="min-w-40 flex-1">
+                <button
+                  type="button"
+                  onClick={() => setSection(item.key)}
+                  aria-current={active ? "page" : undefined}
+                  className={`flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left shadow-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
+                    active
+                      ? "border-brand bg-brand-soft text-brand-ink shadow-[0_1px_2px_0_rgb(0_0_0/0.05),inset_0_-3px_0_var(--color-brand)]"
+                      : "border-line bg-surface text-fg hover:border-brand/40 hover:bg-brand-soft/50"
+                  }`}
+                >
+                  <span className="text-sm font-medium whitespace-nowrap">{item.label}</span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium tabular-nums ${
+                      active ? "bg-surface text-brand-ink" : "bg-brand-soft text-brand-ink"
+                    }`}
                   >
-                    {item.label}
-                    <span className="ml-auto text-xs tabular-nums">{item.count}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
+                    {item.count}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
 
-        <div className="min-w-0">
+      <div className="mt-5 min-w-0">
           {shown === "details" ? (
             <Panel title="Details" count={filledCount}>
               <DetailsTable rows={details} />
@@ -631,21 +653,31 @@ export function AgentProfile({
               {certifications.length === 0 ? (
                 <PanelEmpty>No certifications recorded.</PanelEmpty>
               ) : (
-                <CertificationsTable
-                  certifications={certifications}
-                  leading="policyType"
-                  onEdit={
-                    readOnly
-                      ? undefined
-                      : (certification) =>
-                          setCertificationEditor({
-                            mode: "edit",
-                            certification,
-                          })
-                  }
-                  // The download needs certifications access, which an agent's sign-in doesn't have.
-                  fileLinks={!readOnly}
-                />
+                // One table per year due, newest first.
+                <div className="grid gap-6">
+                  {certificationsByYear(certifications).map((group) => (
+                    <section key={group.year || "none"} aria-label={`Certifications due ${group.year || "without a date"}`}>
+                      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-fg-subtle">
+                        {group.year || "No due date"}
+                        <span className="ml-2 font-normal tabular-nums">{group.certifications.length}</span>
+                      </h3>
+                      <CertificationsTable
+                        certifications={group.certifications}
+                        onEdit={
+                          readOnly
+                            ? undefined
+                            : (certification) =>
+                                setCertificationEditor({
+                                  mode: "edit",
+                                  certification,
+                                })
+                        }
+                        // The download needs certifications access, which an agent's sign-in doesn't have.
+                        fileLinks={!readOnly}
+                      />
+                    </section>
+                  ))}
+                </div>
               )}
             </Panel>
           ) : shown === "passwords" && passwords ? (
@@ -660,16 +692,15 @@ export function AgentProfile({
           ) : shown === null ? (
             <PanelEmpty>Nothing is shared with you yet. Ask the office.</PanelEmpty>
           ) : null}
-        </div>
       </div>
 
       {readOnly ? null : (
         <>
-          {/* Agent fixed to this profile; the form picks the policy type. */}
+          {/* Agent fixed to this profile. */}
           <CertificationDialog
             editor={certificationEditor}
-            fixed={{ kind: "agent", agent: { id: agent.id, name: agent.name } }}
-            options={policyTypes}
+            agent={{ id: agent.id, name: agent.name }}
+            carriers={certificationCarriers}
             onSave={saveAgentCertification}
             onClose={() => setCertificationEditor(null)}
           />

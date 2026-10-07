@@ -6,25 +6,12 @@ import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { EditIcon } from "@/components/edit-icon";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
-import { PROFILE_BUTTON_CLASS } from "@/components/profile-shell";
 import { StatusBadge, statusRank } from "@/components/status-badge";
-import { certifiablePolicyType } from "@/lib/certification-options";
-import type { CertificationRecord } from "@/lib/certifications";
-import type { CarrierRef, PolicyTypeRecord } from "@/lib/policy-types";
+import type { PolicyTypeRecord } from "@/lib/policy-types";
 import { rowNumbers } from "@/lib/row-numbers";
 import { byName } from "@/lib/text";
-import { saveCertification } from "../certifications/actions";
-import {
-  CertificationDialog,
-  type CertificationEditor,
-  type CertificationError,
-  type CertificationOption,
-  type CertificationValues,
-} from "../certifications/certification-dialog";
-import { CertificationsTable } from "../certifications/certifications-table";
 import { savePolicyType } from "./actions";
 import {
-  CERTIFICATION_SCOPE_LABELS,
   PolicyTypeDialog,
   type PolicyTypeEditor,
   type PolicyTypeError,
@@ -36,75 +23,24 @@ import {
  * (./policy-type-dialog.tsx). Saves go to the API through the savePolicyType
  * server action; the API records a note of what changed. The table sorts by
  * header and filters by search. There is no profile page: the catalog is
- * name, certification scope (with the carriers it needs, for per carrier)
- * and status.
+ * name and status.
  *
- * Clicking a name expands the row to show who holds that type — one
- * certification per agent (agent, carriers, start, end, status) with an
- * Edit on each row and an Add button — through the shared CertificationDialog
- * (../certifications/certification-dialog.tsx) with the policy type fixed.
- * The agent profile adds the same rows from the other side. When the role
- * can't see certifications (`initialCertifications` is null) names don't
- * expand and nothing else changes.
- *
- * Both lists are server-loaded and kept in state so a save shows at once;
- * the actions also revalidate the page, so the next render agrees.
+ * The list is server-loaded and kept in state so a save shows at once; the
+ * action also revalidates the page, so the next render agrees.
  */
 
 type PolicyTypesViewProps = {
   initialPolicyTypes: PolicyTypeRecord[];
-  /** Every certification, or null when the role can't see them. */
-  initialCertifications: CertificationRecord[] | null;
-  /** Every agent, for the certification dialog's select. */
-  agents: CertificationOption[];
-  /** Carriers with an agency contract, by name; null when the role can't see agency contracts. */
-  contractedCarriers: CarrierRef[] | null;
 };
 
-/** How the list shows a type's certification scope. */
-function scopeText(policyType: PolicyTypeRecord): string {
-  if (policyType.certificationScope === "per_carrier") {
-    return `Per carrier (${policyType.certificationCarriers.length})`;
-  }
-  return policyType.certificationScope === "single" ? "Single" : "No";
-}
-
-const SCOPE_RANK = { per_carrier: 0, single: 1, none: 2 } as const;
-
-/** Which policy type's certification dialog is open, and for which row. */
-type HolderEditor = { policyType: PolicyTypeRecord; editor: CertificationEditor };
-
-const byAgentName = (a: CertificationRecord, b: CertificationRecord) => a.agentName.localeCompare(b.agentName);
-
-export function PolicyTypesView({
-  initialPolicyTypes,
-  initialCertifications,
-  agents,
-  contractedCarriers,
-}: PolicyTypesViewProps) {
+export function PolicyTypesView({ initialPolicyTypes }: PolicyTypesViewProps) {
   const [policyTypes, setPolicyTypes] = useState(initialPolicyTypes);
   const [editor, setEditor] = useState<PolicyTypeEditor | null>(null);
-  const [certifications, setCertifications] = useState(initialCertifications);
-  const [holderEditor, setHolderEditor] = useState<HolderEditor | null>(null);
-
-  const canSeeCertifications = certifications !== null;
 
   // The ID shown is the policy type's place in the name-sorted list, 1…n, not
   // the API's UUID. It moves when a name sorts elsewhere, so it is a row
   // number, not a key.
   const numbers = useMemo(() => rowNumbers(policyTypes), [policyTypes]);
-
-  // Holders by policy type, each list by agent name.
-  const holdersByType = useMemo(() => {
-    const map = new Map<string, CertificationRecord[]>();
-    for (const certification of certifications ?? []) {
-      const list = map.get(certification.policyTypeId) ?? [];
-      list.push(certification);
-      map.set(certification.policyTypeId, list);
-    }
-    for (const list of map.values()) list.sort(byAgentName);
-    return map;
-  }, [certifications]);
 
   // Sort and search run in DataTable.
   const columns = useMemo<DataTableColumn<PolicyTypeRecord>[]>(
@@ -134,58 +70,9 @@ export function PolicyTypesView({
       {
         id: "name",
         header: "Name",
-        cell: (policyType, { expanded, toggleExpanded, detailsId }) =>
-          canSeeCertifications ? (
-            <button
-              type="button"
-              onClick={toggleExpanded}
-              aria-expanded={expanded}
-              aria-controls={expanded ? detailsId : undefined}
-              className="-ml-1 flex items-center gap-1 whitespace-nowrap rounded-md px-1 py-0.5 text-fg hover:bg-surface-hover"
-            >
-              {policyType.name}
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 20 20"
-                className={`size-4 shrink-0 text-fg-subtle transition-transform ${expanded ? "rotate-90" : ""}`}
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.5}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M8 5l5 5-5 5" />
-              </svg>
-            </button>
-          ) : (
-            <span className="whitespace-nowrap text-fg">{policyType.name}</span>
-          ),
+        cell: (policyType) => <span className="whitespace-nowrap text-fg">{policyType.name}</span>,
         sortValue: (policyType) => policyType.name,
         searchText: (policyType) => policyType.name,
-      },
-      {
-        id: "certificationScope",
-        header: "Certification",
-        cell: (policyType) => (
-          <span
-            className={policyType.certificationScope === "none" ? "text-fg-faint" : undefined}
-            title={
-              policyType.certificationScope === "per_carrier"
-                ? policyType.certificationCarriers.map((carrier) => carrier.name).join(", ")
-                : undefined
-            }
-          >
-            {scopeText(policyType)}
-          </span>
-        ),
-        className: "whitespace-nowrap text-fg-muted",
-        // Per carrier, then single, then not required when sorted ascending.
-        sortValue: (policyType) => SCOPE_RANK[policyType.certificationScope],
-        searchText: (policyType) =>
-          [
-            CERTIFICATION_SCOPE_LABELS[policyType.certificationScope],
-            ...policyType.certificationCarriers.map((carrier) => carrier.name),
-          ].join(" "),
       },
       {
         id: "status",
@@ -195,7 +82,7 @@ export function PolicyTypesView({
         searchText: (policyType) => policyType.status,
       },
     ],
-    [numbers, canSeeCertifications],
+    [numbers],
   );
 
   /** Adds or edits a policy type through the API. Resolves with the dialog's errors, if any. */
@@ -211,18 +98,6 @@ export function PolicyTypesView({
         : [...current, saved]
       ).sort(byName),
     );
-    return [];
-  };
-
-  /** Adds or edits a certification for the open row's policy type. Resolves with the dialog's errors, if any. */
-  const handleSaveHolder = async (values: CertificationValues): Promise<CertificationError[]> => {
-    const editingId = holderEditor?.editor.mode === "edit" ? holderEditor.editor.certification.id : undefined;
-    const result = await saveCertification(values, "policyType", editingId);
-    if (!result.ok) return result.errors;
-    setCertifications((current) => [
-      ...(current ?? []).filter((row) => row.id !== result.certification.id),
-      result.certification,
-    ]);
     return [];
   };
 
@@ -248,67 +123,10 @@ export function PolicyTypesView({
           columns={columns}
           getRowId={(policyType) => policyType.id}
           unit={["policy type", "policy types"]}
-          renderDetails={
-            canSeeCertifications
-              ? (policyType) => {
-                  const holders = holdersByType.get(policyType.id) ?? [];
-                  return (
-                    <section aria-label={`Agents certified for ${policyType.name}`}>
-                      <div className="flex items-center justify-between gap-3">
-                        <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
-                          Certified agents
-                          <span className="ml-2 font-normal tabular-nums">{holders.length}</span>
-                        </h3>
-                        <button
-                          type="button"
-                          onClick={() => setHolderEditor({ policyType, editor: { mode: "add" } })}
-                          className={PROFILE_BUTTON_CLASS}
-                        >
-                          <span aria-hidden="true">+ </span>Add certification
-                          <span className="sr-only"> for {policyType.name}</span>
-                        </button>
-                      </div>
-                      <div className="mt-3">
-                        {holders.length === 0 ? (
-                          <p className="text-sm text-fg-subtle">No certifications recorded.</p>
-                        ) : (
-                          <CertificationsTable
-                            certifications={holders}
-                            leading="agent"
-                            onEdit={(certification) =>
-                              setHolderEditor({ policyType, editor: { mode: "edit", certification } })
-                            }
-                          />
-                        )}
-                      </div>
-                    </section>
-                  );
-                }
-              : undefined
-          }
         />
       )}
 
-      <PolicyTypeDialog
-        editor={editor}
-        contractedCarriers={contractedCarriers}
-        onSave={handleSave}
-        onClose={() => setEditor(null)}
-      />
-
-      {/* Policy type fixed to the open row; the form picks the agent. */}
-      <CertificationDialog
-        editor={holderEditor?.editor ?? null}
-        fixed={{
-          kind: "policyType",
-          policyType: holderEditor
-            ? certifiablePolicyType(holderEditor.policyType, contractedCarriers)
-            : { id: "", name: "", status: "active", certificationScope: "none", carriers: [] },
-        }}
-        options={agents}
-        onSave={handleSaveHolder}
-        onClose={() => setHolderEditor(null)}
-      />
+      <PolicyTypeDialog editor={editor} onSave={handleSave} onClose={() => setEditor(null)} />
     </>
   );
 }

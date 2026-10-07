@@ -8,16 +8,14 @@ import "server-only";
  * the API records a change note on every add and every edit that changed
  * something.
  *
- * One row is one agent certified for one policy type (lib/policy-types.ts).
- * The same rows are added from the agent profile (agent fixed, type chosen)
- * and from the policy types table (type fixed, agent chosen); there is no
- * Certifications page. A policy type certified per carrier also records which
- * of its carriers the row covers (one row can cover several; still one row
- * per agent and type); other types have none. Dates are optional. A row may carry one PDF, kept
- * privately by the API and downloaded through the route handler at
- * /certifications/{id}/file (app/(dashboard)/certifications/[id]/file);
- * is_verified is set by hand. Carrier-policy certificates, commissions and
- * any rule that blocks a sale are not modelled here.
+ * One row is one agent's yearly certification with a carrier for one of its
+ * lines of business (the sub type), due on a deadline the API sets (Sept 15
+ * for now). Policy types play no part. Only the agent is required; carrier,
+ * line, dates and the rest are optional, and nothing else is checked: a
+ * certification is an add-on. Rows are added and edited from the agent
+ * profile and the agent form. A row may carry one PDF, kept privately by the
+ * API and downloaded through the route handler at /certifications/{id}/file
+ * (app/(dashboard)/certifications/[id]/file); is_verified is set by hand.
  *
  * Reads throw on failure like every data module; a page that shows
  * certifications beside another entity wraps the call in allowForbidden
@@ -27,7 +25,6 @@ import "server-only";
 
 import { apiGet, apiGetAll } from "@/lib/api-server";
 import type { FieldChange } from "@/lib/change-notes";
-import type { CarrierRef } from "@/lib/policy-types";
 
 export type CertificationStatus = "active" | "inactive";
 
@@ -37,14 +34,17 @@ export type CertificationRecord = {
   agentId: string;
   agentName: string;
   agentStatus: "active" | "inactive";
-  policyTypeId: string;
-  policyTypeName: string;
-  policyTypeStatus: "active" | "inactive";
-  /** Carriers covered, in name order. Empty unless the policy type is certified per carrier. */
-  carriers: CarrierRef[];
+  /** "" when the row has no carrier. */
+  carrierId: string;
+  /** "" when the row has no carrier. */
+  carrierName: string;
+  /** The sub type: one of LINES_OF_BUSINESS, or "" when unset. */
+  lineOfBusiness: string;
+  /** "YYYY-MM-DD", or "" when unset. */
+  dueDate: string;
   /** "YYYY-MM-DD", or "" when unset. */
   startDate: string;
-  /** "YYYY-MM-DD", or "" when unset. On or after startDate when both are set. */
+  /** "YYYY-MM-DD", or "" when unset. */
   endDate: string;
   /** Set by hand; uploading a PDF does not set it. */
   isVerified: boolean;
@@ -54,46 +54,41 @@ export type CertificationRecord = {
   status: CertificationStatus;
 };
 
-/** What the add / edit form submits. One of agentId / policyTypeId is fixed by the page. */
+/** What the add / edit form submits. The agent is fixed by the page. */
 export type CertificationValues = {
   agentId: string;
-  policyTypeId: string;
-  /** Carriers covered; only for a per-carrier policy type, then at least one. */
-  carrierIds: string[];
+  /** "" for none. */
+  carrierId: string;
+  /** "" for none. */
+  lineOfBusiness: string;
+  /** "" lets the API default a new row to the next deadline. */
+  dueDate: string;
   startDate: string;
   endDate: string;
-  /** Left out by forms without the box (the agent form's certificate rows), so the stored flag stays. */
+  /** Left out by forms without the box, so the stored flag stays. */
   isVerified?: boolean;
   /** A new PDF to store (replacing any current one); null or left out keeps what is there. */
   file?: File | null;
   status: CertificationStatus;
 };
 
-/** Fields the form has, for an error to sit under; `form` is for errors about the attempt itself. */
-export type CertificationErrorField =
-  | "agent"
-  | "policyType"
-  | "carriers"
-  | "startDate"
-  | "endDate"
-  | "isVerified"
-  | "file"
-  | "status"
-  | "form";
-
-/** A save error, shown under the field it names, or under the form for `form`. */
-export type CertificationError = { field: CertificationErrorField; message: string };
-
 /** Certification fields a note can record, in the order a note lists them. */
 export type CertificationField =
   | "agent"
-  | "policyType"
-  | "carriers"
+  | "carrier"
+  | "lineOfBusiness"
+  | "dueDate"
   | "startDate"
   | "endDate"
   | "isVerified"
   | "status"
   | "file";
+
+/** Fields the form has, for an error to sit under; `form` is for errors about the attempt itself. */
+export type CertificationErrorField = CertificationField | "form";
+
+/** A save error, shown under the field it names, or under the form for `form`. */
+export type CertificationError = { field: CertificationErrorField; message: string };
 
 export type CertificationChange = FieldChange<CertificationField>;
 
@@ -110,7 +105,7 @@ export type CertificationNote = {
   /** Full name of who made the change, or null when unknown. */
   createdBy: string | null;
   /**
-   * Only the fields that changed: agent, type and carriers by name, dates as YYYY-MM-DD
+   * Only the fields that changed: agent and carrier by name, dates as YYYY-MM-DD
    * or blank, verified as "yes" / "no", the PDF by file name (blank before the first).
    */
   changes: CertificationChange[];
@@ -120,8 +115,9 @@ export type CertificationNote = {
 export type ApiCertification = {
   id: string;
   agent: { id: string; name: string; is_active: boolean };
-  policy_type: { id: string; name: string; is_active: boolean };
-  carriers: { id: string; name: string; is_active: boolean }[];
+  carrier: { id: string; name: string; is_active: boolean } | null;
+  line_of_business: string;
+  due_date: string | null;
   start_date: string | null;
   end_date: string | null;
   is_verified: boolean;
@@ -144,8 +140,9 @@ type ApiCertificationNote = {
 /** API field name -> CertificationField, for a note's changes. */
 const NOTE_FIELDS: Record<string, CertificationField> = {
   agent: "agent",
-  policy_type: "policyType",
-  carriers: "carriers",
+  carrier: "carrier",
+  line_of_business: "lineOfBusiness",
+  due_date: "dueDate",
   start_date: "startDate",
   end_date: "endDate",
   is_verified: "isVerified",
@@ -160,10 +157,10 @@ export function toCertificationRecord(certification: ApiCertification): Certific
     agentId: certification.agent.id,
     agentName: certification.agent.name,
     agentStatus: certification.agent.is_active ? "active" : "inactive",
-    policyTypeId: certification.policy_type.id,
-    policyTypeName: certification.policy_type.name,
-    policyTypeStatus: certification.policy_type.is_active ? "active" : "inactive",
-    carriers: certification.carriers.map(({ id, name }) => ({ id, name })),
+    carrierId: certification.carrier?.id ?? "",
+    carrierName: certification.carrier?.name ?? "",
+    lineOfBusiness: certification.line_of_business,
+    dueDate: certification.due_date ?? "",
     startDate: certification.start_date ?? "",
     endDate: certification.end_date ?? "",
     isVerified: certification.is_verified,
@@ -189,15 +186,15 @@ function toCertificationNote(note: ApiCertificationNote): CertificationNote {
 type CertificationFilter = {
   /** Only this agent's certifications. */
   agentId?: string;
-  /** Only certifications for this policy type. */
-  policyTypeId?: string;
+  /** Only this carrier's certifications. */
+  carrierId?: string;
 };
 
-/** Certifications matching `filter` (all when empty), sorted by policy type name then agent name. */
+/** Certifications matching `filter` (all when empty), by agent name, then due date, carrier and line. */
 export async function getCertifications(filter: CertificationFilter = {}): Promise<CertificationRecord[]> {
   const certifications = await apiGetAll<ApiCertification>("/certifications/", {
     agent: filter.agentId,
-    policy_type: filter.policyTypeId,
+    carrier: filter.carrierId,
   });
   return certifications.map(toCertificationRecord);
 }

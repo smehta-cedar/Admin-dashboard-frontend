@@ -1,9 +1,9 @@
 "use client";
 
-import type { CertifiablePolicyType } from "@/lib/certification-options";
+import type { CertifiableCarrier } from "@/lib/certification-options";
 import { AgentFormPage } from "../agent-form-page";
 
 /** Add agent. Cancel and a successful save return to the list. */
-export function NewAgentView({ policyTypes }: { policyTypes: CertifiablePolicyType[] | null }) {
-  return <AgentFormPage policyTypes={policyTypes} returnTo="/agents" />;
+export function NewAgentView({ carriers }: { carriers: CertifiableCarrier[] | null }) {
+  return <AgentFormPage carriers={carriers} returnTo="/agents" />;
 }

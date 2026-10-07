@@ -3,16 +3,12 @@
 /*
  * Add or edit a certification, run on the Next server so the access token
  * stays in its HttpOnly cookie. POST /certifications/create/ or PATCH
- * /certifications/{id}/; the API keeps one live row per agent and policy
- * type, checks the dates and the carriers (per-carrier types only), and
- * records the change note.
+ * /certifications/{id}/; the API records the change note. Only the agent is
+ * required and nothing else is checked: a certification is an add-on. A
+ * blank due date on a new row is defaulted by the API to the next deadline.
  *
- * The same action serves both places a certification is edited: the agent
- * profile (agent fixed, `fixed: "agent"`) and the policy types table (type
- * fixed, `fixed: "policyType"`). On an edit only the side the user can
- * change is sent, so the API's duplicate error names that side; on an add
- * both are sent and the API names policy_type. Either way the message lands
- * on the one field the form lets the user choose.
+ * Certifications are edited from the agent profile and the agent form, both
+ * with the agent fixed, so an edit never sends the agent.
  *
  * When the form picked a PDF the body goes as multipart form data with the
  * file alongside the other fields; otherwise it is JSON and the stored file
@@ -26,14 +22,15 @@
  *   403 permission_denied   the role can't change certifications  -> under the form
  *   network_error           the API is down                       -> under the form
  *
- * On success every agent profile and the policy types page are revalidated,
- * so their next render agrees with the state the view updated at once.
+ * On success every agent profile is revalidated, so its next render agrees
+ * with the state the view updated at once.
  */
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { apiFetch } from "@/lib/api-server";
+import { allowForbidden, apiFetch } from "@/lib/api-server";
 import {
+  getCertifications,
   toCertificationRecord,
   type ApiCertification,
   type CertificationError,
@@ -45,35 +42,27 @@ export type SaveCertificationResult =
   | { ok: true; certification: CertificationRecord }
   | { ok: false; errors: CertificationError[] };
 
-/** Which side of the pair the form can't change. */
-export type CertificationFixed = "agent" | "policyType";
-
 /** API field name -> form field, for a 400's errors. Anything else goes under the form. */
-function errorFields(fixed: CertificationFixed): Record<string, CertificationError["field"]> {
-  // Whichever side is fixed can't be wrong from the form's point of view, so
-  // an error about the pair lands on the side the user picked.
-  const chosen: CertificationError["field"] = fixed === "agent" ? "policyType" : "agent";
-  return {
-    agent: chosen,
-    policy_type: chosen,
-    carriers: "carriers",
-    start_date: "startDate",
-    end_date: "endDate",
-    is_verified: "isVerified",
-    file: "file",
-    is_active: "status",
-  };
-}
+const ERROR_FIELDS: Record<string, CertificationError["field"]> = {
+  agent: "agent",
+  carrier: "carrier",
+  line_of_business: "lineOfBusiness",
+  due_date: "dueDate",
+  start_date: "startDate",
+  end_date: "endDate",
+  is_verified: "isVerified",
+  file: "file",
+  is_active: "status",
+};
 
 /**
- * `fields` as multipart form data with `file` alongside; a null date goes as
- * "" (cleared), a list as one entry per item (an empty list sends nothing).
+ * `fields` as multipart form data with `file` alongside; a null value goes
+ * as "" (cleared).
  */
-function toFormData(fields: Record<string, string | string[] | boolean | null | undefined>, file: File): FormData {
+function toFormData(fields: Record<string, string | boolean | null | undefined>, file: File): FormData {
   const data = new FormData();
   for (const [name, value] of Object.entries(fields)) {
-    if (Array.isArray(value)) for (const item of value) data.append(name, item);
-    else if (value !== undefined) data.set(name, value === null ? "" : String(value));
+    if (value !== undefined) data.set(name, value === null ? "" : String(value));
   }
   data.set("file", file);
   return data;
@@ -82,23 +71,20 @@ function toFormData(fields: Record<string, string | string[] | boolean | null | 
 /** Adds a certification, or edits the one with `editingId`. */
 export async function saveCertification(
   values: CertificationValues,
-  fixed: CertificationFixed,
   editingId?: string,
 ): Promise<SaveCertificationResult> {
   const details = {
-    carriers: values.carrierIds,
+    carrier: values.carrierId || null,
+    line_of_business: values.lineOfBusiness,
+    // A new row with no due date gets the API's default; an edit can clear it.
+    due_date: values.dueDate || (editingId ? null : undefined),
     start_date: values.startDate || null,
     end_date: values.endDate || null,
     // Undefined keys drop out of the JSON body and are skipped in the multipart one.
     is_verified: values.isVerified,
     is_active: values.status === "active",
   };
-  const fields = editingId
-    ? // Only the side the form lets the user change.
-      fixed === "agent"
-      ? { policy_type: values.policyTypeId, ...details }
-      : { agent: values.agentId, ...details }
-    : { agent: values.agentId, policy_type: values.policyTypeId, ...details };
+  const fields = editingId ? details : { agent: values.agentId, ...details };
   const body = values.file ? toFormData(fields, values.file) : fields;
   const result = editingId
     ? await apiFetch<ApiCertification>(`/certifications/${encodeURIComponent(editingId)}/`, { method: "PATCH", body })
@@ -109,10 +95,9 @@ export async function saveCertification(
     if (result.status === 401) redirect("/login");
 
     if (result.code === "invalid" && result.errors) {
-      const fields = errorFields(fixed);
       const errors: CertificationError[] = [];
       for (const [apiField, messages] of Object.entries(result.errors)) {
-        errors.push({ field: fields[apiField] ?? "form", message: messages[0] });
+        errors.push({ field: ERROR_FIELDS[apiField] ?? "form", message: messages[0] });
       }
       return { ok: false, errors: errors.length > 0 ? errors : [{ field: "form", message: result.message }] };
     }
@@ -120,13 +105,19 @@ export async function saveCertification(
     return { ok: false, errors: [{ field: "form", message: result.message }] };
   }
 
-  // An edit may have moved the row to another agent, so every agent profile is revalidated.
   revalidatePath("/agents/[id]", "page");
-  revalidatePath("/policy-types");
   return { ok: true, certification: toCertificationRecord(result.data) };
 }
 
-/** Removes a certification. The API soft-deletes it, so the pair can be added again. */
+/**
+ * One agent's certifications as they are now, e.g. after adding a carrier
+ * gave them new ones; null when the role can't see certifications.
+ */
+export async function listAgentCertifications(agentId: string): Promise<CertificationRecord[] | null> {
+  return allowForbidden(getCertifications({ agentId }));
+}
+
+/** Removes a certification. The API soft-deletes it. */
 export async function deleteCertification(id: string): Promise<{ ok: true } | { ok: false; message: string }> {
   const result = await apiFetch<null>(`/certifications/${encodeURIComponent(id)}/`, { method: "DELETE" });
   if (!result.ok) {
@@ -134,6 +125,5 @@ export async function deleteCertification(id: string): Promise<{ ok: true } | { 
     return { ok: false, message: result.message };
   }
   revalidatePath("/agents/[id]", "page");
-  revalidatePath("/policy-types");
   return { ok: true };
 }

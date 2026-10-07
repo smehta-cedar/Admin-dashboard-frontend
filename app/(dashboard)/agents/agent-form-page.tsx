@@ -4,7 +4,7 @@ import { useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import type { AgentRecord } from "@/lib/agents";
-import type { CertifiablePolicyType } from "@/lib/certification-options";
+import type { CertifiableCarrier } from "@/lib/certification-options";
 import { deleteCertification, saveCertification } from "../certifications/actions";
 import { saveAgentLicenses } from "./actions";
 import { AgentForm, type AgentError, type AgentValues } from "./agent-dialog";
@@ -23,11 +23,11 @@ import { CertificateSection } from "./new/certificate-section";
  */
 
 type AgentFormPageProps = {
-  /** Null when the role can't see policy types: the certifications card is left out. */
-  policyTypes: CertifiablePolicyType[] | null;
+  /** Carriers for the certification rows; null when the role can't see certifications: the card is left out. */
+  carriers: CertifiableCarrier[] | null;
   /** Set on Edit. Leave out for an empty Add form. */
   agent?: AgentRecord;
-  /** Certifications already on the agent. Ignored when `policyTypes` is null. */
+  /** Certifications already on the agent. Ignored when `carriers` is null. */
   initialCertificates?: CertificateDraft[];
   /** Where Cancel and a successful save go. */
   returnTo: string;
@@ -35,8 +35,9 @@ type AgentFormPageProps = {
 
 function sameCertificate(a: CertificateDraft, b: CertificateDraft) {
   return (
-    a.policyTypeId === b.policyTypeId &&
-    a.carriers.map((carrier) => carrier.id).join() === b.carriers.map((carrier) => carrier.id).join() &&
+    a.carrierId === b.carrierId &&
+    a.lineOfBusiness === b.lineOfBusiness &&
+    a.dueDate === b.dueDate &&
     a.startDate === b.startDate &&
     a.endDate === b.endDate &&
     a.isVerified === b.isVerified &&
@@ -47,7 +48,7 @@ function sameCertificate(a: CertificateDraft, b: CertificateDraft) {
 }
 
 export function AgentFormPage({
-  policyTypes,
+  carriers,
   agent,
   initialCertificates = [],
   returnTo,
@@ -65,13 +66,13 @@ export function AgentFormPage({
     if (!result.ok) return result.error;
     agentId.current = result.agent.id;
 
-    if (!policyTypes) return null;
+    if (!carriers) return null;
 
     const failed: CertificateDraft[] = [];
     let message: string | null = null;
     const kept: CertificateDraft[] = [];
 
-    // Remove first, so a type that was taken off the list can be added again.
+    // Removals first, then adds and edits.
     for (const [certificationId, prior] of baseline.current) {
       if (certificates.some((draft) => draft.id === certificationId)) continue;
       const removed = await deleteCertification(certificationId);
@@ -87,8 +88,9 @@ export function AgentFormPage({
       const prior = baseline.current.get(draft.id);
       const valuesFor = {
         agentId: result.agent.id,
-        policyTypeId: draft.policyTypeId,
-        carrierIds: draft.carriers.map((carrier) => carrier.id),
+        carrierId: draft.carrierId,
+        lineOfBusiness: draft.lineOfBusiness,
+        dueDate: draft.dueDate,
         startDate: draft.startDate,
         endDate: draft.endDate,
         isVerified: draft.isVerified,
@@ -96,7 +98,7 @@ export function AgentFormPage({
         status: draft.status,
       };
       if (!prior) {
-        const saved = await saveCertification(valuesFor, "agent");
+        const saved = await saveCertification(valuesFor);
         if (!saved.ok) {
           kept.push(draft);
           message ??= saved.errors[0]?.message ?? "Couldn't add the certification.";
@@ -106,7 +108,7 @@ export function AgentFormPage({
           kept.push(stored);
         }
       } else if (!sameCertificate(prior, draft)) {
-        const saved = await saveCertification(valuesFor, "agent", draft.id);
+        const saved = await saveCertification(valuesFor, draft.id);
         if (!saved.ok) {
           kept.push(draft);
           message ??= saved.errors[0]?.message ?? "Couldn't save the certification.";
@@ -145,10 +147,10 @@ export function AgentFormPage({
           return null;
         }}
         pageExtra={
-          policyTypes ? (
+          carriers ? (
             <CertificateSection
               idPrefix={id}
-              policyTypes={policyTypes}
+              carriers={carriers}
               drafts={certificates}
               onChange={setCertificates}
               onRemove={async (draft) => {

@@ -10,11 +10,12 @@ import type { AgencyField, AgencyRecord, AgencyValues } from "@/lib/agency";
  * with org-flavoured labels — name, DBA names, status, agency NPN, email
  * and phone. The form's Licences section is off: the agency's state
  * licences are added, edited and removed one at a time from the profile's
- * State licences panel (./license-dialog.tsx). Edit only: there is one
- * agency, so nothing is ever added here.
+ * State licences panel (./license-dialog.tsx). There is one agency: the
+ * dialog adds it ("new") only from the empty Agency page a superuser sees
+ * before it exists (./new-agency.tsx), and edits it from then on.
  *
- * The agency profile passes `onSave`, which calls the saveAgency server
- * action (./actions.ts); the API records the change note.
+ * The caller passes `onSave`, which calls the createAgency or saveAgency
+ * server action (./actions.ts); the API records the change note.
  */
 
 export type { AgencyValues } from "@/lib/agency";
@@ -44,8 +45,8 @@ const FORM_LABELS: ProducerLabels = {
 };
 
 type AgencyDialogProps = {
-  /** The agency to edit, or null to keep the dialog closed. */
-  editing: AgencyRecord | null;
+  /** The agency to edit, "new" to add it, or null to keep the dialog closed. */
+  editing: AgencyRecord | "new" | null;
   /** Saves the values; resolves with the error to show instead of closing. */
   onSave: (values: AgencyValues) => Promise<AgencyError | null>;
   /** Runs for every close: Cancel, Escape, backdrop click, or a save. */
@@ -59,7 +60,18 @@ export function AgencyDialog({ editing, onSave, onClose }: AgencyDialogProps) {
   // Clearing `editing` unmounts the form, which resets it.
   return (
     <ModalDialog dialogRef={dialogRef} labelledBy={`${id}-title`} onClose={onClose}>
-      {editing ? (
+      {editing === "new" ? (
+        <ProducerForm
+          id={id}
+          title="Add agency"
+          description="Licences and contracts are added from the agency page once it is saved."
+          submitLabel="Add agency"
+          labels={FORM_LABELS}
+          licences={false}
+          onSave={onSave}
+          close={close}
+        />
+      ) : editing ? (
         <ProducerForm
           id={id}
           title={`Edit ${editing.name}`}

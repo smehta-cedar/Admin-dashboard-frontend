@@ -1,8 +1,7 @@
-﻿"use client";
+"use client";
 
 import { useState, type KeyboardEvent } from "react";
-import { certificationFileProblem } from "@/app/(dashboard)/certifications/certification-dialog";
-import { CarrierCheckboxes } from "@/components/carrier-checkboxes";
+import { carrierChoices, certificationFileProblem } from "@/app/(dashboard)/certifications/certification-dialog";
 import { GHOST_BUTTON_CLASS, INPUT_CLASS, PRIMARY_BUTTON_CLASS, ROW_BUTTON_CLASS } from "@/components/classes";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DeleteIcon } from "@/components/delete-icon";
@@ -11,7 +10,7 @@ import { Field } from "@/components/field";
 import { PdfUpload } from "@/components/pdf-upload";
 import { PROFILE_BUTTON_CLASS, PROFILE_LINK_CLASS } from "@/components/profile-shell";
 import { StatusBadge } from "@/components/status-badge";
-import type { CertifiablePolicyType } from "@/lib/certification-options";
+import { linesFor, type CertifiableCarrier } from "@/lib/certification-options";
 import type { CertificationStatus } from "@/lib/certifications";
 import type { CertificateDraft } from "./certificate-draft";
 import { formatLicenceDate } from "@/lib/state-licenses";
@@ -22,9 +21,10 @@ import { formatLicenceDate } from "@/lib/state-licenses";
  * each one for that agent. The entry row is hidden until Add certification,
  * the same way licences are, and the list is what gets saved.
  *
- * A policy type certified per carrier shows a box per carrier the row can
- * cover (the type's carriers with an agency contract) and needs at least
- * one; other types have no carriers.
+ * Every field is optional: carrier, line of business (the carrier's own
+ * lines, or every line with no carrier), due date (blank lets the API set
+ * the next deadline), dates and status. Nothing is checked but the PDF: a
+ * certification is an add-on.
  *
  * Each row may carry a PDF and the Verified flag. A picked PDF stays in the
  * browser until the save sends it; a row that already has a stored file
@@ -34,7 +34,7 @@ import { formatLicenceDate } from "@/lib/state-licenses";
 type CertificateSectionProps = {
   /** Prefix for element IDs, the agent form's id. */
   idPrefix: string;
-  policyTypes: CertifiablePolicyType[];
+  carriers: CertifiableCarrier[];
   drafts: CertificateDraft[];
   onChange: (drafts: CertificateDraft[]) => void;
   /**
@@ -45,9 +45,9 @@ type CertificateSectionProps = {
 };
 
 type Entry = {
-  policyTypeId: string;
-  /** Checked carriers; only the chosen type's are kept on Add. */
-  carrierIds: string[];
+  carrierId: string;
+  lineOfBusiness: string;
+  dueDate: string;
   startDate: string;
   endDate: string;
   isVerified: boolean;
@@ -57,8 +57,9 @@ type Entry = {
 };
 
 const EMPTY_ENTRY: Entry = {
-  policyTypeId: "",
-  carrierIds: [],
+  carrierId: "",
+  lineOfBusiness: "",
+  dueDate: "",
   startDate: "",
   endDate: "",
   isVerified: false,
@@ -68,11 +69,15 @@ const EMPTY_ENTRY: Entry = {
 
 let nextDraftId = 0;
 
-export function CertificateSection({ idPrefix, policyTypes, drafts, onChange, onRemove }: CertificateSectionProps) {
+/** What a row is called in labels, e.g. "Humana MAPD". */
+function draftLabel(draft: CertificateDraft): string {
+  return [draft.carrierName, draft.lineOfBusiness].filter(Boolean).join(" ") || "untitled";
+}
+
+export function CertificateSection({ idPrefix, carriers, drafts, onChange, onRemove }: CertificateSectionProps) {
   const [entryOpen, setEntryOpen] = useState(false);
   const [entry, setEntry] = useState<Entry>(EMPTY_ENTRY);
   const [held, setHeld] = useState<CertificateDraft | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   /** Bumped to empty the file input whenever the entry row resets. */
@@ -81,12 +86,11 @@ export function CertificateSection({ idPrefix, policyTypes, drafts, onChange, on
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
 
   const id = `${idPrefix}-certificate`;
-  const choices = policyTypes
-    .filter((type) => type.status === "active" || type.id === entry.policyTypeId)
-    .slice()
-    .sort((a, b) => a.name.localeCompare(b.name));
-  const chosenType = choices.find((type) => type.id === entry.policyTypeId);
-  const perCarrier = chosenType?.certificationScope === "per_carrier";
+  const choices = carrierChoices(
+    carriers,
+    held?.carrierId ? { id: held.carrierId, name: held.carrierName } : undefined,
+  );
+  const lines = linesFor(carriers, entry.carrierId, held?.lineOfBusiness);
 
   const closeEntry = (restore: CertificateDraft | null) => {
     if (restore) onChange([...drafts, restore]);
@@ -97,7 +101,6 @@ export function CertificateSection({ idPrefix, policyTypes, drafts, onChange, on
 
   const resetEntry = (next: Entry) => {
     setEntry(next);
-    setError(null);
     setFileError(null);
     setFileInputKey((key) => key + 1);
   };
@@ -109,31 +112,13 @@ export function CertificateSection({ idPrefix, policyTypes, drafts, onChange, on
   };
 
   const addCertificate = () => {
-    const policyType = choices.find((type) => type.id === entry.policyTypeId);
-    if (!policyType) {
-      setError(choices.length === 0 ? "There are no policy types to certify yet." : "Pick a policy type.");
-      return;
-    }
-    if (entry.startDate && entry.endDate && entry.endDate < entry.startDate) {
-      setError("The end date must be on or after the start date.");
-      return;
-    }
     if (fileError) return;
-    if (drafts.some((draft) => draft.policyTypeId === policyType.id)) {
-      setError(`${policyType.name} is already in the list. Delete it to enter it again.`);
-      return;
-    }
-    // In the type's order (by name); boxes of another type don't count.
-    const carriers = policyType.carriers.filter((carrier) => entry.carrierIds.includes(carrier.id));
-    if (policyType.certificationScope === "per_carrier" && carriers.length === 0) {
-      setError("Choose at least one carrier.");
-      return;
-    }
     const draft: CertificateDraft = {
       id: held?.id ?? `new-${++nextDraftId}`,
-      policyTypeId: policyType.id,
-      policyTypeName: policyType.name,
-      carriers,
+      carrierId: entry.carrierId,
+      carrierName: choices.find((carrier) => carrier.id === entry.carrierId)?.name ?? "",
+      lineOfBusiness: entry.lineOfBusiness,
+      dueDate: entry.dueDate,
       startDate: entry.startDate,
       endDate: entry.endDate,
       isVerified: entry.isVerified,
@@ -153,8 +138,9 @@ export function CertificateSection({ idPrefix, policyTypes, drafts, onChange, on
     onChange(drafts.filter((item) => item.id !== draftId));
     setHeld(draft);
     resetEntry({
-      policyTypeId: draft.policyTypeId,
-      carrierIds: draft.carriers.map((carrier) => carrier.id),
+      carrierId: draft.carrierId,
+      lineOfBusiness: draft.lineOfBusiness,
+      dueDate: draft.dueDate,
       startDate: draft.startDate,
       endDate: draft.endDate,
       isVerified: draft.isVerified,
@@ -173,7 +159,6 @@ export function CertificateSection({ idPrefix, policyTypes, drafts, onChange, on
 
   const update = (patch: Partial<Entry>) => {
     setEntry((current) => ({ ...current, ...patch }));
-    setError(null);
   };
 
   const pending = drafts.find((draft) => draft.id === pendingDelete);
@@ -210,16 +195,19 @@ export function CertificateSection({ idPrefix, policyTypes, drafts, onChange, on
                       Action
                     </th>
                     <th scope="col" className="px-3 py-2 font-medium">
-                      Policy type
+                      Carrier
                     </th>
                     <th scope="col" className="px-3 py-2 font-medium">
-                      Carriers
+                      Line of business
                     </th>
                     <th scope="col" className="px-3 py-2 font-medium">
-                      Start date
+                      Due date
                     </th>
                     <th scope="col" className="px-3 py-2 font-medium">
-                      End date
+                      Completion date
+                    </th>
+                    <th scope="col" className="px-3 py-2 font-medium">
+                      Expiry date
                     </th>
                     <th scope="col" className="px-3 py-2 font-medium">
                       Document
@@ -242,21 +230,22 @@ export function CertificateSection({ idPrefix, policyTypes, drafts, onChange, on
                           className={`inline-flex items-center gap-1.5 ${ROW_BUTTON_CLASS}`}
                         >
                           <EditIcon className="size-3.5 shrink-0" />
-                          <span className="sr-only"> {draft.policyTypeName}</span>
+                          <span className="sr-only"> {draftLabel(draft)}</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => setPendingDelete(draft.id)}
-                          aria-label={`Delete the ${draft.policyTypeName} certification`}
+                          aria-label={`Delete the ${draftLabel(draft)} certification`}
                           title="Delete"
                           className={`inline-flex items-center ${ROW_BUTTON_CLASS} hover:text-danger`}
                         >
                           <DeleteIcon className="size-3.5 shrink-0" />
                         </button>
                       </td>
-                      <td className="px-3 py-2">{draft.policyTypeName}</td>
-                      <td className="px-3 py-2">
-                        {draft.carriers.length > 0 ? draft.carriers.map((carrier) => carrier.name).join(", ") : "—"}
+                      <td className="px-3 py-2">{draft.carrierName || "—"}</td>
+                      <td className="px-3 py-2">{draft.lineOfBusiness || "—"}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {draft.dueDate ? formatLicenceDate(draft.dueDate) : "—"}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         {draft.startDate ? formatLicenceDate(draft.startDate) : "—"}
@@ -298,41 +287,47 @@ export function CertificateSection({ idPrefix, policyTypes, drafts, onChange, on
               className="grid items-end gap-3 grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)]"
               onKeyDown={addOnEnter}
             >
-              <Field label="Policy type" required htmlFor={`${id}-type`}>
+              <Field label="Carrier" htmlFor={`${id}-carrier`}>
                 <select
-                  id={`${id}-type`}
-                  value={entry.policyTypeId}
-                  aria-invalid={error && !entry.policyTypeId ? true : undefined}
-                  aria-describedby={error ? `${id}-error` : undefined}
-                  onChange={(event) => update({ policyTypeId: event.target.value })}
+                  id={`${id}-carrier`}
+                  value={entry.carrierId}
+                  onChange={(event) => {
+                    const carrierId = event.target.value;
+                    // A line the new carrier doesn't write goes back to none.
+                    const keep = linesFor(carriers, carrierId, held?.lineOfBusiness).includes(entry.lineOfBusiness);
+                    update({ carrierId, ...(keep ? {} : { lineOfBusiness: "" }) });
+                  }}
                   className={INPUT_CLASS}
                 >
-                  <option value="" disabled>
-                    Choose a policy type
-                  </option>
-                  {choices.map((type) => (
-                    <option key={type.id} value={type.id}>
-                      {type.name}
+                  <option value="">None</option>
+                  {choices.map((carrier) => (
+                    <option key={carrier.id} value={carrier.id}>
+                      {carrier.name}
                     </option>
                   ))}
                 </select>
               </Field>
-              <Field label="Start date" htmlFor={`${id}-start`}>
-                <input
-                  id={`${id}-start`}
-                  type="date"
-                  value={entry.startDate}
-                  onChange={(event) => update({ startDate: event.target.value })}
+              <Field label="Line of business" htmlFor={`${id}-line`}>
+                <select
+                  id={`${id}-line`}
+                  value={entry.lineOfBusiness}
+                  onChange={(event) => update({ lineOfBusiness: event.target.value })}
                   className={INPUT_CLASS}
-                />
+                >
+                  <option value="">None</option>
+                  {lines.map((line) => (
+                    <option key={line} value={line}>
+                      {line}
+                    </option>
+                  ))}
+                </select>
               </Field>
-              <Field label="End date" htmlFor={`${id}-end`}>
+              <Field label="Due date" htmlFor={`${id}-due`}>
                 <input
-                  id={`${id}-end`}
+                  id={`${id}-due`}
                   type="date"
-                  min={entry.startDate || undefined}
-                  value={entry.endDate}
-                  onChange={(event) => update({ endDate: event.target.value })}
+                  value={entry.dueDate}
+                  onChange={(event) => update({ dueDate: event.target.value })}
                   className={INPUT_CLASS}
                 />
               </Field>
@@ -349,17 +344,24 @@ export function CertificateSection({ idPrefix, policyTypes, drafts, onChange, on
                   <option value="inactive">Inactive</option>
                 </select>
               </Field>
-              {perCarrier ? (
-                <CarrierCheckboxes
-                  legend="Carriers"
-                  carriers={chosenType.carriers}
-                  checkedIds={entry.carrierIds}
-                  onChange={(carrierIds) => update({ carrierIds })}
-                  emptyText="No contracted carriers need this certification."
-                  errorId={`${id}-error`}
-                  className="col-span-4"
+              <Field label="Completion date" htmlFor={`${id}-start`}>
+                <input
+                  id={`${id}-start`}
+                  type="date"
+                  value={entry.startDate}
+                  onChange={(event) => update({ startDate: event.target.value })}
+                  className={INPUT_CLASS}
                 />
-              ) : null}
+              </Field>
+              <Field label="Expiry date" htmlFor={`${id}-end`}>
+                <input
+                  id={`${id}-end`}
+                  type="date"
+                  value={entry.endDate}
+                  onChange={(event) => update({ endDate: event.target.value })}
+                  className={INPUT_CLASS}
+                />
+              </Field>
               <Field
                 label="Document"
                 htmlFor={`${id}-file`}
@@ -401,11 +403,6 @@ export function CertificateSection({ idPrefix, policyTypes, drafts, onChange, on
                 </button>
               </div>
             </div>
-            {error ? (
-              <p id={`${id}-error`} role="alert" className="mt-1 text-xs text-danger">
-                {error}
-              </p>
-            ) : null}
           </div>
         ) : null}
       </div>
@@ -419,7 +416,7 @@ export function CertificateSection({ idPrefix, policyTypes, drafts, onChange, on
     <ConfirmDialog
       open={pendingDelete !== null}
       title="Delete certification"
-      message={pending ? `Delete the ${pending.policyTypeName} certification?` : ""}
+      message={pending ? `Delete the ${draftLabel(pending)} certification?` : ""}
       onConfirm={async () => {
         const draft = drafts.find((item) => item.id === pendingDelete);
         if (!draft) return;
