@@ -38,7 +38,6 @@ export type SaveAgencyContractResult =
 const ERROR_FIELDS: Record<string, AgencyContractError["field"]> = {
   carrier: "carrierId",
   contract_number: "contractNumber",
-  policy_types: "policyTypeIds",
   is_active: "status",
 };
 

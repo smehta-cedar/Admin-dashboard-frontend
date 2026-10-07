@@ -27,7 +27,7 @@ export default async function LoginPage() {
         <ThemeToggle />
       </div>
       <main className="flex flex-1 items-center justify-center px-4 pb-16">
-        <div className="w-full max-w-sm rounded-lg border border-line bg-surface p-6 shadow-sm sm:p-8">
+        <div className="w-full max-w-sm rounded-lg border glass p-6 shadow-sm sm:p-8">
           <div className="flex justify-center">
             <BrandLogo height={40} />
           </div>

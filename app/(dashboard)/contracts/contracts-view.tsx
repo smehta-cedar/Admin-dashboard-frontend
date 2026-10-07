@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/empty-state";
 import { CopyableNumber, LicenseNumber } from "@/components/license-number";
 import { NoteList } from "@/components/note-list";
 import { PageHeader } from "@/components/page-header";
-import { MAP_BUCKETS, UsMap } from "@/components/us-map";
+import { DISABLED_SWATCH, MAP_BUCKETS, UsMap } from "@/components/us-map";
 import { US_MAP_VIEWBOX } from "@/components/us-map-shapes";
 import type { AgentRecord } from "@/lib/agents";
 import type { CarrierContractNote, CarrierContractRecord } from "@/lib/carrier-contracts";
@@ -62,6 +62,8 @@ type ContractsViewProps = {
   carriers: CarrierOption[];
   /** The agency's licence number per state code; shown under the selected state. */
   agencyLicenseNumbers: Record<string, string>;
+  /** The agency's licensed states; every other state is striped grey and can't be picked. Null strips nothing. */
+  agencyLicensedStates: string[] | null;
 };
 
 /** How the selected state's appointments are grouped. */
@@ -164,7 +166,12 @@ export function ContractsView({
   agents,
   carriers,
   agencyLicenseNumbers,
+  agencyLicensedStates,
 }: ContractsViewProps) {
+  // States the agency isn't licensed in: striped on the map, as on the agent profile.
+  const agencyUnlicensed = agencyLicensedStates
+    ? US_STATES.map((state) => state.code).filter((code) => !agencyLicensedStates.includes(code))
+    : [];
   const { contracts, editor, setEditor, saveContract } = useAppointments({
     initialContracts,
     agents,
@@ -458,7 +465,7 @@ export function ContractsView({
          * (bottom-left) sit outside the scroller, so they stay pinned while the
          * map pans under them.
          */}
-        <div className="relative rounded-lg border border-line p-4">
+        <div className="relative rounded-lg border glass p-4 shadow-sm">
           <div
             className="flex overflow-auto"
             style={{
@@ -471,6 +478,7 @@ export function ContractsView({
                 selectedCode={selectedCode}
                 onSelect={selectState}
                 unit={["agent", "agents"]}
+                disabled={agencyUnlicensed}
               />
             </div>
           </div>
@@ -508,6 +516,12 @@ export function ContractsView({
                   <span className="tabular-nums">{bucket.label}</span>
                 </li>
               ))}
+              {agencyUnlicensed.length > 0 ? (
+                <li className="flex items-center gap-1">
+                  <span aria-hidden="true" className={`size-3 rounded-sm ring-1 ring-inset ring-line ${DISABLED_SWATCH}`} />
+                  <span>Agency not licensed</span>
+                </li>
+              ) : null}
             </ul>
           </div>
 

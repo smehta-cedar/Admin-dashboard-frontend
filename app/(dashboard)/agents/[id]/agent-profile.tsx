@@ -3,14 +3,18 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
+import { ROW_BUTTON_CLASS } from "@/components/classes";
 import { CredentialValue } from "@/components/credential-value";
+import { DeleteIcon } from "@/components/delete-icon";
+import { EditIcon } from "@/components/edit-icon";
 import { HydratedNoteList } from "@/components/hydrated-note-list";
-import { CopyableNumber } from "@/components/license-number";
+import { CopyableNumber, LicenseNumber } from "@/components/license-number";
 import {
   PasswordsPanel,
   Panel,
   PanelEmpty,
   PROFILE_BUTTON_CLASS,
+  PROFILE_LABEL_CLASS,
   PROFILE_LINK_CLASS,
   PROFILE_TH_CLASS,
   ProfileNameRow,
@@ -18,6 +22,7 @@ import {
   StateChipCell,
   type ProfilePassword,
 } from "@/components/profile-shell";
+import { ProfileStateMap, TableMapToggle, type PanelView } from "@/components/profile-state-map";
 import { StateLicensesPanel } from "@/components/state-licenses-panel";
 import { StatusBadge } from "@/components/status-badge";
 import type { AgentStateLicenseRecord } from "@/lib/agent-state-licenses";
@@ -27,10 +32,28 @@ import type { CertificationRecord } from "@/lib/certifications";
 import type { CarrierContractRecord } from "@/lib/carrier-contracts";
 import type { CarrierRecord } from "@/lib/carriers";
 import { formatAddress } from "@/lib/address";
-import { formatLicenceDate } from "@/lib/state-licenses";
-import { writableStates } from "@/lib/us-states";
+import type { PasswordRecord } from "@/lib/passwords";
+import {
+  formatLicenceDate,
+  licenceLinesText,
+  licensedStatesOf,
+  licenseDatesOf,
+  licenseLinesOf,
+  licenseNumbersOf,
+  type StateLicense,
+} from "@/lib/state-licenses";
+import { US_STATE_NAMES, US_STATES, writableStates } from "@/lib/us-states";
 import { byName } from "@/lib/text";
-import { listAgentCertifications, saveCertification } from "../../certifications/actions";
+import { deleteCertification, listAgentCertifications, saveCertification } from "../../certifications/actions";
+import { deletePassword, savePassword } from "../../passwords/actions";
+import {
+  PasswordDialog,
+  type PasswordEditor,
+  type PasswordError,
+  type PasswordValues,
+} from "../../passwords/password-dialog";
+import { saveAgentLicenses } from "../actions";
+import { AgentLicenseDialog, type AgentLicenseEditor, type AgentLicenseValues } from "./license-dialog";
 import {
   CertificationDialog,
   type CertificationEditor,
@@ -49,9 +72,11 @@ import { AGENT_FIELD_LABELS } from "../agent-dialog";
 /*
  * Profile for one agent: identity, then everything linked to them — the states
  * they can write in, contracted carriers, what is still pending, passwords,
- * and change notes. Passwords are still edited on their page. Two things
- * are editable here: the agent's own fields (Edit opens /agents/[id]/edit, the
- * same page as Add agent, and returns here) and appointing this agent to a carrier.
+ * and change notes. The agent's own fields are edited on /agents/[id]/edit
+ * (Edit, the same page as Add agent, which returns here). Every row of
+ * Carriers, State licences, Certifications and Passwords starts with its own
+ * Edit button, and each panel has an Add button; both open that section's
+ * dialog, so one row is changed without leaving the profile.
  *
  * Layout, from the shared pieces in components/profile-shell.tsx. The page is
  * capped at the 2xl breakpoint, wider than the list pages. A header that is
@@ -79,6 +104,19 @@ import { AGENT_FIELD_LABELS } from "../agent-dialog";
  * Pending is a `Panel` too, with an empty state ("Nothing is pending") since
  * it is always in the list.
  *
+ * Carriers and State licences each have a Table | Map switch in their header
+ * (components/profile-state-map.tsx). The Carriers map shades a state by how
+ * many carriers the agent can write with there; the licences map shades
+ * licensed states, darker when the licence is active. In Map view the full
+ * table sits under the map, always every row. Clicking a state slides in the
+ * Contracts page's right-hand panel: the carriers writable there (a line
+ * opens that contract's Edit), or the licence there with Edit licence. The
+ * Carriers map also floats a card of the agent's carriers (name and writing
+ * number) over its top-left; picking one lights only its writable states.
+ * On both maps, states the agency holds no licence in are striped and can't
+ * be picked (`agencyLicensedStates`). The choices are page state, kept across section
+ * switches; a pick only filters while its map shows.
+ *
  * The cards stay a single row; on a narrow screen they scroll sideways
  * instead of stacking over the panel.
  *
@@ -104,10 +142,20 @@ import { AGENT_FIELD_LABELS } from "../agent-dialog";
  * agent, not their status, on every page (the Contracts pages just leave them
  * out of the counts).
  *
- * The agent and their licence rows are kept in state. Editing them happens on
- * /agents/[id]/edit; coming back loads the saved agent. Appointments save through
- * the appointments hook. page.tsx keys this component by agent ID, so
- * switching agents starts that state again.
+ * "Add carrier" and a carrier row's Edit share that dialog (edit mode holds
+ * the contract). A State licences row's Edit, and Add licence, open
+ * AgentLicenseDialog (./license-dialog.tsx) for one licence; its save sends
+ * the whole list, with that row changed, through saveAgentLicenses — the same
+ * call the edit page makes when a licence is deleted — and the saved agent
+ * comes back, so the carriers' writable states follow at once. Passwords
+ * open the shared PasswordDialog with this agent the only choice, saving
+ * through savePassword like the Passwords page.
+ *
+ * The agent, their licence rows, certifications and passwords are kept in
+ * state, each started again when a fresh server render brings new props
+ * (useServerState). Appointments save through the appointments hook.
+ * page.tsx keys this component by agent ID, so switching agents starts that
+ * state again.
  *
  * `readOnly` is the same profile for an agent signed in as themselves
  * (app/agent/page.tsx): no Edit, Add carrier or certification editing,
@@ -138,11 +186,201 @@ type AgentProfileProps = {
   notes: AgentNote[] | null;
   /** The agent's own view: nothing edits and nothing links into the staff app. */
   readOnly?: boolean;
+  /**
+   * The agency's licensed states. Every other state is disabled on the maps.
+   * Null (no agency yet, or the role can't read it) disables nothing.
+   */
+  agencyLicensedStates?: string[] | null;
   /** Sections to leave out of the list: on the agent's own view, those their role doesn't grant. */
   hiddenSections?: SectionKey[];
 };
 
 const CARRIER_COLUMNS = ["Carrier", "Writing number", "Writable states", "Status"];
+
+/** State that starts from a prop, and starts again when a fresh server render (refresh, revalidation) brings a new one. */
+function useServerState<T>(initial: T) {
+  const [value, setValue] = useState(initial);
+  const [loaded, setLoaded] = useState(initial);
+  if (initial !== loaded) {
+    setLoaded(initial);
+    setValue(initial);
+  }
+  return [value, setValue] as const;
+}
+
+/** A row's first cell: icon-only Edit and Delete buttons. */
+function RowActions({
+  editLabel,
+  onEdit,
+  deleteLabel,
+  onDelete,
+}: {
+  editLabel: string;
+  onEdit: () => void;
+  deleteLabel: string;
+  onDelete: () => void;
+}) {
+  return (
+    <td className="whitespace-nowrap px-3 py-1.5 align-middle">
+      <button
+        type="button"
+        onClick={onEdit}
+        aria-label={editLabel}
+        title="Edit"
+        className={`inline-flex items-center gap-1.5 ${ROW_BUTTON_CLASS}`}
+      >
+        <EditIcon className="size-3.5 shrink-0" />
+      </button>
+      <button
+        type="button"
+        onClick={onDelete}
+        aria-label={deleteLabel}
+        title="Delete"
+        className={`inline-flex items-center ${ROW_BUTTON_CLASS} hover:text-danger`}
+      >
+        <DeleteIcon className="size-3.5 shrink-0" />
+      </button>
+    </td>
+  );
+}
+
+/**
+ * The card floating over the Carriers map's top-left: one button per carrier,
+ * its name over its writing number. Picking one lights its writable states on
+ * the map; picking it again clears it.
+ */
+function CarrierMapCard({
+  carriers,
+  selectedId,
+  onSelect,
+}: {
+  carriers: { id: string; name: string; writingNumber: string; writable: string[] }[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <div className="w-full overflow-hidden rounded-lg bg-surface/95 shadow-md ring-1 ring-line sm:w-56">
+      <p className={`border-b border-line ${PROFILE_TH_CLASS}`}>Carriers</p>
+      <ul className="max-h-72 divide-y divide-line overflow-y-auto">
+        {carriers.map((carrier) => {
+          const active = carrier.id === selectedId;
+          return (
+            <li key={carrier.id}>
+              <button
+                type="button"
+                aria-pressed={active}
+                onClick={() => onSelect(carrier.id)}
+                className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition-colors ${
+                  active
+                    ? "bg-map-pick-soft text-map-pick-soft-ink shadow-[inset_3px_0_0_var(--color-map-pick)]"
+                    : "text-fg hover:bg-surface-hover"
+                }`}
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium">{carrier.name}</span>
+                  <span className={`block truncate font-mono text-xs ${carrier.writingNumber ? "" : "text-fg-subtle"}`}>
+                    {carrier.writingNumber || "No writing number"}
+                  </span>
+                </span>
+                <span
+                  className="shrink-0 rounded-full bg-surface-muted px-1.5 py-0.5 text-xs tabular-nums text-fg-muted"
+                  title={`${carrier.writable.length} writable ${carrier.writable.length === 1 ? "state" : "states"}`}
+                >
+                  {carrier.writable.length}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+/** A password as the profile lists it: the carrier as the party, linking to its profile. */
+function profilePassword(record: PasswordRecord): ProfilePassword {
+  return { ...record, partyName: record.carrierName, partyHref: `/carriers/${record.carrierId}` };
+}
+
+/**
+ * The Passwords panel with Edit and Delete on every row and Add password in
+ * its header. Same columns as the shared PasswordsPanel (components/profile-shell.tsx).
+ */
+function EditablePasswordsPanel({
+  passwords,
+  onAdd,
+  onEdit,
+  onDelete,
+}: {
+  passwords: ProfilePassword[];
+  onAdd: () => void;
+  onEdit: (record: ProfilePassword) => void;
+  onDelete: (record: ProfilePassword) => void;
+}) {
+  return (
+    <Panel
+      title="Passwords"
+      count={passwords.length}
+      action={
+        <button type="button" onClick={onAdd} className={PROFILE_BUTTON_CLASS}>
+          <span aria-hidden="true">+ </span>Add password
+        </button>
+      }
+    >
+      {passwords.length === 0 ? (
+        <PanelEmpty>No passwords recorded.</PanelEmpty>
+      ) : (
+        <ProfileTable
+          columns={["Action", "Carrier", "Portal username", "Password", "Link", "Status"]}
+          rows={passwords}
+          rowKey={(record) => record.id}
+        >
+          {(record) => (
+            <>
+              <RowActions
+                editLabel={`Edit the ${record.partyName} password`}
+                onEdit={() => onEdit(record)}
+                deleteLabel={`Delete the ${record.partyName} password`}
+                onDelete={() => onDelete(record)}
+              />
+              <td className="min-w-24 whitespace-nowrap px-3 py-2.5">
+                {record.partyHref ? (
+                  <Link href={record.partyHref} className={PROFILE_LINK_CLASS}>
+                    {record.partyName}
+                  </Link>
+                ) : (
+                  record.partyName
+                )}
+              </td>
+              <td className="px-3 py-2.5 text-fg-muted">
+                <CredentialValue value={record.username} label="username" />
+              </td>
+              <td className="px-3 py-2.5 text-fg-muted">
+                <CredentialValue value={record.portalPassword} label="password" secret />
+              </td>
+              <td className="px-3 py-2.5">
+                {record.link ? (
+                  <a
+                    href={record.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={record.link}
+                    className={`block max-w-48 truncate ${PROFILE_LINK_CLASS}`}
+                  >
+                    {record.link}
+                  </a>
+                ) : null}
+              </td>
+              <td className="px-3 py-2.5">
+                <StatusBadge status={record.status} />
+              </td>
+            </>
+          )}
+        </ProfileTable>
+      )}
+    </Panel>
+  );
+}
 
 /** One row of the Details table: the field's label and its text, a link, or "—". */
 type DetailRow = {
@@ -314,26 +552,31 @@ export function AgentProfile({
   initialLicenses,
   initialCertifications,
   certificationCarriers,
-  passwords,
+  passwords: initialPasswords,
   notes,
   readOnly = false,
+  agencyLicensedStates = null,
   hiddenSections = [],
 }: AgentProfileProps) {
-  const agent = initialAgent;
-  const licenses = initialLicenses;
-  const [certifications, setCertifications] = useState(initialCertifications);
-  // A fresh server render (refresh, revalidation) brings rows added elsewhere, e.g. by the yearly command.
-  const [loadedCertifications, setLoadedCertifications] = useState(initialCertifications);
-  if (initialCertifications !== loadedCertifications) {
-    setLoadedCertifications(initialCertifications);
-    setCertifications(initialCertifications);
-  }
+  const [agent, setAgent] = useServerState(initialAgent);
+  const [licenses, setLicenses] = useServerState(initialLicenses);
+  // A fresh server render also brings certifications added elsewhere, e.g. by the yearly command.
+  const [certifications, setCertifications] = useServerState(initialCertifications);
+  const [passwords, setPasswords] = useServerState(initialPasswords);
   const router = useRouter();
   const [certificationEditor, setCertificationEditor] = useState<CertificationEditor | null>(null);
+  const [licenseEditor, setLicenseEditor] = useState<AgentLicenseEditor | null>(null);
+  const [passwordEditor, setPasswordEditor] = useState<PasswordEditor | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   // Which section the panel shows. Carriers first: it is what the page is opened for.
   const [section, setSection] = useState<SectionKey | null>(null);
+  // Carriers opens on its map (with the table under it); State licences on its table.
+  const [carriersView, setCarriersView] = useState<PanelView>("map");
+  const [licencesView, setLicencesView] = useState<PanelView>("table");
+  // The carrier picked on the Carriers map's card: only its writable states light up.
+  const [mapCarrierId, setMapCarrierId] = useState<string | null>(null);
   // Appointments added here are for this agent only.
-  const { contracts, editor, setEditor, saveContract } = useAppointments({
+  const { contracts, editor, setEditor, saveContract, removeContract } = useAppointments({
     initialContracts,
     agents: [agent],
     carriers,
@@ -359,11 +602,52 @@ export function AgentProfile({
               ...carrier,
               writable: writableStates(contract.appointedStates, agent.licensedStates, carrier.availableStates),
               writingNumber: contract.writingNumber,
+              contract,
             },
           ]
         : [];
     })
     .sort(byName);
+
+  // How many of this agent's carriers they can write with in each state, for the Carriers map.
+  const carrierCounts: Record<string, number> = {};
+  for (const carrier of agentCarriers) {
+    for (const code of carrier.writable) carrierCounts[code] = (carrierCounts[code] ?? 0) + 1;
+  }
+  const licenceByState = new Map(licenses.map((license) => [license.state, license]));
+  const licenceCounts = Object.fromEntries(licenses.map((license) => [license.state, 1]));
+  const mapCarrier = agentCarriers.find((carrier) => carrier.id === mapCarrierId) ?? null;
+  // Both maps disable the states the agency isn't licensed in.
+  const agencyUnlicensed = agencyLicensedStates
+    ? US_STATES.map((state) => state.code).filter((code) => !agencyLicensedStates.includes(code))
+    : [];
+  // The agent's carriers they can write with in a state, for the State licences map panel.
+  const carriersIn = (code: string) => agentCarriers.filter((carrier) => carrier.writable.includes(code));
+  /** A state's carriers, one per line: name (linked for staff) and its writing number with a copy icon. */
+  const stateCarriers = (code: string) => {
+    const here = carriersIn(code);
+    if (here.length === 0) return <span className="text-xs text-fg-faint">No carriers</span>;
+    return (
+      <ul aria-label={`Carriers in ${US_STATE_NAMES[code] ?? code}`} className="grid gap-1">
+        {here.map((carrier) => (
+          <li key={carrier.id} className="flex min-w-0 flex-wrap items-center justify-between gap-x-2">
+            <span className="min-w-0 truncate text-sm">
+              {readOnly ? (
+                carrier.name
+              ) : (
+                <Link href={`/carriers/${carrier.id}`} className={PROFILE_LINK_CLASS}>
+                  {carrier.name}
+                </Link>
+              )}
+            </span>
+            <CopyableNumber value={carrier.writingNumber} label={`${carrier.name} writing number`} empty="No writing number" />
+          </li>
+        ))}
+      </ul>
+    );
+  };
+  // The Carriers map outlines licensed states; its tooltip says which.
+  const licensedText = (code: string) => (agent.licensedStates.includes(code) ? "Licensed" : "Not licensed");
 
   const pending = readOnly ? [] : pendingItems({ agent, agentCarriers, passwords: passwords ?? [] });
 
@@ -505,6 +789,60 @@ export function AgentProfile({
     return [];
   };
 
+  /** Replaces this agent's licences with `rows` through the API. Resolves with the error to show, if any. */
+  const saveLicenceRows = async (rows: StateLicense[]): Promise<string | null> => {
+    const result = await saveAgentLicenses(agent.id, {
+      licensedStates: licensedStatesOf(rows),
+      licenseNumbers: licenseNumbersOf(rows),
+      licenseLines: licenseLinesOf(rows),
+      licenseDates: licenseDatesOf(rows),
+    });
+    if (!result.ok) return result.error.message;
+    // The saved agent too: its licensed states decide each carrier's writable states.
+    setAgent(result.agent);
+    setLicenses(result.licenses);
+    return null;
+  };
+
+  /** Adds a licence, or replaces the row for `previousState`. */
+  const saveLicence = (values: AgentLicenseValues, previousState: string | null) =>
+    saveLicenceRows([
+      ...licenses.filter((row) => row.state !== previousState),
+      // Only the state, number, lines and dates are sent; the API keeps the rest.
+      { ...values, id: "", status: "active" },
+    ]);
+
+  const removeLicence = (state: string) => saveLicenceRows(licenses.filter((row) => row.state !== state));
+
+  /** Adds or edits one of this agent's passwords through the API. Resolves with the dialog's errors, if any. */
+  const saveAgentPassword = async (values: PasswordValues, editing?: PasswordRecord): Promise<PasswordError[]> => {
+    const result = await savePassword(values, editing?.id);
+    if (!result.ok) return result.errors;
+    const saved = result.password;
+    setPasswords((current) =>
+      [
+        ...(current ?? []).filter((record) => record.id !== saved.id),
+        ...(saved.agentId === agent.id ? [profilePassword(saved)] : []),
+      ].sort((a, b) => a.partyName.localeCompare(b.partyName)),
+    );
+    return [];
+  };
+
+  // The State licences header: Add licence at the end.
+  const licencesAction = readOnly ? null : (
+    <button type="button" onClick={() => setLicenseEditor({ mode: "add" })} className={PROFILE_BUTTON_CLASS}>
+      <span aria-hidden="true">+ </span>Add licence
+      <span className="sr-only"> for {agent.name}</span>
+    </button>
+  );
+
+  /** Runs a row delete and keeps the API's message when it fails. */
+  const runDelete = async (remove: () => Promise<string | null>) => {
+    setActionError(null);
+    const message = await remove();
+    if (message) setActionError(message);
+  };
+
   return (
     <div className="mx-auto max-w-(--breakpoint-2xl) pb-12">
       <ProfileNameRow
@@ -531,7 +869,7 @@ export function AgentProfile({
                   className={`flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left shadow-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
                     active
                       ? "border-brand bg-brand-soft text-brand-ink shadow-[0_1px_2px_0_rgb(0_0_0/0.05),inset_0_-3px_0_var(--color-brand)]"
-                      : "border-line bg-surface text-fg hover:border-brand/40 hover:bg-brand-soft/50"
+                      : "glass text-fg hover:border-brand/40 hover:bg-brand-soft/50"
                   }`}
                 >
                   <span className="text-sm font-medium whitespace-nowrap">{item.label}</span>
@@ -550,6 +888,11 @@ export function AgentProfile({
       </nav>
 
       <div className="mt-5 min-w-0">
+          {actionError ? (
+            <p role="alert" className="mb-3 text-sm text-danger">
+              {actionError}
+            </p>
+          ) : null}
           {shown === "details" ? (
             <Panel title="Details" count={filledCount}>
               <DetailsTable rows={details} />
@@ -583,6 +926,9 @@ export function AgentProfile({
             <Panel
               title="Carriers"
               count={agentCarriers.length}
+              center={
+                agentCarriers.length > 0 ? <TableMapToggle view={carriersView} onChange={setCarriersView} /> : undefined
+              }
               action={
                 !readOnly && carriers.length > 0 ? (
                   <button
@@ -599,40 +945,251 @@ export function AgentProfile({
               {agentCarriers.length === 0 ? (
                 <PanelEmpty>Not contracted with any carriers.</PanelEmpty>
               ) : (
-                <ProfileTable columns={CARRIER_COLUMNS} rows={agentCarriers} rowKey={(carrier) => carrier.id}>
-                  {(carrier) => (
-                    <>
-                      <td className="min-w-0 truncate px-3 py-2.5 align-middle sm:whitespace-nowrap">
-                        {readOnly ? (
-                          carrier.name
-                        ) : (
-                          <Link href={`/carriers/${carrier.id}`} className={PROFILE_LINK_CLASS}>
-                            {carrier.name}
-                          </Link>
-                        )}
-                      </td>
-                      <td className="min-w-0 px-3 py-2.5 align-middle">
-                        <CopyableNumber
-                          value={carrier.writingNumber}
-                          label="Writing number"
-                          empty="No writing number"
+                <>
+                  {carriersView === "map" ? (
+                    <ProfileStateMap
+                      disabled={agencyUnlicensed}
+                      counts={carrierCounts}
+                      unit={["carrier", "carriers"]}
+                      {...(mapCarrier
+                        ? {
+                            // One carrier picked: its writable states lit, the rest blank.
+                            showCounts: false,
+                            bucketOf: () => 0,
+                            highlighted: mapCarrier.writable,
+                            describeState: (code: string) =>
+                              `${US_STATE_NAMES[code] ?? code} · ${
+                                mapCarrier.writable.includes(code) ? "Writable" : "Not writable"
+                              } with ${mapCarrier.name} · ${licensedText(code)}`,
+                            legendTitle: mapCarrier.name,
+                            legend: [
+                              { bucket: "pick" as const, label: "Writable" },
+                              { bucket: 0, label: "Not writable" },
+                              { bucket: "outline" as const, label: "Licensed" },
+                            ],
+                          }
+                        : {
+                            describeState: (code: string) => {
+                              const count = carrierCounts[code] ?? 0;
+                              return `${US_STATE_NAMES[code] ?? code} · ${count} ${
+                                count === 1 ? "carrier" : "carriers"
+                              } · ${licensedText(code)}`;
+                            },
+                            legendTitle: "Carriers writable",
+                            legend: [
+                              { bucket: 0, label: "0" },
+                              { bucket: 1, label: "1" },
+                              { bucket: 2, label: "2" },
+                              { bucket: 3, label: "3" },
+                              { bucket: 4, label: "4+" },
+                              { bucket: "outline" as const, label: "Licensed" },
+                            ],
+                          })}
+                      outlined={agent.licensedStates}
+                      overlay={
+                        <CarrierMapCard
+                          carriers={agentCarriers}
+                          selectedId={mapCarrier?.id ?? null}
+                          onSelect={(id) => setMapCarrierId((current) => (current === id ? null : id))}
                         />
-                      </td>
-                      <StateChipCell
-                        codes={carrier.writable}
-                        label={`States writable with ${carrier.name}`}
-                        empty="No states yet"
-                      />
-                      <td className="px-3 py-2.5 align-middle">
-                        <StatusBadge status={carrier.status} />
-                      </td>
-                    </>
-                  )}
-                </ProfileTable>
+                      }
+                      keepPanelOpen={editor !== null}
+                      renderPanelSubtitle={(code) => <LicenseNumber value={agent.licenseNumbers[code]} />}
+                      renderPanel={(code) => {
+                        const here = agentCarriers.filter((carrier) => carrier.writable.includes(code));
+                        return (
+                          <>
+                            <p role="status" className="text-xs text-fg-muted">
+                              {here.length === 1 ? "Carrier" : "Carriers"}: {here.length}
+                            </p>
+                            {here.length > 0 ? (
+                              <ul className="mt-4 divide-y divide-line text-sm">
+                                {here.map((carrier) => (
+                                  // Clicking the line opens Edit, as on Contracts; the name links to the carrier.
+                                  <li
+                                    key={carrier.id}
+                                    onClick={
+                                      readOnly ? undefined : () => setEditor({ mode: "edit", contract: carrier.contract })
+                                    }
+                                    className={`flex items-center justify-between gap-3 rounded px-2 py-2.5 ${
+                                      readOnly ? "" : "cursor-pointer hover:bg-surface-hover"
+                                    }`}
+                                  >
+                                    <span className="min-w-0">
+                                      <span className="block truncate font-semibold text-fg">
+                                        {readOnly ? (
+                                          carrier.name
+                                        ) : (
+                                          <Link
+                                            href={`/carriers/${carrier.id}`}
+                                            onClick={(event) => event.stopPropagation()}
+                                            className="hover:underline"
+                                          >
+                                            {carrier.name}
+                                          </Link>
+                                        )}
+                                      </span>
+                                      <span className="mt-1 block">
+                                        <StatusBadge status={carrier.status} />
+                                      </span>
+                                    </span>
+                                    <span onClick={(event) => event.stopPropagation()} className="shrink-0">
+                                      <CopyableNumber
+                                        value={carrier.writingNumber}
+                                        label="Writing number"
+                                        empty="No writing number"
+                                      />
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="mt-3 text-sm text-fg-subtle">
+                                {agent.name} can&apos;t write in {US_STATE_NAMES[code] ?? code} with any carrier yet.
+                              </p>
+                            )}
+                          </>
+                        );
+                      }}
+                    />
+                  ) : null}
+                  <ProfileTable
+                    columns={readOnly ? CARRIER_COLUMNS : ["Action", ...CARRIER_COLUMNS]}
+                    rows={agentCarriers}
+                    rowKey={(carrier) => carrier.id}
+                  >
+                    {(carrier) => (
+                      <>
+                        {readOnly ? null : (
+                          <RowActions
+                            editLabel={`Edit the ${carrier.name} contract`}
+                            onEdit={() => setEditor({ mode: "edit", contract: carrier.contract })}
+                            deleteLabel={`Delete the ${carrier.name} contract`}
+                            onDelete={() => void runDelete(() => removeContract(carrier.contract.id))}
+                          />
+                        )}
+                        <td className="min-w-0 truncate px-3 py-2.5 align-middle sm:whitespace-nowrap">
+                          {readOnly ? (
+                            carrier.name
+                          ) : (
+                            <Link href={`/carriers/${carrier.id}`} className={PROFILE_LINK_CLASS}>
+                              {carrier.name}
+                            </Link>
+                          )}
+                        </td>
+                        <td className="min-w-0 px-3 py-2.5 align-middle">
+                          <CopyableNumber
+                            value={carrier.writingNumber}
+                            label="Writing number"
+                            empty="No writing number"
+                          />
+                        </td>
+                        <StateChipCell
+                          codes={carrier.writable}
+                          label={`States writable with ${carrier.name}`}
+                          empty="No states yet"
+                        />
+                        <td className="px-3 py-2.5 align-middle">
+                          <StatusBadge status={carrier.status} />
+                        </td>
+                      </>
+                    )}
+                  </ProfileTable>
+                </>
               )}
             </Panel>
           ) : shown === "licences" ? (
-            <StateLicensesPanel licenses={licenses} showLines />
+            <StateLicensesPanel
+              licenses={licenses}
+              center={
+                licenses.length > 0 ? <TableMapToggle view={licencesView} onChange={setLicencesView} /> : undefined
+              }
+              beforeTable={
+                licencesView === "map" && licenses.length > 0 ? (
+                  <ProfileStateMap
+                    disabled={agencyUnlicensed}
+                    counts={licenceCounts}
+                    unit={["licence", "licences"]}
+                    showCounts={false}
+                    bucketOf={(code) => {
+                      const license = licenceByState.get(code);
+                      return !license ? 0 : license.status === "active" ? 4 : 2;
+                    }}
+                    describeState={(code) => {
+                      const license = licenceByState.get(code);
+                      const name = US_STATE_NAMES[code] ?? code;
+                      if (!license) return `${name} · Not licensed`;
+                      return [name, license.licenseNumber, licenceLinesText(license), license.status]
+                        .filter(Boolean)
+                        .join(" · ");
+                    }}
+                    legendTitle="Licence"
+                    legend={[
+                      { bucket: 4, label: "Active" },
+                      { bucket: 2, label: "Other status" },
+                      { bucket: 0, label: "Not licensed" },
+                    ]}
+                    keepPanelOpen={licenseEditor !== null}
+                    renderPanelSubtitle={(code) => <LicenseNumber value={licenceByState.get(code)?.licenseNumber} />}
+                    renderPanel={(code) => {
+                      const license = licenceByState.get(code);
+                      if (!license) {
+                        return (
+                          <p className="text-sm text-fg-subtle">
+                            {agent.name} isn&apos;t licensed in {US_STATE_NAMES[code] ?? code}.
+                          </p>
+                        );
+                      }
+                      return (
+                        <>
+                          <DetailsTable
+                            rows={[
+                              { key: "lines", label: "Lines", value: licenceLinesText(license) || "—", filled: true },
+                              {
+                                key: "status",
+                                label: "Status",
+                                value: <StatusBadge status={license.status} />,
+                                filled: true,
+                              },
+                              {
+                                key: "start",
+                                label: "Start",
+                                value: <time dateTime={license.startDate}>{formatLicenceDate(license.startDate)}</time>,
+                                filled: true,
+                              },
+                              {
+                                key: "end",
+                                label: "End",
+                                value: <time dateTime={license.endDate}>{formatLicenceDate(license.endDate)}</time>,
+                                filled: true,
+                              },
+                            ]}
+                          />
+                          <h3 className={`mt-5 mb-2 ${PROFILE_LABEL_CLASS}`}>Carriers</h3>
+                          {stateCarriers(code)}
+                          {readOnly ? null : (
+                            <button
+                              type="button"
+                              onClick={() => setLicenseEditor({ mode: "edit", license })}
+                              className={`mt-4 ${PROFILE_BUTTON_CLASS}`}
+                            >
+                              <EditIcon className="size-3.5 shrink-0" />
+                              Edit licence
+                            </button>
+                          )}
+                        </>
+                      );
+                    }}
+                  />
+                ) : null
+              }
+              showLines
+              action={licencesAction}
+              onEdit={readOnly ? undefined : (license) => setLicenseEditor({ mode: "edit", license })}
+              onDelete={
+                readOnly ? undefined : (license) => void runDelete(() => removeLicence(license.state))
+              }
+            />
           ) : shown === "certifications" && certifications ? (
             <Panel
               title="Certifications"
@@ -672,6 +1229,19 @@ export function AgentProfile({
                                   certification,
                                 })
                         }
+                        onDelete={
+                          readOnly
+                            ? undefined
+                            : (certification) =>
+                                void runDelete(async () => {
+                                  const result = await deleteCertification(certification.id);
+                                  if (!result.ok) return result.message;
+                                  setCertifications((current) =>
+                                    (current ?? []).filter((row) => row.id !== certification.id),
+                                  );
+                                  return null;
+                                })
+                        }
                         // The download needs certifications access, which an agent's sign-in doesn't have.
                         fileLinks={!readOnly}
                       />
@@ -681,7 +1251,23 @@ export function AgentProfile({
               )}
             </Panel>
           ) : shown === "passwords" && passwords ? (
-            <PasswordsPanel passwords={passwords} partyHeading="Carrier" />
+            readOnly ? (
+              <PasswordsPanel passwords={passwords} partyHeading="Carrier" />
+            ) : (
+              <EditablePasswordsPanel
+                passwords={passwords}
+                onAdd={() => setPasswordEditor({ mode: "add", agentId: agent.id })}
+                onEdit={(password) => setPasswordEditor({ mode: "edit", password })}
+                onDelete={(password) =>
+                  void runDelete(async () => {
+                    const result = await deletePassword(password.id);
+                    if (!result.ok) return result.message;
+                    setPasswords((current) => (current ?? []).filter((record) => record.id !== password.id));
+                    return null;
+                  })
+                }
+              />
+            )
           ) : shown === "notes" && notes ? (
             <Panel title="Notes" count={notes.length}>
               {/* Cancels NoteList's own top margin; the panel body already pads. */}
@@ -705,6 +1291,24 @@ export function AgentProfile({
             onClose={() => setCertificationEditor(null)}
           />
 
+          <AgentLicenseDialog
+            editor={licenseEditor}
+            licensedStates={agent.licensedStates}
+            onSave={saveLicence}
+            onRemove={removeLicence}
+            onClose={() => setLicenseEditor(null)}
+          />
+
+          {/* This agent is the only choice, so a password here is always theirs. */}
+          <PasswordDialog
+            editor={passwordEditor}
+            agents={[{ id: agent.id, name: agent.name, status: agent.status }]}
+            carriers={carriers}
+            agency={null}
+            onSave={saveAgentPassword}
+            onClose={() => setPasswordEditor(null)}
+          />
+
           {/* Agent locked to this profile: the only option, already chosen. */}
           <AppointmentDialog
             editor={editor}
@@ -717,6 +1321,7 @@ export function AgentProfile({
               },
             ]}
             carriers={carriers}
+            requireWritingNumber
             onSave={saveContract}
             onClose={() => setEditor(null)}
           />

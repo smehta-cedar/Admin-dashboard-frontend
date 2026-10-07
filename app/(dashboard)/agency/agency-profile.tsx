@@ -31,6 +31,7 @@ import {
   type AgencyContractValues,
 } from "./agency-contract-dialog";
 import { saveAgencyContract } from "./contract-actions";
+import { addPolicyType } from "./policy-type-actions";
 import { AGENCY_FIELD_LABELS, AgencyDialog, type AgencyError, type AgencyValues } from "./agency-dialog";
 import { AgencyLicenseDialog, type AgencyLicenseEditor, type AgencyLicenseValues } from "./license-dialog";
 
@@ -61,7 +62,8 @@ import { AgencyLicenseDialog, type AgencyLicenseEditor, type AgencyLicenseValues
  * A full-width Contracts panel, under State licences, lists the agency's
  * contract with each carrier (carrier, contract number, policy types, status)
  * and opens AgencyContractDialog from Add contract and a row's Edit, saved
- * through saveAgencyContract. A carrier whose contract has no number yet
+ * through saveAgencyContract; the dialog adds new policy types through
+ * addPolicyType (./policy-type-actions.ts). A carrier whose contract has no number yet
  * shows "No number yet": agents can't be given that carrier until it has
  * one. The panel is left out when the role can't see agency contracts (the
  * page passes null).
@@ -86,7 +88,7 @@ type AgencyProfileProps = {
 };
 
 const AGENT_COLUMNS = ["Agent", "Licensed states", "Status"];
-const CONTRACT_COLUMNS = ["Action", "Carrier", "Contract number", "Policy types", "Status"];
+const CONTRACT_COLUMNS = ["Action", "Carrier", "Writing number", "Policy types", "Status"];
 
 export function AgencyProfile({
   initialAgency,
@@ -304,6 +306,7 @@ export function AgencyProfile({
           contractedCarrierIds={contracts.map((contract) => contract.carrierId)}
           policyTypes={policyTypes}
           onSave={saveContract}
+          onAddPolicyType={addPolicyType}
           onClose={() => setContractEditor(null)}
         />
       ) : null}

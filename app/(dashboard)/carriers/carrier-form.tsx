@@ -25,7 +25,7 @@ import type {
   CarrierRecord,
   CarrierValues,
 } from "@/lib/carriers";
-import { LINES_OF_BUSINESS } from "@/lib/lines-of-business";
+import { LINES_OF_BUSINESS, type LineOfBusiness } from "@/lib/lines-of-business";
 import {
   AGENCY_LICENCE_STATUSES,
   formatLicenceDate,
@@ -51,7 +51,9 @@ import { saveCarrier } from "./actions";
  * revalidates every page, so the list and profile show the change when the
  * page returns to them. The API checks the name against every other
  * carrier's name and aliases and records the change note; the form only
- * checks what it can see at once (a line of business is chosen).
+ * checks what it can see at once (a line of business is chosen). Under
+ * those lines, Certifications marks which of them need an agent
+ * certification. A box there stays off unless that line is checked above.
  */
 
 export type { CarrierError, CarrierValues } from "@/lib/carriers";
@@ -61,6 +63,7 @@ export const CARRIER_FIELD_LABELS: Record<CarrierField, string> = {
   name: "Name",
   aliases: "Aliases",
   linesOfBusiness: "Lines of business",
+  certificationLines: "Certifications",
   link: "Link",
   status: "Status",
   availableStates: "Available states",
@@ -74,13 +77,18 @@ export const CARRIER_FIELD_LABELS: Record<CarrierField, string> = {
 export function readCarrierForm(data: FormData): CarrierValues {
   const text = (field: CarrierField) => String(data.get(field) ?? "").trim();
   const checkedLines = data.getAll("linesOfBusiness");
+  const checkedCertifications = data.getAll("certificationLines");
+  const linesOfBusiness = LINES_OF_BUSINESS.filter((line) => checkedLines.includes(line));
   return {
     name: text("name"),
     aliases: text("aliases")
       .split(",")
       .map((alias) => alias.trim())
       .filter(Boolean),
-    linesOfBusiness: LINES_OF_BUSINESS.filter((line) => checkedLines.includes(line)),
+    linesOfBusiness,
+    certificationLines: LINES_OF_BUSINESS.filter(
+      (line) => linesOfBusiness.includes(line) && checkedCertifications.includes(line),
+    ),
     link: text("link"),
     status: CARRIER_STATUSES.find((status) => status === text("status")) ?? ("active" satisfies CarrierStatus),
     licenses: JSON.parse(String(data.get("licenses") ?? "[]")) as CarrierLicenseValues[],
@@ -99,6 +107,8 @@ export function CarrierFormPage({ carrier: editing, returnTo }: CarrierFormPageP
   const id = useId();
   const [errors, setErrors] = useState<CarrierError[]>([]);
   const [saving, setSaving] = useState(false);
+  const [lines, setLines] = useState<LineOfBusiness[]>(editing?.linesOfBusiness ?? []);
+  const [certificationLines, setCertificationLines] = useState<LineOfBusiness[]>(editing?.certificationLines ?? []);
 
   const messageFor = (field: CarrierError["field"]) =>
     errors.find((error) => error.field === field)?.message ?? null;
@@ -109,6 +119,7 @@ export function CarrierFormPage({ carrier: editing, returnTo }: CarrierFormPageP
   const aliasesError = messageFor("aliases");
   const linkError = messageFor("link");
   const linesError = messageFor("linesOfBusiness");
+  const certificationsError = messageFor("certificationLines");
   const statesError = messageFor("availableStates");
   const formError = messageFor("form") ?? messageFor("status");
 
@@ -206,31 +217,84 @@ export function CarrierFormPage({ carrier: editing, returnTo }: CarrierFormPageP
                 className={INPUT_CLASS}
               />
             </Field>
-            <fieldset className="min-w-0">
-              <legend className="block text-sm font-medium text-fg">Lines of business</legend>
-              <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2">
-                {LINES_OF_BUSINESS.map((line) => (
-                  <label key={line} className="flex items-center gap-2 text-sm text-fg">
-                    <input
-                      type="checkbox"
-                      name="linesOfBusiness"
-                      value={line}
-                      defaultChecked={editing?.linesOfBusiness.includes(line)}
-                      aria-invalid={linesError ? true : undefined}
-                      aria-describedby={linesError ? `${id}-lines-error` : undefined}
-                      onChange={() => clear("linesOfBusiness")}
-                      className="size-4 accent-brand-strong"
-                    />
-                    {line}
-                  </label>
-                ))}
-              </div>
-              {linesError ? (
-                <p id={`${id}-lines-error`} className="mt-1 text-xs text-danger">
-                  {linesError}
-                </p>
-              ) : null}
-            </fieldset>
+            <div className="min-w-0 sm:col-span-2">
+              <fieldset>
+                <legend className="block text-sm font-medium text-fg">Lines of business</legend>
+                <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2">
+                  {LINES_OF_BUSINESS.map((line) => (
+                    <label key={line} className="flex items-center gap-2 text-xs text-fg">
+                      <input
+                        type="checkbox"
+                        name="linesOfBusiness"
+                        value={line}
+                        checked={lines.includes(line)}
+                        aria-invalid={linesError ? true : undefined}
+                        aria-describedby={linesError ? `${id}-lines-error` : undefined}
+                        onChange={(event) => {
+                          const on = event.target.checked;
+                          setLines((current) =>
+                            on
+                              ? LINES_OF_BUSINESS.filter((item) => current.includes(item) || item === line)
+                              : current.filter((item) => item !== line),
+                          );
+                          if (!on) setCertificationLines((current) => current.filter((item) => item !== line));
+                          clear("linesOfBusiness");
+                        }}
+                        className="size-4 accent-brand-strong"
+                      />
+                      {line}
+                    </label>
+                  ))}
+                </div>
+                {linesError ? (
+                  <p id={`${id}-lines-error`} className="mt-1 text-xs text-danger">
+                    {linesError}
+                  </p>
+                ) : null}
+              </fieldset>
+              <fieldset className="mt-4">
+                <legend className="block text-sm font-bold text-fg">Certifications</legend>
+                <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2">
+                  {LINES_OF_BUSINESS.map((line) => {
+                    const offered = lines.includes(line);
+                    return (
+                      <label
+                        key={line}
+                        className={`flex items-center gap-2 text-xs ${offered ? "text-fg" : "text-fg-subtle"}`}
+                      >
+                        <input
+                          type="checkbox"
+                          name="certificationLines"
+                          value={line}
+                          checked={offered && certificationLines.includes(line)}
+                          disabled={!offered}
+                          aria-invalid={certificationsError ? true : undefined}
+                          aria-describedby={
+                            certificationsError ? `${id}-certifications-error` : `${id}-certifications-hint`
+                          }
+                          onChange={(event) => {
+                            const on = event.target.checked;
+                            setCertificationLines((current) =>
+                              on
+                                ? LINES_OF_BUSINESS.filter((item) => current.includes(item) || item === line)
+                                : current.filter((item) => item !== line),
+                            );
+                            clear("certificationLines");
+                          }}
+                          className="size-4 accent-brand-strong disabled:opacity-40"
+                        />
+                        {line}
+                      </label>
+                    );
+                  })}
+                </div>
+                {certificationsError ? (
+                  <p id={`${id}-certifications-error`} className="mt-1 text-xs text-danger">
+                    {certificationsError}
+                  </p>
+                ) : null}
+              </fieldset>
+            </div>
             <Field
               label="Link"
               htmlFor={`${id}-link`}

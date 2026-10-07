@@ -34,7 +34,7 @@ export default async function ProfilePage() {
         actions={<ChangePasswordButton className={PROFILE_BUTTON_CLASS} />}
       />
 
-      <section className="rounded-xl border border-line bg-surface shadow-sm">
+      <section className="rounded-xl border glass shadow-sm">
         <div className="flex items-center gap-3.5 border-b border-line px-5 py-4">
           <ProfileAvatar name={name} />
           <div className="min-w-0">

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { AppointmentError, AppointmentValues, CarrierContractRecord } from "@/lib/carrier-contracts";
-import { saveAppointment } from "./actions";
+import { deleteAppointment, saveAppointment } from "./actions";
 import type { AppointmentEditor } from "./appointment-dialog";
 
 /*
@@ -52,5 +52,13 @@ export function useAppointments({ initialContracts, agents, carriers, onSaved }:
     return null;
   };
 
-  return { contracts, editor, setEditor, saveContract, agentName, carrierName };
+  /** Drops one contract through the API. Resolves with the error to show, if any. */
+  const removeContract = async (id: string): Promise<string | null> => {
+    const result = await deleteAppointment(id);
+    if (!result.ok) return result.message;
+    setContracts((current) => current.filter((contract) => contract.id !== id));
+    return null;
+  };
+
+  return { contracts, editor, setEditor, saveContract, removeContract, agentName, carrierName };
 }

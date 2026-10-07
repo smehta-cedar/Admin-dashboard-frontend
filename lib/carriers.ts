@@ -51,6 +51,12 @@ export type CarrierRecord = {
   aliases: string[];
   /** At least one, in LINES_OF_BUSINESS order. */
   linesOfBusiness: LineOfBusiness[];
+  /**
+   * Lines that need an agent certification. A subset of linesOfBusiness, in
+   * the same order. Empty means none do. Appointing an agent creates a
+   * certification for each of these, and only these.
+   */
+  certificationLines: LineOfBusiness[];
   /** The carrier's site or agent portal, a full URL. Empty when none. */
   link: string;
   /**
@@ -79,6 +85,7 @@ export type CarrierField =
   | "name"
   | "aliases"
   | "linesOfBusiness"
+  | "certificationLines"
   | "link"
   | "status"
   | "availableStates"
@@ -91,7 +98,10 @@ export type CarrierField =
 export type CarrierLicenseValues = Omit<StateLicense, "id">;
 
 /** What the add / edit form submits. The available states come from the rows. */
-export type CarrierValues = Pick<CarrierRecord, "name" | "aliases" | "linesOfBusiness" | "link" | "status"> & {
+export type CarrierValues = Pick<
+  CarrierRecord,
+  "name" | "aliases" | "linesOfBusiness" | "certificationLines" | "link" | "status"
+> & {
   licenses: CarrierLicenseValues[];
 };
 
@@ -122,6 +132,7 @@ export type ApiCarrier = {
   name: string;
   aliases: string[];
   lines_of_business: string[];
+  certification_lines: string[];
   link: string;
   available_states: string[];
   licenses: ApiCarrierLicense[];
@@ -160,6 +171,7 @@ const NOTE_FIELDS: Record<string, CarrierField> = {
   name: "name",
   aliases: "aliases",
   lines_of_business: "linesOfBusiness",
+  certification_lines: "certificationLines",
   link: "link",
   available_states: "availableStates",
   license_numbers: "licenseNumbers",
@@ -182,6 +194,9 @@ export function toCarrierRecord(carrier: ApiCarrier): CarrierRecord {
     name: carrier.name,
     aliases: carrier.aliases,
     linesOfBusiness: LINES_OF_BUSINESS.filter((line) => carrier.lines_of_business.includes(line)),
+    certificationLines: LINES_OF_BUSINESS.filter(
+      (line) => carrier.lines_of_business.includes(line) && (carrier.certification_lines ?? []).includes(line),
+    ),
     link: carrier.link,
     availableStates: [...new Set(carrier.available_states)].sort(),
     licenses: carrier.licenses

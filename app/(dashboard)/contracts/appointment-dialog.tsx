@@ -41,6 +41,9 @@ import { byName } from "@/lib/text";
  * carrier, a writing number unique within that carrier, and every state
  * against both ceilings, naming the side that blocks it, then records the
  * change note. While the save is in flight the buttons are disabled.
+ *
+ * `requireWritingNumber` (the agent profile) makes the writing number
+ * mandatory: the field is required and a blank one isn't sent.
  */
 
 type AgentOption = Pick<AgentRecord, "id" | "name" | "status" | "licensedStates">;
@@ -70,13 +73,22 @@ type AppointmentDialogProps = {
   /** Every agent; inactive ones are marked, like inactive carriers. */
   agents: AgentOption[];
   carriers: CarrierOption[];
+  /** Whether a contract can't be saved without a writing number. */
+  requireWritingNumber?: boolean;
   /** Saves the values; resolves with an error to show instead of closing. */
   onSave: (values: AppointmentValues, editing?: CarrierContractRecord) => Promise<AppointmentError | null>;
   /** Runs for every close: Cancel, Escape, backdrop click, or a save. */
   onClose: () => void;
 };
 
-export function AppointmentDialog({ editor, agents, carriers, onSave, onClose }: AppointmentDialogProps) {
+export function AppointmentDialog({
+  editor,
+  agents,
+  carriers,
+  requireWritingNumber = false,
+  onSave,
+  onClose,
+}: AppointmentDialogProps) {
   const { dialogRef, close } = useModalDialog(editor !== null);
   const id = useId();
 
@@ -89,6 +101,7 @@ export function AppointmentDialog({ editor, agents, carriers, onSave, onClose }:
           editor={editor}
           agents={agents}
           carriers={carriers}
+          requireWritingNumber={requireWritingNumber}
           onSave={onSave}
           close={close}
         />
@@ -104,7 +117,7 @@ type AppointmentFormProps = Omit<AppointmentDialogProps, "editor" | "onClose"> &
 };
 
 /** The dialog's form. Mounted per open, so its state starts fresh each time. */
-function AppointmentForm({ id, editor, agents, carriers, onSave, close }: AppointmentFormProps) {
+function AppointmentForm({ id, editor, agents, carriers, requireWritingNumber, onSave, close }: AppointmentFormProps) {
   const editing = editor.mode === "edit" ? editor.contract : undefined;
   const [error, setError] = useState<AppointmentError | null>(null);
   const [saving, setSaving] = useState(false);
@@ -169,6 +182,10 @@ function AppointmentForm({ id, editor, agents, carriers, onSave, close }: Appoin
         data.getAll("appointedStates").map((code) => String(code).trim()).filter(Boolean),
       ),
     };
+    if (requireWritingNumber && !values.writingNumber) {
+      setError({ field: "writingNumber", message: "Enter the writing number." });
+      return;
+    }
     setSaving(true);
     try {
       const saveError = await onSave(values, editing);
@@ -255,7 +272,8 @@ function AppointmentForm({ id, editor, agents, carriers, onSave, close }: Appoin
         <Field
           label="Writing number"
           htmlFor={`${id}-writing-number`}
-          optional
+          optional={!requireWritingNumber}
+          required={requireWritingNumber}
           hint={writingNumberError ?? "Producer ID at this carrier."}
           hintId={`${id}-writing-number-hint`}
           error={Boolean(writingNumberError)}
@@ -264,6 +282,8 @@ function AppointmentForm({ id, editor, agents, carriers, onSave, close }: Appoin
             id={`${id}-writing-number`}
             name="writingNumber"
             type="text"
+            required={requireWritingNumber}
+            pattern={requireWritingNumber ? ".*\\S.*" : undefined}
             autoComplete="off"
             defaultValue={editing?.writingNumber}
             aria-invalid={writingNumberError ? true : undefined}

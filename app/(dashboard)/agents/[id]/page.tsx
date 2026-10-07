@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { NoAccess } from "@/components/no-access";
 import { canViewModule } from "@/lib/access";
+import { getAgency } from "@/lib/agency";
 import { getAgent, getAgentNotes, getAgentWithLicenses } from "@/lib/agents";
 import { allowForbidden } from "@/lib/api-server";
 import { getCarrierContracts } from "@/lib/carrier-contracts";
@@ -26,13 +27,15 @@ export default async function AgentProfilePage(props: PageProps<"/agents/[id]">)
   if (!loaded) notFound();
   const { agent, licenses } = loaded;
 
-  const [notes, carrierContracts, passwords, carriers, certifications] = await Promise.all([
+  const [notes, carrierContracts, passwords, carriers, certifications, agency] = await Promise.all([
     getAgentNotes(id),
     getCarrierContracts(),
     getPasswords(),
     getCarriers(),
     // Null for a role without certifications view: the profile then hides the section.
     allowForbidden(getCertifications({ agentId: id })),
+    // Null for a role without agency view: the maps then disable nothing.
+    allowForbidden(getAgency()),
   ]);
 
   return (
@@ -66,6 +69,7 @@ export default async function AgentProfilePage(props: PageProps<"/agents/[id]">)
         }))
         .sort((a, b) => a.partyName.localeCompare(b.partyName))}
       notes={notes}
+      agencyLicensedStates={agency ? agency.licensedStates : null}
     />
   );
 }

@@ -167,6 +167,20 @@ export function CarrierProfile({
                 </ul>
               ) : null}
             </Detail>
+            <Detail label="Certifications">
+              {carrier.certificationLines.length > 0 ? (
+                <ul className="flex flex-wrap gap-1.5">
+                  {carrier.certificationLines.map((line) => (
+                    <li
+                      key={line}
+                      className="rounded-md bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand-ink"
+                    >
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </Detail>
           </>
         }
         asideTitle="Available states"
@@ -264,7 +278,7 @@ export function CarrierProfile({
                     {policy.name}
                   </td>
                   <td className="min-w-0 truncate px-3 py-2.5 align-middle text-fg-muted">
-                    {policy.policyTypeName}
+                    {policy.policyTypeName || <span className="text-fg-subtle">—</span>}
                   </td>
                   <StateChipCell
                     codes={policy.availableStates}

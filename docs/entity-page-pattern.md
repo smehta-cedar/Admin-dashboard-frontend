@@ -559,14 +559,16 @@ Same pattern as Carriers; the differences:
 ### Policy types on the API
 
 - **Policy types** ([lib/policy-types.ts](../lib/policy-types.ts),
-  `/api/v1/policy-types/`, `backend/apps/policies`, route `/policy-types`):
+  `/api/v1/policy-types/`, `backend/apps/policies`; no page of its own):
   the catalog of policy kinds, an entity of its own that is not a carrier's
   line of business and has nothing to do with certifications.
-  `PolicyTypeRecord` is `{ id, name, status }`. The table shows name and
-  status; the dialog is name (required) and status. `savePolicyType`
-  (`policy-types/actions.ts`) posts or patches and maps a 400's `name` under
-  its field, everything else under the form. Notes are written by the API
-  (`getPolicyTypeNotes`); there is no profile page.
+  `PolicyTypeRecord` is `{ id, name, status }`. New types are added only
+  from the Agency page's contract dialog ("+ Add policy type" under the
+  policy type boxes), through `addPolicyType`
+  (`agency/policy-type-actions.ts`), which posts an active type and shows a
+  400's message under the boxes; the new type is ticked at once. A name
+  already listed (ignoring case) is just ticked. Types can't be renamed or
+  deactivated in the app. Notes are written by the API.
 - **Certifications** ([lib/certifications.ts](../lib/certifications.ts),
   `/api/v1/certifications/`): an agent's yearly certification with a carrier
   for one of its lines of business (the sub type), with a due date the API
@@ -668,7 +670,7 @@ Same pattern as Carriers; the differences:
 ### Policy types on the API
 
 - **Policy types** ([lib/policy-types.ts](../lib/policy-types.ts),
-  `/api/v1/policy-types/`, `backend/apps/policies`, route `/policy-types`):
+  `/api/v1/policy-types/`, `backend/apps/policies`; no page of its own, see above):
   the catalog of policy kinds, an entity of its own that is not a carrier's
   line of business. `PolicyTypeRecord` is `{ id, name, certificationScope,
   certificationCarriers, status }`; the scope is `none`, `single` (one

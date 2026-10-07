@@ -2,18 +2,17 @@ import "server-only";
 
 /*
  * Data boundary for policy types: reads the Django API (backend/apps/policies,
- * `/api/v1/policy-types/`) as the signed-in user. Adds and edits go through
- * the server action in app/(dashboard)/policy-types/actions.ts, which posts
- * to the same API; the API records a change note on every add and every
- * edit that changed something.
+ * `/api/v1/policy-types/`) as the signed-in user. There is no Policy types
+ * page: new types are added from the agency's contract dialog, through the
+ * server action in app/(dashboard)/agency/policy-type-actions.ts, which posts
+ * to the same API; the API records a change note on every add.
  *
  * A policy type is a catalog entry of its own (e.g. "Medicare Advantage"),
  * not a carrier's line of business (lib/lines-of-business.ts). Agent
  * certifications have nothing to do with it.
  */
 
-import { apiFetch, apiGet, apiGetAll, ApiError } from "@/lib/api-server";
-import type { FieldChange } from "@/lib/change-notes";
+import { apiGetAll } from "@/lib/api-server";
 
 export type PolicyTypeStatus = "active" | "inactive";
 
@@ -22,35 +21,8 @@ export type PolicyTypeRecord = {
   id: string;
   /** Unique among policy types, ignoring case. */
   name: string;
-  /** The API's is_active. Defaults to "active" when adding. */
+  /** The API's is_active. Types added in the app are always active. */
   status: PolicyTypeStatus;
-};
-
-/** Policy type fields a note can record. The ID never changes. */
-export type PolicyTypeField = Exclude<keyof PolicyTypeRecord, "id">;
-
-/** What the add / edit form submits: every field but the ID. */
-export type PolicyTypeValues = Omit<PolicyTypeRecord, "id">;
-
-/** A save error, shown under the field it names, or under the form for `form`. */
-export type PolicyTypeError = { field: PolicyTypeField | "form"; message: string };
-
-export type PolicyTypeChange = FieldChange<PolicyTypeField>;
-
-/**
- * Change-log entry the API writes whenever a policy type is added or edited.
- * Append-only: notes are never edited or deleted.
- */
-export type PolicyTypeNote = {
-  id: string;
-  policyTypeId: PolicyTypeRecord["id"];
-  kind: "added" | "edited";
-  /** ISO 8601 timestamp in UTC, e.g. "2026-09-02T14:05:00.000Z". */
-  createdAt: string;
-  /** Full name of who made the change, or null when unknown. */
-  createdBy: string | null;
-  /** Only the fields that changed, in form order. */
-  changes: PolicyTypeChange[];
 };
 
 /** A policy type as the API serialises it (PolicyTypeSerializer). */
@@ -62,22 +34,6 @@ export type ApiPolicyType = {
   updated_at: string;
 };
 
-/** A note as the API serialises it (PolicyTypeNoteSerializer). */
-type ApiPolicyTypeNote = {
-  id: string;
-  policy_type_id: string;
-  kind: "added" | "edited";
-  changes: { field: string; from: string; to: string }[];
-  created_by: string | null;
-  created_at: string;
-};
-
-/** API field name -> PolicyTypeRecord field, for a note's changes. */
-const NOTE_FIELDS: Record<string, PolicyTypeField> = {
-  name: "name",
-  status: "status",
-};
-
 /** An API policy type as the app holds it. */
 export function toPolicyTypeRecord(policyType: ApiPolicyType): PolicyTypeRecord {
   return {
@@ -87,38 +43,8 @@ export function toPolicyTypeRecord(policyType: ApiPolicyType): PolicyTypeRecord 
   };
 }
 
-function toPolicyTypeNote(note: ApiPolicyTypeNote): PolicyTypeNote {
-  return {
-    id: note.id,
-    policyTypeId: note.policy_type_id,
-    kind: note.kind,
-    createdAt: note.created_at,
-    createdBy: note.created_by,
-    changes: note.changes.flatMap((change) => {
-      const field = NOTE_FIELDS[change.field];
-      return field ? [{ field, from: change.from, to: change.to }] : [];
-    }),
-  };
-}
-
 /** Every policy type, active and inactive, sorted by name. */
 export async function getPolicyTypes(): Promise<PolicyTypeRecord[]> {
   const policyTypes = await apiGetAll<ApiPolicyType>("/policy-types/");
   return policyTypes.map(toPolicyTypeRecord);
-}
-
-/** One policy type by ID, or null when there is none (or the ID isn't one). */
-export async function getPolicyType(id: string): Promise<PolicyTypeRecord | null> {
-  const result = await apiFetch<ApiPolicyType>(`/policy-types/${encodeURIComponent(id)}/`);
-  if (!result.ok) {
-    if (result.status === 404) return null;
-    throw new ApiError(`/policy-types/${id}/`, result);
-  }
-  return toPolicyTypeRecord(result.data);
-}
-
-/** One policy type's change notes, newest first. */
-export async function getPolicyTypeNotes(policyTypeId: string): Promise<PolicyTypeNote[]> {
-  const notes = await apiGet<ApiPolicyTypeNote[]>(`/policy-types/${encodeURIComponent(policyTypeId)}/notes/`);
-  return notes.map(toPolicyTypeNote);
 }

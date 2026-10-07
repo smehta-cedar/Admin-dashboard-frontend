@@ -167,7 +167,7 @@ export function CertificateSection({ idPrefix, carriers, drafts, onChange, onRem
 
   return (
     <>
-    <section className="min-w-0 rounded-lg border border-line bg-surface p-5 shadow-sm">
+    <section className="min-w-0 rounded-lg border glass p-5 shadow-sm">
       <div className="flex min-h-8 flex-wrap items-center justify-between gap-3">
         <h3 className="text-sm font-semibold text-fg">Certifications</h3>
         {entryOpen ? null : (

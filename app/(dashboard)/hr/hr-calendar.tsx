@@ -108,7 +108,7 @@ export function HrCalendar({ month, onMonthChange, today, dayOffs, expiries, onS
   })();
 
   return (
-    <section aria-labelledby={captionId} className="overflow-hidden rounded-xl border border-line bg-surface shadow-sm">
+    <section aria-labelledby={captionId} className="overflow-hidden rounded-xl border glass shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-surface-muted/80 px-3 py-2 sm:px-4">
         <div className="flex min-w-0 items-center gap-1">
           <span

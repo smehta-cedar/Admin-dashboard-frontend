@@ -286,7 +286,7 @@ type FormSectionProps = {
 export function FormSection({ title, action, layout, columns, children }: FormSectionProps) {
   const shell =
     layout === "page"
-      ? "rounded-lg border border-line bg-surface p-5 shadow-sm"
+      ? "rounded-lg border glass p-5 shadow-sm"
       : "border-t border-line pt-5";
   return (
     <section className={`min-w-0 ${shell}`}>

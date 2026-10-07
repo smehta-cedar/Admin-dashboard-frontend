@@ -44,8 +44,6 @@ const NAV_ITEMS: NavItem[] = [
       },
     ],
   },
-  // The catalog of policy kinds; policies and certifications will point at it.
-  { href: "/policy-types", label: "Policy types", icon: "policy-types", module: "policy_types" },
   // How payouts are calculated, so it goes with the commissions overview.
   { href: "/rulebook", label: "Rulebook", icon: "rulebook", module: "dashboard" },
   { href: "/passwords", label: "Passwords", icon: "passwords", module: "passwords", searchable: true },

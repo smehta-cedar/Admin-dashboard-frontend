@@ -49,7 +49,6 @@ export type AgencyContractValues = {
 export type AgencyContractErrorField =
   | "carrierId"
   | "contractNumber"
-  | "policyTypeIds"
   | "status"
   | "form";
 

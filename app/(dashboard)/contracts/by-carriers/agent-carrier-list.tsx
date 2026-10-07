@@ -49,7 +49,7 @@ export function AgentCarrierList({ agents, carriers, contracts, onAdd, onEdit, h
           No agents yet. Add them on the Agents page.
         </p>
       ) : (
-        <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface shadow-xs">
+        <ul className="divide-y divide-line overflow-hidden rounded-2xl border glass shadow-xs">
           {agents.map((agent) => {
             // In the order of the carriers shown above, each with its contract.
             const agentCarriers = carriers.flatMap((carrier) => {

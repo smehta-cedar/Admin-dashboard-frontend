@@ -35,8 +35,9 @@
   --color-gradient-ink-muted: #1f3a32;
 
   /* ---- Surfaces ------------------------------------------------------- */
-  /* The page behind everything. */
-  --color-canvas: #ffffff;
+  /* The page behind everything. A cool grey-green rather than white, so the
+     frosted cards (the `glass` utility) read as raised off it. */
+  --color-canvas: #e9efec;
   /* Cards, tables, dialogs, popovers — anything raised off the canvas. */
   --color-surface: #ffffff;
   /* Tinted recessed surface: nav rail, table headers, expanded rows. */
@@ -125,6 +126,14 @@
   --color-map-2-ink: #111827;
   --color-map-3-ink: #ffffff;
   --color-map-4-ink: #ffffff;
+  /* The pick: a selected state, or a selected carrier's states. Amber, so it
+     never reads as one of the green buckets. `line` outlines it, `soft` and
+     `ink` mark the picked row in a list. */
+  --color-map-pick: #f59e0b;
+  --color-map-pick-ink: #111827;
+  --color-map-pick-line: #b45309;
+  --color-map-pick-soft: #fef3c7;
+  --color-map-pick-soft-ink: #92400e;
 
   --gradient-brand: linear-gradient(135deg, #30b48f, #73bd66);
   /* Filled part of a card's coverage bar; the unfilled remainder is the
@@ -137,6 +146,24 @@
  * Dark mode, in full. Nothing else in the app needs a `dark:` utility for
  * anything built on the tokens above.
  */
+/* Glass cards and the page glow behind them (see the `glass` utility). */
+:root {
+  --glass-bg: rgb(255 255 255 / 0.62);
+  --glass-line: rgb(255 255 255 / 0.75);
+  --page-glow:
+    radial-gradient(60rem 40rem at 5% -10%, rgb(55 179 143 / 0.2), transparent 60%),
+    radial-gradient(50rem 36rem at 100% 0%, rgb(115 189 102 / 0.16), transparent 60%),
+    radial-gradient(48rem 32rem at 50% 110%, rgb(55 179 143 / 0.12), transparent 60%);
+}
+
+html.dark {
+  --glass-bg: rgb(23 29 27 / 0.72);
+  --glass-line: rgb(255 255 255 / 0.08);
+  --page-glow:
+    radial-gradient(60rem 40rem at 5% -10%, rgb(63 199 158 / 0.1), transparent 60%),
+    radial-gradient(50rem 36rem at 100% 0%, rgb(115 189 102 / 0.07), transparent 60%);
+}
+
 html.dark {
   --color-brand: #3fc79e;
   /* Held at the light value: white text on it stays 5.2:1, and it still reads
@@ -212,10 +239,25 @@ html.dark {
   --color-map-2-ink: #e8eeeb;
   --color-map-3-ink: #0e1312;
   --color-map-4-ink: #0e1312;
+  --color-map-pick: #fbbf24;
+  --color-map-pick-ink: #0e1312;
+  --color-map-pick-line: #fde68a;
+  --color-map-pick-soft: #2a2312;
+  --color-map-pick-soft-ink: #fcd34d;
 }
 
 @theme inline {
   --font-sans: var(--font-figtree), ui-sans-serif, sans-serif;
+}
+
+/* A frosted card: the surface, partly see-through, blurring the page glow
+   behind it. Sets the border color too, so a card says `border glass` in place
+   of `border border-line bg-surface`. Dialogs, menus and popovers stay solid. */
+@utility glass {
+  background-color: var(--glass-bg);
+  border-color: var(--glass-line);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  backdrop-filter: blur(16px) saturate(160%);
 }
 
 @utility bg-brand-gradient {
@@ -240,6 +282,9 @@ html.dark {
 
   body {
     @apply bg-canvas text-fg antialiased;
+    /* Soft brand glows for the glass cards to blur; fixed, so they stay put while the page scrolls. */
+    background-image: var(--page-glow);
+    background-attachment: fixed;
   }
 
   /* Stop the page scrolling behind the open mobile drawer. */

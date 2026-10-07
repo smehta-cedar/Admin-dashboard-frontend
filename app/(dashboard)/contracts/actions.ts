@@ -75,3 +75,14 @@ export async function saveAppointment(
   revalidatePath("/", "layout");
   return { ok: true, contract: toContractRecord(result.data) };
 }
+
+/** Removes a contract. The API soft-deletes it, so the agent can be appointed to that carrier again. */
+export async function deleteAppointment(id: string): Promise<{ ok: true } | { ok: false; message: string }> {
+  const result = await apiFetch<null>(`/contracts/${encodeURIComponent(id)}/`, { method: "DELETE" });
+  if (!result.ok) {
+    if (result.status === 401) redirect("/login");
+    return { ok: false, message: result.message };
+  }
+  revalidatePath("/", "layout");
+  return { ok: true };
+}

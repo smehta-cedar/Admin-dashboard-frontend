@@ -184,7 +184,7 @@ export function DataTable<T extends RowData>({
         </p>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-line">
+      <div className="overflow-x-auto rounded-lg border glass">
         <table className="min-w-full text-left text-sm">
           <thead className="bg-surface-muted">
             <tr>

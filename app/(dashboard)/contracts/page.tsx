@@ -43,6 +43,8 @@ export default async function ContractsPage() {
         agentAccessible,
       }))}
       agencyLicenseNumbers={agency?.licenseNumbers ?? {}}
+      // No agency record yet: nothing is striped.
+      agencyLicensedStates={agency ? agency.licensedStates : null}
     />
   );
 }

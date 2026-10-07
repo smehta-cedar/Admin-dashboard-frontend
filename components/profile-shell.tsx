@@ -94,7 +94,7 @@ export function ProfileHeader({ details, asideTitle, asideCount, asideTooltip, c
   const headingId = useId();
 
   return (
-    <header className="mt-4 grid overflow-hidden rounded-xl border border-line bg-surface p-2 shadow-sm lg:grid-cols-[auto_minmax(0,1fr)]">
+    <header className="mt-4 grid overflow-hidden rounded-xl border glass p-2 shadow-sm lg:grid-cols-[auto_minmax(0,1fr)]">
       <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] content-start items-baseline gap-x-6 gap-y-3 px-5 py-4 lg:max-w-md">
         {details}
       </dl>
@@ -212,26 +212,34 @@ type PanelProps = {
   count: number;
   /** Shown at the end of the title row, e.g. an Add button. */
   action?: ReactNode;
+  /** Shown centered in the title row, e.g. a Table | Map switch. */
+  center?: ReactNode;
   /** Extra classes on the card, e.g. a column span. */
   className?: string;
   children: ReactNode;
 };
 
 /** A titled card holding one related list, inset from the card's edges by the body padding. */
-export function Panel({ title, count, action, className = "", children }: PanelProps) {
+export function Panel({ title, count, action, center, className = "", children }: PanelProps) {
   const headingId = useId();
 
   return (
     <section
       aria-labelledby={headingId}
-      className={`min-w-0 overflow-hidden rounded-xl border border-line bg-surface shadow-sm ${className}`}
+      className={`min-w-0 overflow-hidden rounded-xl border glass shadow-sm ${className}`}
     >
-      <div className="flex min-h-13 items-center justify-between gap-3 border-b border-line px-5 py-2.5">
+      {/* With `center`, three columns: the outer two share the leftover width, so the middle sits dead center. */}
+      <div
+        className={`min-h-13 items-center gap-3 border-b border-line px-5 py-2.5 ${
+          center ? "grid grid-cols-[1fr_auto_1fr]" : "flex justify-between"
+        }`}
+      >
         <h2 id={headingId} className="flex items-center gap-2 text-sm font-semibold text-fg">
           {title}
           <Count value={count} />
         </h2>
-        {action}
+        {center}
+        {center ? <div className="flex justify-end">{action}</div> : action}
       </div>
       <div className="p-4 sm:p-5">{children}</div>
     </section>

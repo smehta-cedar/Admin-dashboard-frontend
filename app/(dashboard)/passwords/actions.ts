@@ -79,3 +79,14 @@ export async function savePassword(values: PasswordValues, editingId?: string): 
   revalidatePath("/", "layout");
   return { ok: true, password: toPasswordRecord(result.data) };
 }
+
+/** Removes a password. The API soft-deletes it, so the same carrier can have one again. */
+export async function deletePassword(id: string): Promise<{ ok: true } | { ok: false; message: string }> {
+  const result = await apiFetch<null>(`/passwords/${encodeURIComponent(id)}/`, { method: "DELETE" });
+  if (!result.ok) {
+    if (result.status === 401) redirect("/login");
+    return { ok: false, message: result.message };
+  }
+  revalidatePath("/", "layout");
+  return { ok: true };
+}

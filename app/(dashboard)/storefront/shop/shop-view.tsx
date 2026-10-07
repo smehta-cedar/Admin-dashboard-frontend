@@ -190,7 +190,7 @@ function Catalog({ products, onPick }: CatalogProps) {
               <button
                 type="button"
                 onClick={() => onPick(product)}
-                className="group block w-full rounded-lg border border-line bg-surface text-left shadow-sm hover:border-brand-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                className="group block w-full rounded-lg border glass text-left shadow-sm hover:border-brand-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
               >
                 <div className="aspect-square overflow-hidden rounded-t-lg bg-surface-muted">
                   <ProductPicture product={product} color={product.colors[0]?.id ?? ""} thumbnail />
@@ -514,7 +514,7 @@ type ConfirmationProps = {
 
 function Confirmation({ product, selection, email }: ConfirmationProps) {
   return (
-    <div className="mx-auto max-w-lg rounded-lg border border-line bg-surface p-6 text-center sm:p-8">
+    <div className="mx-auto max-w-lg rounded-lg border glass p-6 text-center sm:p-8">
       <div className="flex justify-center">
         <BrandLogo compact height={48} />
       </div>
