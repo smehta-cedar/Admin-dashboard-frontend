@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, useState, type KeyboardEvent } from "react";
+import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { INPUT_CLASS } from "@/components/classes";
 import { US_STATES, US_STATE_NAMES } from "@/lib/us-states";
 
@@ -16,6 +16,9 @@ import { US_STATES, US_STATE_NAMES } from "@/lib/us-states";
  * combobox input over a listbox, options picked on mousedown-prevented
  * clicks so the input keeps focus, and the list closes when focus leaves the
  * whole control.
+ *
+ * The list is position: absolute under (or, when space is short, over) the
+ * input, so it stays anchored to the field instead of floating via fixed.
  */
 
 type StateSelectProps = {
@@ -31,13 +34,15 @@ type StateSelectProps = {
   /** IDs of the hint or error that describes the field. */
   describedBy?: string;
   placeholder?: string;
+  /** Codes the list is limited to; every state when left out. */
+  allowedStates?: string[];
 };
 
 /** States whose name or code starts with, or whose name contains, the text. */
-function matching(query: string) {
+function matching(query: string, states: typeof US_STATES) {
   const text = query.trim().toLowerCase();
-  if (!text) return US_STATES;
-  return US_STATES.filter(
+  if (!text) return states;
+  return states.filter(
     (state) => state.name.toLowerCase().includes(text) || state.code.toLowerCase().startsWith(text),
   );
 }
@@ -50,6 +55,7 @@ export function StateSelect({
   invalid,
   describedBy,
   placeholder = "Search states…",
+  allowedStates,
 }: StateSelectProps) {
   const listId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -57,8 +63,30 @@ export function StateSelect({
   const [query, setQuery] = useState(US_STATE_NAMES[defaultValue] ?? "");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
+  const [flip, setFlip] = useState(false);
 
-  const options = matching(query);
+  const states = allowedStates ? US_STATES.filter((state) => allowedStates.includes(state.code)) : US_STATES;
+  const options = matching(query, states);
+
+  // Prefer opening below the input; flip above when the viewport is short underneath.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const input = inputRef.current;
+      if (!input) return;
+      const rect = input.getBoundingClientRect();
+      const below = window.innerHeight - rect.bottom - 8;
+      const above = rect.top - 8;
+      setFlip(below < 200 && above > below);
+    };
+    place();
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+    };
+  }, [open]);
   const optionId = (index: number) => `${listId}-option-${index}`;
 
   const choose = (nextCode: string) => {
@@ -124,7 +152,8 @@ export function StateSelect({
             onChange?.("");
           }
         }}
-        onFocus={() => setOpen(true)}
+        // Open on click/type/arrows only — not on focus. A dialog's showModal()
+        // focuses the first field, which would otherwise drop the list open.
         onClick={() => setOpen(true)}
         onKeyDown={onKeyDown}
         role="combobox"
@@ -167,9 +196,13 @@ export function StateSelect({
         </svg>
       </button>
       {open ? (
-        <div className="absolute inset-x-0 top-full z-50 mt-1 overflow-hidden rounded-md border border-line bg-surface shadow-lg">
+        <div
+          className={`absolute left-0 right-0 z-50 flex max-h-72 flex-col overflow-hidden rounded-lg border border-line bg-surface shadow-xl ring-1 ring-black/5 ${
+            flip ? "bottom-full mb-1" : "top-full mt-1"
+          }`}
+        >
           {options.length > 0 ? (
-            <ul id={listId} role="listbox" aria-label="States" className="max-h-56 overflow-y-auto py-1">
+            <ul id={listId} role="listbox" aria-label="States" className="min-h-0 flex-1 overflow-y-auto p-1">
               {options.map((state, index) => {
                 const selected = state.code === code;
                 return (
@@ -181,19 +214,39 @@ export function StateSelect({
                     onMouseDown={(event) => event.preventDefault()}
                     onMouseEnter={() => setActive(index)}
                     onClick={() => choose(state.code)}
-                    className={`flex cursor-pointer items-center justify-between gap-3 px-3 py-1.5 text-sm ${
+                    className={`flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm ${
                       index === active ? "bg-surface-hover" : ""
-                    } ${selected ? "font-medium text-brand-ink" : "text-fg"}`}
+                    } ${selected ? "bg-brand-soft font-medium text-brand-ink" : "text-fg"}`}
                   >
-                    <span className="truncate">{state.name}</span>
-                    <span className="shrink-0 font-mono text-xs text-fg-subtle">{state.code}</span>
+                    <span
+                      className={`w-8 shrink-0 rounded bg-surface-muted py-0.5 text-center font-mono text-[11px] font-medium ${
+                        selected ? "text-brand-ink" : "text-fg-subtle"
+                      }`}
+                    >
+                      {state.code}
+                    </span>
+                    <span className="flex-1 truncate">{state.name}</span>
+                    {selected ? (
+                      <svg
+                        aria-hidden="true"
+                        viewBox="0 0 20 20"
+                        className="size-4 shrink-0"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M5 10.5l3 3 7-7" />
+                      </svg>
+                    ) : null}
                   </li>
                 );
               })}
             </ul>
           ) : (
-            <p role="status" className="px-3 py-2 text-sm text-fg-muted">
-              No state matches “{query.trim()}”.
+            <p role="status" className="px-3 py-3 text-sm text-fg-muted">
+              {query.trim() ? `No state matches “${query.trim()}”.` : "No states to choose from."}
             </p>
           )}
         </div>

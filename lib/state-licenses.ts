@@ -14,37 +14,44 @@ import { nextId } from "@/lib/change-notes";
  * rows are edited (applyLicenceEdits). Nothing stores them any more.
  *
  * Every row counts as a licensed state, whatever its status: a pending or
- * JIT licence still lists the state, as the old licensedStates did. The
+ * expired licence still lists the state, as the old licensedStates did. The
  * licence number is empty until the state issues one.
  */
 
 /**
- * active: licence in force. review: renewal or paperwork under review.
- * pending: applied for, not issued yet. applied: the application is in.
- * expired: the term ran out. cancelled: given up or revoked. jit: "just in
- * time" — obtained only when a sale there needs it.
+ * active: licence in force. pending: applied for, not issued yet. applied:
+ * the application is in. expired: the end date has passed (set from the
+ * date, see statusForEndDate). cancelled: given up or revoked (agency only).
  */
-export type StateLicenseStatus = "active" | "review" | "pending" | "applied" | "expired" | "cancelled" | "jit";
+export type StateLicenseStatus = "active" | "pending" | "applied" | "expired" | "cancelled";
 
 export const STATE_LICENSE_STATUSES: readonly string[] = [
   "active",
-  "review",
   "pending",
   "applied",
   "expired",
   "cancelled",
-  "jit",
 ] satisfies StateLicenseStatus[];
 
+/** The statuses an agent's licence can have, in the order the dropdown lists them; the API's agent LICENSE_STATUSES. */
+export const AGENT_LICENCE_STATUSES: readonly StateLicenseStatus[] = ["active", "applied", "pending", "expired"];
+
 /** The statuses the agency form offers for a licence, in the order the dropdown lists them. */
-export const AGENCY_LICENCE_STATUSES: readonly StateLicenseStatus[] = [
-  "active",
-  "pending",
-  "review",
-  "applied",
-  "expired",
-  "cancelled",
-];
+export const AGENCY_LICENCE_STATUSES: readonly StateLicenseStatus[] = ["active", "pending", "applied", "expired", "cancelled"];
+
+/** Only an active licence must have its number and end date; every other status may leave them blank. */
+export function licenceDetailsRequired(status: StateLicenseStatus) {
+  return status === "active";
+}
+
+/**
+ * The status after the end date is set: expired once the date is before
+ * today, and an expired licence given a later date goes back to active.
+ */
+export function statusForEndDate(status: StateLicenseStatus, endDate: string, today = todayIso()): StateLicenseStatus {
+  if (endDate && endDate < today) return "expired";
+  return status === "expired" && endDate ? "active" : status;
+}
 
 /**
  * The lines of business a licence covers in its state. An agent's form has
@@ -143,6 +150,11 @@ function isoDate(date: Date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${date.getFullYear()}-${month}-${day}`;
+}
+
+/** Today as YYYY-MM-DD, the start date a new licence row opens with. */
+export function todayIso() {
+  return isoDate(new Date());
 }
 
 type ApplyInput<T extends StateLicense> = {

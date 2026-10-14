@@ -184,6 +184,7 @@ export function AgencyProfile({
       <div className="mt-5 grid items-start gap-5 xl:grid-cols-2">
         <StateLicensesPanel
           licenses={licenses}
+          showLines
           className="xl:col-span-2"
           action={addLicenseButton}
           onEdit={(license) => setLicenseEditor({ mode: "edit", license })}

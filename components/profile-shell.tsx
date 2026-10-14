@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useId, type ComponentProps, type ReactNode } from "react";
-import { CredentialValue } from "@/components/credential-value";
+import { PasswordsTable, type PasswordParty } from "@/components/passwords-table";
 import { EditIcon } from "@/components/edit-icon";
 import { LicenseNumber } from "@/components/license-number";
 import { StatusBadge } from "@/components/status-badge";
@@ -328,71 +327,50 @@ export function StateChipCell({ codes, label, empty }: StateChipCellProps) {
   );
 }
 
-/** A password row on a profile, with the other party (carrier or agent) resolved to a link. */
-export type ProfilePassword = PasswordRecord & {
-  partyName: string;
-  /** Unset on an agent's own profile: the name shows unlinked. */
-  partyHref?: string;
-};
-
 type PasswordsPanelProps = {
-  /** Sorted by party name. */
-  passwords: ProfilePassword[];
-  /** Heading of the first column: "Carrier" on an agent, "Agent" on a carrier. */
-  partyHeading: string;
+  /** In the order to list them. */
+  passwords: PasswordRecord[];
+  /** The name column to show: "carrier" on an agent, "agent" on a carrier. */
+  party: PasswordParty;
+  /** Link the names to their profiles. Off on the agent's own portal. */
+  linkParties?: boolean;
+  /** Adds Add password to the header. */
+  onAdd?: () => void;
+  onEdit?: (password: PasswordRecord) => void;
+  onDelete?: (password: PasswordRecord) => void;
   /** Extra classes on the panel, e.g. a column span. */
   className?: string;
 };
 
-/** The Passwords panel: the other party, portal username, password, link and status. */
-export function PasswordsPanel({ passwords, partyHeading, className }: PasswordsPanelProps) {
+/** The Passwords panel: the shared PasswordsTable (components/passwords-table.tsx) for one agent or carrier. */
+export function PasswordsPanel({ passwords, party, linkParties, onAdd, onEdit, onDelete, className }: PasswordsPanelProps) {
   return (
-    <Panel title="Passwords" count={passwords.length} className={className}>
+    <Panel
+      title="Passwords"
+      count={passwords.length}
+      className={className}
+      action={
+        onAdd ? (
+          <button type="button" onClick={onAdd} className={PROFILE_BUTTON_CLASS}>
+            <span aria-hidden="true">+ </span>Add password
+          </button>
+        ) : undefined
+      }
+    >
       {passwords.length === 0 ? (
         <PanelEmpty>No passwords recorded.</PanelEmpty>
       ) : (
-        <ProfileTable
-          columns={[partyHeading, "Portal username", "Password", "Link", "Status"]}
-          rows={passwords}
-          rowKey={(record) => record.id}
-        >
-          {(record) => (
-            <>
-              <td className="min-w-24 whitespace-nowrap px-3 py-2.5">
-                {record.partyHref ? (
-                  <Link href={record.partyHref} className={PROFILE_LINK_CLASS}>
-                    {record.partyName}
-                  </Link>
-                ) : (
-                  record.partyName
-                )}
-              </td>
-              <td className="px-3 py-2.5 text-fg-muted">
-                <CredentialValue value={record.username} label="username" />
-              </td>
-              <td className="px-3 py-2.5 text-fg-muted">
-                <CredentialValue value={record.portalPassword} label="password" secret />
-              </td>
-              <td className="px-3 py-2.5">
-                {record.link ? (
-                  <a
-                    href={record.link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={record.link}
-                    className={`block max-w-48 truncate ${PROFILE_LINK_CLASS}`}
-                  >
-                    {record.link}
-                  </a>
-                ) : null}
-              </td>
-              <td className="px-3 py-2.5">
-                <StatusBadge status={record.status} />
-              </td>
-            </>
-          )}
-        </ProfileTable>
+        <PasswordsTable
+          passwords={passwords}
+          parties={party === "agent" ? AGENT_PARTY : CARRIER_PARTY}
+          linkParties={linkParties}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
       )}
     </Panel>
   );
 }
+
+const AGENT_PARTY: PasswordParty[] = ["agent"];
+const CARRIER_PARTY: PasswordParty[] = ["carrier"];

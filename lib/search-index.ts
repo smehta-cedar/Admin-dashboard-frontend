@@ -16,6 +16,7 @@ import { allowForbidden } from "@/lib/api-server";
 import { getCarrierContracts } from "@/lib/carrier-contracts";
 import { getCarriers } from "@/lib/carriers";
 import { getPasswords } from "@/lib/passwords";
+import { getSitePasswords } from "@/lib/site-passwords";
 import { phoneDigits } from "@/lib/phone";
 import { SEARCH_PARAM, type SearchEntry, type SearchIndex } from "@/lib/search";
 import { getUsers } from "@/lib/users";
@@ -36,10 +37,11 @@ const listHref = (href: string, ...words: string[]) =>
 const orEmpty = async <T>(request: Promise<T[]>): Promise<T[]> => (await allowForbidden(request)) ?? [];
 
 export async function getSearchIndex(): Promise<SearchIndex> {
-  const [agents, carriers, passwords, contracts, users] = await Promise.all([
+  const [agents, carriers, passwords, sitePasswords, contracts, users] = await Promise.all([
     orEmpty(getAgents()),
     orEmpty(getCarriers()),
     orEmpty(getPasswords()),
+    orEmpty(getSitePasswords()),
     orEmpty(getCarrierContracts()),
     orEmpty(getUsers()),
   ]);
@@ -83,19 +85,30 @@ export async function getSearchIndex(): Promise<SearchIndex> {
         ],
       ),
     ),
-    "/passwords": passwords.map((password) => {
-      // The agency's own password has no agent: its name comes with the record.
-      const agent = password.agentId
-        ? (agentsById.get(password.agentId)?.name ?? `Agent ${password.agentId}`)
-        : password.agentName;
-      const carrier = carriersById.get(password.carrierId)?.name ?? `Carrier ${password.carrierId}`;
-      return entry(
-        listHref("/passwords", agent, carrier),
-        agent,
-        [carrier, password.username],
-        [agent, carrier, password.username, password.status],
-      );
-    }),
+    "/passwords": [
+      ...passwords.map((password) => {
+        // The agency's own password has no agent: its name comes with the record.
+        const agent = password.agentId
+          ? (agentsById.get(password.agentId)?.name ?? `Agent ${password.agentId}`)
+          : password.agentName;
+        const carrier = carriersById.get(password.carrierId)?.name ?? `Carrier ${password.carrierId}`;
+        return entry(
+          listHref("/passwords", agent, carrier),
+          agent,
+          [carrier, password.username],
+          [agent, carrier, password.username, password.status],
+        );
+      }),
+      // Site passwords match on the site's name, the way carrier ones match on the carrier.
+      ...sitePasswords.map((password) =>
+        entry(
+          listHref("/passwords", password.agentName, password.siteName),
+          password.agentName,
+          [password.siteName, password.username],
+          [password.agentName, password.siteName, password.username, password.status],
+        ),
+      ),
+    ],
     "/contracts": contracts.flatMap((contract) => {
       const agent = agentsById.get(contract.agentId);
       if (!agent) return [];
@@ -121,10 +134,10 @@ export async function getSearchIndex(): Promise<SearchIndex> {
       ];
     }),
     "/users": users.map((user) =>
-      entry(listHref("/users", user.email), user.name, [user.email, user.role?.name ?? ""], [
+      entry(listHref("/users", user.email), user.name, [user.email, ...user.roles.map((role) => role.name)], [
         user.name,
         user.email,
-        user.role?.name ?? "",
+        ...user.roles.map((role) => role.name),
         user.status,
       ]),
     ),

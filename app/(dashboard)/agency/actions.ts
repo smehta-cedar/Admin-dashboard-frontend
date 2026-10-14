@@ -128,13 +128,15 @@ export async function createAgency(values: AgencyValues): Promise<SaveAgencyResu
 }
 
 /** One licence as the API takes it. A blank date is sent as null, which keeps a row's date and defaults a new row's. */
-function toApiLicense(row: AgencyLicenseValues) {
+function toApiLicense(row: AgencyLicenseValues | AgencyStateLicenseRecord) {
   return {
     state: row.state,
     license_number: row.licenseNumber,
     status: row.status,
     start_date: row.startDate || null,
     end_date: row.endDate || null,
+    life: row.life,
+    health: row.health,
   };
 }
 

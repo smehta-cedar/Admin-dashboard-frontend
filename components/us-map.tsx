@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type KeyboardEvent } from "react";
+import { useId, useState, type KeyboardEvent, type ReactNode } from "react";
 import { US_MAP_VIEWBOX, US_STATE_SHAPES, type UsStateShape } from "@/components/us-map-shapes";
 import { US_STATE_NAMES } from "@/lib/us-states";
 
@@ -19,6 +19,8 @@ type UsMapProps = {
   unit: [singular: string, plural: string];
   /** The MAP_BUCKETS index to fill a state with, in place of the count's. */
   bucketOf?: (code: string) => number;
+  /** A fill class for a state (e.g. "fill-map-life"), over bucketOf and the count; undefined falls back to them. */
+  fillOf?: (code: string) => string | undefined;
   /** The tooltip and accessible name, in place of "State · N agents". */
   describeState?: (code: string) => string;
   /** Count labels on the bigger states. Off when the shade says it all. */
@@ -35,6 +37,12 @@ type UsMapProps = {
    * Hovering still names them, as "State · Agency not licensed".
    */
   disabled?: string[];
+  /**
+   * An icon group drawn on a state, centred at (0, 0) in viewBox units, e.g.
+   * Life / Health badges. Placed under the count label when there is one;
+   * `small` is true for states too small for a label.
+   */
+  renderMarker?: (code: string, small: boolean) => ReactNode;
 };
 
 /**
@@ -79,12 +87,14 @@ export function UsMap({
   onSelect,
   unit,
   bucketOf,
+  fillOf,
   describeState,
   showCounts = true,
   highlighted = [],
   fillSelected = false,
   outlined = [],
   disabled = [],
+  renderMarker,
 }: UsMapProps) {
   const stripesId = useId();
   const isDisabled = (code: string) => disabled.includes(code);
@@ -147,9 +157,12 @@ export function UsMap({
               />
             );
           }
+          const customFill = fillOf?.(shape.code);
           const fill = picked(shape.code)
             ? { fill: "fill-map-pick" }
-            : bucketOf
+            : customFill
+              ? { fill: customFill }
+              : bucketOf
               ? (MAP_BUCKETS[bucketOf(shape.code)] ?? MAP_BUCKETS[0])
               : bucketFor(counts[shape.code] ?? 0);
           return (
@@ -223,6 +236,24 @@ export function UsMap({
             );
           })}
         </g>
+
+        {renderMarker ? (
+          <g aria-hidden="true" className="pointer-events-none">
+            {US_STATE_SHAPES.map((shape) => {
+              if (isDisabled(shape.code)) return null;
+              const small = shape.area < LABEL_MIN_AREA;
+              const marker = renderMarker(shape.code, small);
+              if (!marker) return null;
+              const { x, y } = labelPosition(shape);
+              const counted = showCounts && !small && (counts[shape.code] ?? 0) > 0;
+              return (
+                <g key={shape.code} transform={`translate(${x} ${counted ? y + 17 : y})`}>
+                  {marker}
+                </g>
+              );
+            })}
+          </g>
+        ) : null}
       </svg>
 
       {/* Anchored at the label point; flips below near the top and hugs the side near the edges. */}

@@ -18,13 +18,16 @@ import "server-only";
  * role with the `passwords` module can read it, and it reaches the browser
  * in the page's props (never the search index).
  *
+ * Logins that aren't at a carrier are site passwords, in
+ * lib/site-passwords.ts.
+ *
  * data/passwords.json is no longer read here; it is the seed file for
  * `python manage.py seed_passwords`.
  */
 
 import type { AgentRecord } from "@/lib/agents";
-import { apiGet, apiGetAll } from "@/lib/api-server";
-import type { CarrierRecord } from "@/lib/carriers";
+import { ApiError, apiFetch, apiGet, apiGetAll } from "@/lib/api-server";
+import type { CarrierLink, CarrierRecord } from "@/lib/carriers";
 import type { FieldChange } from "@/lib/change-notes";
 
 export type PasswordStatus = "active" | "pending" | "inactive";
@@ -47,18 +50,18 @@ export type PasswordRecord = {
   /** Unique per agent: one password for each agent at each carrier. */
   carrierId: CarrierRecord["id"];
   carrierName: string;
+  /** The carrier's named links (portal, website, …) as of the read; edited on the carrier, not here. */
+  carrierLinks: CarrierLink[];
   /** Carrier portal username. */
   username: string;
   /** Carrier portal password, exactly as entered (not trimmed). */
   portalPassword: string;
-  /** The carrier portal's sign-in page, or "" when none. */
-  link: string;
   /** Defaults to "active" when adding. */
   status: PasswordStatus;
 };
 
 /** Password fields a note can record. The ID and the looked-up names never change on their own. */
-export type PasswordField = Exclude<keyof PasswordRecord, "id" | "agentName" | "carrierName">;
+export type PasswordField = Exclude<keyof PasswordRecord, "id" | "agentName" | "carrierName" | "carrierLinks">;
 
 /** What the add / edit form submits. */
 export type PasswordValues = Pick<PasswordRecord, PasswordField>;
@@ -91,10 +94,9 @@ export type ApiPassword = {
   /** One of agent and agency is set, the other null. */
   agent: { id: string; name: string; is_active: boolean } | null;
   agency: { id: string; name: string; is_active: boolean } | null;
-  carrier: { id: string; name: string; status: string; is_active: boolean };
+  carrier: { id: string; name: string; status: string; is_active: boolean; links?: CarrierLink[] };
   username: string;
   portal_password: string;
-  link: string;
   status: string;
   created_at: string;
   updated_at: string;
@@ -116,7 +118,6 @@ const NOTE_FIELDS: Record<string, PasswordField> = {
   carrier: "carrierId",
   username: "username",
   password: "portalPassword",
-  link: "link",
   status: "status",
 };
 
@@ -135,9 +136,9 @@ export function toPasswordRecord(password: ApiPassword): PasswordRecord {
     agentName: (password.agent ?? password.agency)?.name ?? "",
     carrierId: password.carrier.id,
     carrierName: password.carrier.name,
+    carrierLinks: password.carrier.links ?? [],
     username: password.username,
     portalPassword: password.portal_password,
-    link: password.link,
     status: knownStatus ? (password.status as PasswordStatus) : "active",
   };
 }
@@ -165,6 +166,16 @@ function toPasswordNote(note: ApiPasswordNote): PasswordNote {
 export async function getPasswords(): Promise<PasswordRecord[]> {
   const passwords = await apiGetAll<ApiPassword>("/passwords/");
   return passwords.map(toPasswordRecord);
+}
+
+/** One password, or null when there is no such password. */
+export async function getPassword(id: string): Promise<PasswordRecord | null> {
+  const result = await apiFetch<ApiPassword>(`/passwords/${encodeURIComponent(id)}/`);
+  if (!result.ok) {
+    if (result.status === 404) return null;
+    throw new ApiError(`/passwords/${id}/`, result);
+  }
+  return toPasswordRecord(result.data);
 }
 
 /** One password's change notes, newest first. */

@@ -2,34 +2,29 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { EditIcon } from "@/components/edit-icon";
-import { HydratedNoteList } from "@/components/hydrated-note-list";
 import { CopyableNumber } from "@/components/license-number";
 import {
-  Detail,
   PasswordsPanel,
   Panel,
   PanelEmpty,
   PROFILE_BUTTON_CLASS,
+  PROFILE_LABEL_CLASS,
   PROFILE_LINK_CLASS,
-  ProfileHeader,
   ProfileNameRow,
   ProfileTable,
-  StateChip,
   StateChipCell,
-  type ProfilePassword,
 } from "@/components/profile-shell";
 import { ROW_BUTTON_CLASS } from "@/components/classes";
-import { StateLicensesPanel } from "@/components/state-licenses-panel";
 import { StatusBadge } from "@/components/status-badge";
 import type { AgentStatus } from "@/lib/agents";
 import type { CarrierPolicyRecord } from "@/lib/carrier-policies";
-import type { CarrierNote, CarrierRecord } from "@/lib/carriers";
+import type { CarrierRecord } from "@/lib/carriers";
+import type { PasswordRecord } from "@/lib/passwords";
 import type { PolicyTypeRecord } from "@/lib/policy-types";
 import { byName } from "@/lib/text";
 import { writableStates } from "@/lib/us-states";
-import { CARRIER_FIELD_LABELS } from "../carrier-form";
 import { saveCarrierPolicy } from "../policy-actions";
 import {
   CarrierPolicyDialog,
@@ -37,11 +32,13 @@ import {
   type CarrierPolicyError,
   type CarrierPolicyValues,
 } from "./carrier-policy-dialog";
+import { CarrierStatesPanel } from "./carrier-states-panel";
 
 /*
  * Profile for one carrier: identity (including the states it is available in,
  * one ceiling on its appointments), then everything linked to it — contracted
- * agents, its policies, passwords, and change notes. An agent row shows the
+ * agents, its policies and passwords. Change notes are still recorded by
+ * the API but not shown here. An agent row shows the
  * states they can actually write here: their appointment narrowed to their
  * own licences (Agents) and this carrier's footprint. Edit opens
  * /carriers/[id]/edit (../carrier-form.tsx), which comes back here with the
@@ -54,14 +51,14 @@ import {
  * this carrier's live footprint.
  *
  * Same layout as the agent profile, built from the shared pieces in
- * components/profile-shell.tsx: the name row (initials, name, status, Edit)
- * over one header card holding the carrier's details beside its available
- * states, then panels: State licences (each state's licence #, lines,
- * status and dates) full width, Agents beside Notes, and Policies and
- * Passwords full width under them.
+ * components/profile-shell.tsx: the name row (initials, name, status, Edit),
+ * then three small cards in one row — Links (each by name), Lines of business,
+ * Certifications — then the Available states map (each state's Life /
+ * Health lines; carrier-states-panel.tsx), then Agents, Policies and Passwords, each full
+ * width.
  *
  * The policies are kept in state so a policy edit shows at once; the carrier
- * and the notes come from the server (the API writes the notes), and the
+ * comes from the server, and the
  * save actions' revalidation brings changes in. page.tsx keys this component
  * by carrier ID, so switching carriers starts that state again.
  */
@@ -78,32 +75,20 @@ type AgentRow = {
 
 type CarrierProfileProps = {
   carrier: CarrierRecord;
-  /** The carrier's place in the name-sorted list, 1…n, as the Carriers page shows it. */
-  number: number;
   /** Contracted agents, sorted by name. */
   agents: AgentRow[];
   /** This carrier's policies, sorted by name. */
   initialPolicies: CarrierPolicyRecord[];
   /** Every policy type, for the policy dialog's select. */
   policyTypes: PolicyTypeRecord[];
-  /** This carrier's passwords, the agent as the party, sorted by agent name. */
-  passwords: ProfilePassword[];
-  /** This carrier's notes, newest first. */
-  notes: CarrierNote[];
+  /** This carrier's passwords, sorted by agent name. */
+  passwords: PasswordRecord[];
 };
 
 const AGENT_COLUMNS = ["Agent", "Writing number", "Writable states", "Status"];
 const POLICY_COLUMNS = ["Action", "Name", "Policy type", "Available states", "Status"];
 
-export function CarrierProfile({
-  carrier,
-  number,
-  agents,
-  initialPolicies,
-  policyTypes,
-  passwords,
-  notes,
-}: CarrierProfileProps) {
+export function CarrierProfile({ carrier, agents, initialPolicies, policyTypes, passwords }: CarrierProfileProps) {
   const router = useRouter();
   const [policies, setPolicies] = useState(initialPolicies);
   const [policyEditor, setPolicyEditor] = useState<CarrierPolicyEditor | null>(null);
@@ -134,76 +119,40 @@ export function CarrierProfile({
         onEdit={() => router.push(`/carriers/${carrier.id}/edit?from=profile`)}
       />
 
-      <ProfileHeader
-        details={
-          <>
-            <Detail label="Carrier ID">
-              <span className="font-mono">#{number}</span>
-            </Detail>
-            <Detail label="Aliases">{carrier.aliases.join(", ")}</Detail>
-            <Detail label="Link">
-              {carrier.link ? (
-                <a
-                  href={carrier.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`break-all ${PROFILE_LINK_CLASS}`}
-                >
-                  {carrier.link}
-                </a>
-              ) : null}
-            </Detail>
-            <Detail label="Lines of business">
-              {carrier.linesOfBusiness.length > 0 ? (
-                <ul className="flex flex-wrap gap-1.5">
-                  {carrier.linesOfBusiness.map((line) => (
-                    <li
-                      key={line}
-                      className="rounded-md bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand-ink"
-                    >
-                      {line}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </Detail>
-            <Detail label="Certifications">
-              {carrier.certificationLines.length > 0 ? (
-                <ul className="flex flex-wrap gap-1.5">
-                  {carrier.certificationLines.map((line) => (
-                    <li
-                      key={line}
-                      className="rounded-md bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand-ink"
-                    >
-                      {line}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </Detail>
-          </>
-        }
-        asideTitle="Available states"
-        asideCount={carrier.availableStates.length}
-        asideTooltip="Where this carrier is available for the agency."
-      >
-        {carrier.availableStates.length === 0 ? (
-          <p className="mt-2 text-sm text-fg-subtle">
-            No states recorded, so no agent can write with this carrier yet.
-          </p>
-        ) : (
-          <ul className="mt-3 flex flex-wrap gap-1.5">
-            {carrier.availableStates.map((code) => (
-              <StateChip key={code} code={code} />
-            ))}
-          </ul>
-        )}
-      </ProfileHeader>
+      {/* Small cards for the carrier's details, in one row above the map. */}
+      <div className="mt-5 mb-5 grid grid-cols-3 gap-3 sm:gap-5">
+        <InfoCard title="Links">
+          {carrier.links.length > 0 ? (
+            <ul className="flex flex-wrap gap-x-3 gap-y-1">
+              {carrier.links.map((link) => (
+                <li key={link.name}>
+                  <a
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={link.url}
+                    className="font-medium text-brand-ink underline underline-offset-2 decoration-brand-ink/40 hover:decoration-brand-ink"
+                  >
+                    {link.name}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </InfoCard>
+        <InfoCard title="Lines of business">
+          {carrier.linesOfBusiness.length > 0 ? <LineChips lines={carrier.linesOfBusiness} /> : null}
+        </InfoCard>
+        <InfoCard title="Certifications">
+          {carrier.certificationLines.length > 0 ? <LineChips lines={carrier.certificationLines} /> : null}
+        </InfoCard>
+      </div>
+
+      {/* Then the states map. */}
+      <CarrierStatesPanel rows={carrier.licenses} agents={agentRows} />
 
       <div className="mt-5 grid items-start gap-5 xl:grid-cols-2">
-        <StateLicensesPanel licenses={carrier.licenses} showLines className="xl:col-span-2" />
-
-        <Panel title="Agents" count={agentRows.length}>
+        <Panel title="Agents" count={agentRows.length} className="xl:col-span-2">
           {agentRows.length === 0 ? (
             <PanelEmpty>No contracted agents.</PanelEmpty>
           ) : (
@@ -216,11 +165,7 @@ export function CarrierProfile({
                     </Link>
                   </td>
                   <td className="min-w-0 px-3 py-2.5 align-middle">
-                    <CopyableNumber
-                      value={agent.writingNumber}
-                      label="Writing number"
-                      empty="No writing number"
-                    />
+                    <CopyableNumber value={agent.writingNumber} label="Writing number" empty="No writing number" />
                   </td>
                   <StateChipCell
                     codes={agent.writable}
@@ -236,23 +181,12 @@ export function CarrierProfile({
           )}
         </Panel>
 
-        <Panel title="Notes" count={notes.length}>
-          {/* Cancels NoteList's own top margin; the panel body already pads. */}
-          <div className="-mt-2">
-            <HydratedNoteList notes={notes} labels={CARRIER_FIELD_LABELS} />
-          </div>
-        </Panel>
-
         <Panel
           title="Policies"
           count={policies.length}
           className="xl:col-span-2"
           action={
-            <button
-              type="button"
-              onClick={() => setPolicyEditor({ mode: "add" })}
-              className={PROFILE_BUTTON_CLASS}
-            >
+            <button type="button" onClick={() => setPolicyEditor({ mode: "add" })} className={PROFILE_BUTTON_CLASS}>
               <span aria-hidden="true">+ </span>Add policy
               <span className="sr-only"> for {carrier.name}</span>
             </button>
@@ -294,7 +228,7 @@ export function CarrierProfile({
           )}
         </Panel>
 
-        <PasswordsPanel passwords={passwords} partyHeading="Agent" className="xl:col-span-2" />
+        <PasswordsPanel passwords={passwords} party="agent" className="xl:col-span-2" />
       </div>
 
       <CarrierPolicyDialog
@@ -306,5 +240,30 @@ export function CarrierProfile({
         onClose={() => setPolicyEditor(null)}
       />
     </div>
+  );
+}
+
+/** A small card for one of the carrier's details, its title beside the value; empty shows a dash. */
+function InfoCard({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border glass p-4 shadow-sm">
+      <h2 className={`shrink-0 ${PROFILE_LABEL_CLASS}`}>{title}</h2>
+      <div className="min-w-0 break-words text-sm text-fg">
+        {children || <span className="text-fg-subtle">—</span>}
+      </div>
+    </section>
+  );
+}
+
+/** Lines of business as chips. */
+function LineChips({ lines }: { lines: string[] }) {
+  return (
+    <ul className="flex flex-wrap gap-1.5">
+      {lines.map((line) => (
+        <li key={line} className="rounded-md bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand-ink">
+          {line}
+        </li>
+      ))}
+    </ul>
   );
 }

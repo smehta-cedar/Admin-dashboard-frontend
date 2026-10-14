@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { LineBadges, LineIcon } from "@/components/line-icons";
 import { DISABLED_SWATCH, MAP_BUCKETS, UsMap } from "@/components/us-map";
+import type { LicenceLines } from "@/lib/state-licenses";
 import { US_STATE_NAMES } from "@/lib/us-states";
 
 /*
@@ -37,10 +39,18 @@ export function TableMapToggle({ view, onChange }: { view: PanelView; onChange: 
   );
 }
 
-/** One legend entry: a MAP_BUCKETS index, "pick" for the amber highlight or "outline" for the bold border, and its text. */
-export type MapLegendItem = { bucket: number | "pick" | "outline" | "disabled"; label: string };
+/**
+ * One legend entry: a MAP_BUCKETS index, "pick" for the amber highlight or
+ * "outline" for the bold border, and its text; or a swatch class of its own
+ * (e.g. "bg-map-life") to match a map's `fillOf`.
+ */
+export type MapLegendItem =
+  | { bucket: number | "pick" | "outline" | "disabled"; label: string }
+  | { swatch: string; label: string };
 
-function legendSwatch(bucket: MapLegendItem["bucket"]) {
+function legendSwatch(item: MapLegendItem) {
+  if ("swatch" in item) return `ring-1 ring-inset ring-line ${item.swatch}`;
+  const { bucket } = item;
   if (bucket === "pick") return "bg-map-pick ring-1 ring-inset ring-line";
   if (bucket === "outline") return "bg-map-0 ring-2 ring-inset ring-fg";
   if (bucket === "disabled") {
@@ -55,6 +65,10 @@ type ProfileStateMapProps = {
   unit: [singular: string, plural: string];
   /** The MAP_BUCKETS index per state, in place of the count's. */
   bucketOf?: (code: string) => number;
+  /** See UsMap's fillOf. */
+  fillOf?: (code: string) => string | undefined;
+  /** A state's Life / Health lines, drawn as heart / cross badges (components/line-icons.tsx). Adds their legend entries. */
+  lineMarkers?: (code: string) => LicenceLines | null | undefined;
   describeState?: (code: string) => string;
   showCounts?: boolean;
   /** Legend title, then its entries. */
@@ -80,6 +94,8 @@ export function ProfileStateMap({
   counts,
   unit,
   bucketOf,
+  fillOf,
+  lineMarkers,
   describeState,
   showCounts,
   legendTitle,
@@ -160,6 +176,15 @@ export function ProfileStateMap({
           onSelect={(code) => selectState(selectedCode === code ? null : code)}
           unit={unit}
           bucketOf={bucketOf}
+          fillOf={fillOf}
+          renderMarker={
+            lineMarkers
+              ? (code, small) => {
+                  const lines = lineMarkers(code);
+                  return lines ? <LineBadges {...lines} scale={small ? 0.7 : 1} /> : null;
+                }
+              : undefined
+          }
           describeState={describeState}
           showCounts={showCounts}
           highlighted={highlighted}
@@ -175,11 +200,23 @@ export function ProfileStateMap({
             <li key={item.label} className="flex items-center gap-1">
               <span
                 aria-hidden="true"
-                className={`size-3 rounded-sm ${legendSwatch(item.bucket)}`}
+                className={`size-3 rounded-sm ${legendSwatch(item)}`}
               />
               <span className="tabular-nums">{item.label}</span>
             </li>
           ))}
+          {lineMarkers ? (
+            <>
+              <li className="ml-1 flex items-center gap-1 border-l border-line pl-2">
+                <LineIcon kind="life" />
+                <span>Life</span>
+              </li>
+              <li className="flex items-center gap-1">
+                <LineIcon kind="health" />
+                <span>Health</span>
+              </li>
+            </>
+          ) : null}
         </ul>
       </div>
 

@@ -9,6 +9,7 @@ import {
   ROW_BUTTON_CLASS,
   TOOLBAR_INPUT_CLASS,
 } from "@/components/classes";
+import { useConfirm } from "@/components/confirm-dialog";
 import { DeleteIcon } from "@/components/delete-icon";
 import { EditIcon } from "@/components/edit-icon";
 import { Field } from "@/components/field";
@@ -16,22 +17,18 @@ import { PageHeader } from "@/components/page-header";
 import { FormSection } from "@/components/producer-form";
 import { PROFILE_BUTTON_CLASS } from "@/components/profile-shell";
 import { StateSelect } from "@/components/state-select";
-import { StatusBadge, statusLabel } from "@/components/status-badge";
+import { statusLabel } from "@/components/status-badge";
 import { CARRIER_STATUSES, type CarrierStatus } from "@/lib/carrier-statuses";
 import type {
   CarrierError,
   CarrierField,
   CarrierLicenseValues,
+  CarrierLink,
   CarrierRecord,
   CarrierValues,
 } from "@/lib/carriers";
 import { LINES_OF_BUSINESS, type LineOfBusiness } from "@/lib/lines-of-business";
-import {
-  AGENCY_LICENCE_STATUSES,
-  formatLicenceDate,
-  licenceLinesText,
-  type StateLicenseStatus,
-} from "@/lib/state-licenses";
+import { licenceLinesText } from "@/lib/state-licenses";
 import { US_STATE_NAMES } from "@/lib/us-states";
 import { saveCarrier } from "./actions";
 
@@ -40,9 +37,9 @@ import { saveCarrier } from "./actions";
  * page in the same layout as the agent pages: one card per group (Identity
  * with the status select in its header, then Available states, the ceiling
  * for every appointment with the carrier) and a sticky button bar. States
- * are added one at a time like an agent's licences, each with its licence #,
- * start and expiration dates, status and Life / Health lines; the Added list
- * is what submits.
+ * are added one at a time, each with its Life / Health lines; the Added list
+ * is what submits. A carrier holds no licences, so a state row has no number,
+ * status or dates here (a row saved before keeps whatever it had).
  * Cancel
  * and a successful save both return to `returnTo`, the list or the profile,
  * whichever opened the page.
@@ -64,7 +61,7 @@ export const CARRIER_FIELD_LABELS: Record<CarrierField, string> = {
   aliases: "Aliases",
   linesOfBusiness: "Lines of business",
   certificationLines: "Certifications",
-  link: "Link",
+  links: "Links",
   status: "Status",
   availableStates: "Available states",
   licenseNumbers: "Licence numbers",
@@ -89,7 +86,7 @@ export function readCarrierForm(data: FormData): CarrierValues {
     certificationLines: LINES_OF_BUSINESS.filter(
       (line) => linesOfBusiness.includes(line) && checkedCertifications.includes(line),
     ),
-    link: text("link"),
+    links: JSON.parse(String(data.get("links") ?? "[]")) as CarrierLink[],
     status: CARRIER_STATUSES.find((status) => status === text("status")) ?? ("active" satisfies CarrierStatus),
     licenses: JSON.parse(String(data.get("licenses") ?? "[]")) as CarrierLicenseValues[],
   };
@@ -117,7 +114,7 @@ export function CarrierFormPage({ carrier: editing, returnTo }: CarrierFormPageP
 
   const nameError = messageFor("name");
   const aliasesError = messageFor("aliases");
-  const linkError = messageFor("link");
+  const linksError = messageFor("links");
   const linesError = messageFor("linesOfBusiness");
   const certificationsError = messageFor("certificationLines");
   const statesError = messageFor("availableStates");
@@ -129,6 +126,12 @@ export function CarrierFormPage({ carrier: editing, returnTo }: CarrierFormPageP
     const values = readCarrierForm(new FormData(event.currentTarget));
     if (values.linesOfBusiness.length === 0) {
       setErrors([{ field: "linesOfBusiness", message: "Choose at least one line of business." }]);
+      return;
+    }
+    const linkNames = values.links.map((link) => link.name.toLowerCase());
+    const repeated = values.links.find((link, index) => linkNames.indexOf(link.name.toLowerCase()) !== index);
+    if (repeated) {
+      setErrors([{ field: "links", message: `The link name "${repeated.name}" is used twice.` }]);
       return;
     }
     setSaving(true);
@@ -295,27 +298,14 @@ export function CarrierFormPage({ carrier: editing, returnTo }: CarrierFormPageP
                 ) : null}
               </fieldset>
             </div>
-            <Field
-              label="Link"
-              htmlFor={`${id}-link`}
-              hint={linkError ?? undefined}
-              hintId={`${id}-link-error`}
-              error
-            >
-              <input
-                id={`${id}-link`}
-                name="link"
-                type="url"
-                autoComplete="off"
-                defaultValue={editing?.link}
-                aria-invalid={linkError ? true : undefined}
-                aria-describedby={linkError ? `${id}-link-error` : undefined}
-                onChange={() => clear("link")}
-                className={INPUT_CLASS}
-              />
-            </Field>
-
           </FormSection>
+
+          <LinksSection
+            id={id}
+            initial={editing?.links ?? []}
+            error={linksError}
+            onChange={() => clear("links")}
+          />
 
           <AvailableStates
             id={id}
@@ -382,8 +372,8 @@ const LINES = [
 
 /**
  * The Available states card, in the agent licence design: the Added table,
- * then an entry row (state, licence #, start and expiration dates, status,
- * Life / Health, Cancel, Add) that "+ Add state" opens. Edit pulls a row back
+ * then an entry row (state, Life / Health, Cancel, Add) that "+ Add state"
+ * opens. Edit pulls a row back
  * into the entry row; Cancel puts it back unchanged. The list submits as one
  * `licenses` hidden input (JSON). Nothing is saved until the form is, so
  * Delete needs no confirmation.
@@ -427,13 +417,9 @@ function AvailableStates({ id, initial, error, onChange }: AvailableStatesProps)
   };
 
   const addRow = () => {
-    const row = { ...draft, licenseNumber: draft.licenseNumber.trim() };
+    const row = draft;
     if (!row.state) {
       setDraftError("Pick a state.");
-      return;
-    }
-    if (row.startDate && row.endDate && row.endDate < row.startDate) {
-      setDraftError("The expiration date must be on or after the start date.");
       return;
     }
     if (rows.some((current) => current.state === row.state)) {
@@ -455,7 +441,11 @@ function AvailableStates({ id, initial, error, onChange }: AvailableStatesProps)
     startEntry(row);
   };
 
-  const removeRow = (state: string) => {
+  const { confirm, confirmDialog } = useConfirm();
+
+  const removeRow = async (state: string) => {
+    const name = US_STATE_NAMES[state] ?? state;
+    if (!(await confirm({ title: "Delete state", message: `Delete ${name} from this carrier's states?` }))) return;
     setRows((current) => current.filter((row) => row.state !== state));
     onChange();
   };
@@ -475,6 +465,7 @@ function AvailableStates({ id, initial, error, onChange }: AvailableStatesProps)
   const stateName = (code: string) => US_STATE_NAMES[code] ?? code;
 
   return (
+    <>
     <FormSection
       title="Available states"
       layout="page"
@@ -502,7 +493,7 @@ function AvailableStates({ id, initial, error, onChange }: AvailableStatesProps)
               <table className="w-full text-left text-sm">
                 <thead className="bg-surface-hover text-xs text-fg-muted">
                   <tr>
-                    {["Action", "State", "Licence #", "Start date", "Expiration date", "Status", "Lines"].map(
+                    {["Action", "State", "Lines"].map(
                       (column) => (
                         <th key={column} scope="col" className="px-3 py-2 font-medium">
                           {column}
@@ -526,7 +517,7 @@ function AvailableStates({ id, initial, error, onChange }: AvailableStatesProps)
                         </button>
                         <button
                           type="button"
-                          onClick={() => removeRow(row.state)}
+                          onClick={() => void removeRow(row.state)}
                           aria-label={`Delete ${stateName(row.state)}`}
                           title="Delete"
                           className={`inline-flex items-center ${ROW_BUTTON_CLASS} hover:text-danger`}
@@ -537,16 +528,6 @@ function AvailableStates({ id, initial, error, onChange }: AvailableStatesProps)
                       <td className="px-3 py-2">
                         <span className="font-mono text-xs font-medium text-fg-muted">{row.state}</span>{" "}
                         {US_STATE_NAMES[row.state] ?? ""}
-                      </td>
-                      <td className="px-3 py-2 font-mono text-xs">{row.licenseNumber || "—"}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        {row.startDate ? formatLicenceDate(row.startDate) : "—"}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        {row.endDate ? formatLicenceDate(row.endDate) : "—"}
-                      </td>
-                      <td className="px-3 py-2">
-                        <StatusBadge status={row.status} />
                       </td>
                       <td className="px-3 py-2">{licenceLinesText(row) || "—"}</td>
                     </tr>
@@ -565,9 +546,14 @@ function AvailableStates({ id, initial, error, onChange }: AvailableStatesProps)
 
       {entryOpen ? (
         <div className="mt-7 min-w-0">
-          {/* Two rows: the state's details, then the status, lines and the buttons. */}
-          <div role="group" aria-label="New state" className="grid gap-3" onKeyDown={addOnEnter}>
-            <div className="grid items-end gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {/* One row: the state, its lines and the buttons. */}
+          <div
+            role="group"
+            aria-label="New state"
+            className="flex flex-wrap items-end gap-x-5 gap-y-3"
+            onKeyDown={addOnEnter}
+          >
+            <div className="w-full sm:w-64">
               <Field label="State" required htmlFor={`${id}-state-entry`}>
                 <StateSelect
                   key={draftKey}
@@ -579,75 +565,27 @@ function AvailableStates({ id, initial, error, onChange }: AvailableStatesProps)
                   describedBy={draftError ? `${id}-state-entry-error` : undefined}
                 />
               </Field>
-              <Field label="Licence #" htmlFor={`${id}-state-number`}>
-                <input
-                  id={`${id}-state-number`}
-                  type="text"
-                  autoComplete="off"
-                  value={draft.licenseNumber}
-                  onChange={(event) => updateDraft({ licenseNumber: event.target.value })}
-                  className={INPUT_CLASS}
-                />
-              </Field>
-              <Field label="Start date" htmlFor={`${id}-state-start`}>
-                <input
-                  id={`${id}-state-start`}
-                  type="date"
-                  value={draft.startDate}
-                  onChange={(event) => updateDraft({ startDate: event.target.value })}
-                  className={INPUT_CLASS}
-                />
-              </Field>
-              <Field label="Expiration date" htmlFor={`${id}-state-end`}>
-                <input
-                  id={`${id}-state-end`}
-                  type="date"
-                  min={draft.startDate || undefined}
-                  value={draft.endDate}
-                  onChange={(event) => updateDraft({ endDate: event.target.value })}
-                  className={INPUT_CLASS}
-                />
-              </Field>
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-5 text-sm text-fg">
-                <label htmlFor={`${id}-state-status`} className="flex items-center gap-2 text-fg-muted">
-                  Status
-                  <select
-                    id={`${id}-state-status`}
-                    value={draft.status}
-                    onChange={(event) => updateDraft({ status: event.target.value as StateLicenseStatus })}
-                    className={`${TOOLBAR_INPUT_CLASS} py-1 pr-7 text-fg`}
-                  >
-                    {AGENCY_LICENCE_STATUSES.map((status) => (
-                      <option key={status} value={status}>
-                        {statusLabel(status)}
-                      </option>
-                    ))}
-                  </select>
+            <div role="group" aria-label="Lines" className="flex h-9 items-center gap-4 text-sm text-fg">
+              {LINES.map((line) => (
+                <label key={line.key} className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={draft[line.key]}
+                    onChange={(event) => updateDraft({ [line.key]: event.target.checked })}
+                    className="size-4 accent-brand-strong"
+                  />
+                  {line.label}
                 </label>
-                <div role="group" aria-label="Lines" className="flex items-center gap-4">
-                  {LINES.map((line) => (
-                    <label key={line.key} className="flex items-center gap-1.5">
-                      <input
-                        type="checkbox"
-                        checked={draft[line.key]}
-                        onChange={(event) => updateDraft({ [line.key]: event.target.checked })}
-                        className="size-4 accent-brand-strong"
-                      />
-                      {line.label}
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button type="button" onClick={cancelEntry} className={GHOST_BUTTON_CLASS}>
-                  Cancel
-                </button>
-                <button type="button" onClick={addRow} className={`${PRIMARY_BUTTON_CLASS} whitespace-nowrap`}>
-                  {held ? "Update" : "Add"}
-                </button>
-              </div>
+              ))}
+            </div>
+            <div className="ml-auto flex gap-2">
+              <button type="button" onClick={cancelEntry} className={GHOST_BUTTON_CLASS}>
+                Cancel
+              </button>
+              <button type="button" onClick={addRow} className={`${PRIMARY_BUTTON_CLASS} whitespace-nowrap`}>
+                {held ? "Update" : "Add"}
+              </button>
             </div>
           </div>
           {draftError ? (
@@ -658,5 +596,124 @@ function AvailableStates({ id, initial, error, onChange }: AvailableStatesProps)
         </div>
       ) : null}
     </FormSection>
+    {confirmDialog}
+    </>
+  );
+}
+
+type LinksSectionProps = {
+  id: string;
+  initial: CarrierLink[];
+  /** The API's error for the links, shown under the list. */
+  error: string | null;
+  /** Runs when the list changes, to clear that error. */
+  onChange: () => void;
+};
+
+/**
+ * The Links card: one row per named link (name, URL, Delete), and "+ Add
+ * link" for another. Both fields of a row are required, so the browser stops
+ * a half-filled row; a row left fully blank is dropped. Names are like a
+ * dict's keys: the form and the API both refuse one used twice. Submits as
+ * one `links` hidden input (JSON).
+ */
+function LinksSection({ id, initial, error, onChange }: LinksSectionProps) {
+  // Each row keeps a key of its own so typing doesn't remount the inputs.
+  const [rows, setRows] = useState(() => initial.map((link, index) => ({ key: index, ...link })));
+  const [nextKey, setNextKey] = useState(initial.length);
+
+  const update = (key: number, patch: Partial<CarrierLink>) => {
+    setRows((current) => current.map((row) => (row.key === key ? { ...row, ...patch } : row)));
+    onChange();
+  };
+
+  const addRow = () => {
+    setRows((current) => [...current, { key: nextKey, name: "", url: "" }]);
+    setNextKey((key) => key + 1);
+    requestAnimationFrame(() => document.getElementById(`${id}-link-name-${nextKey}`)?.focus());
+  };
+
+  const { confirm, confirmDialog } = useConfirm();
+
+  const removeRow = async (key: number) => {
+    const row = rows.find((item) => item.key === key);
+    // A row left blank holds nothing to lose.
+    if (row && (row.name.trim() || row.url.trim())) {
+      const label = row.name.trim() ? `the ${row.name.trim()} link` : "this link";
+      if (!(await confirm({ title: "Delete link", message: `Delete ${label}?` }))) return;
+    }
+    setRows((current) => current.filter((row) => row.key !== key));
+    onChange();
+  };
+
+  const submitted = rows
+    .map((row) => ({ name: row.name.trim(), url: row.url.trim() }))
+    .filter((row) => row.name || row.url);
+
+  return (
+    <>
+    <FormSection
+      title="Links"
+      layout="page"
+      columns=""
+      action={
+        <button type="button" onClick={addRow} className={PROFILE_BUTTON_CLASS}>
+          <span aria-hidden="true">+ </span>Add link
+        </button>
+      }
+    >
+      <input type="hidden" name="links" value={JSON.stringify(submitted)} />
+      {rows.length === 0 ? (
+        <p className="text-sm text-fg-subtle">No links added yet.</p>
+      ) : (
+        <ul className="grid gap-3">
+          {rows.map((row) => {
+            const blank = !row.name.trim() && !row.url.trim();
+            return (
+              <li key={row.key} className="grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto]">
+                <Field label="Name" required htmlFor={`${id}-link-name-${row.key}`}>
+                  <input
+                    id={`${id}-link-name-${row.key}`}
+                    type="text"
+                    autoComplete="off"
+                    required={!blank}
+                    value={row.name}
+                    onChange={(event) => update(row.key, { name: event.target.value })}
+                    className={INPUT_CLASS}
+                  />
+                </Field>
+                <Field label="URL" required htmlFor={`${id}-link-url-${row.key}`}>
+                  <input
+                    id={`${id}-link-url-${row.key}`}
+                    type="url"
+                    autoComplete="off"
+                    required={!blank}
+                    value={row.url}
+                    onChange={(event) => update(row.key, { url: event.target.value })}
+                    className={INPUT_CLASS}
+                  />
+                </Field>
+                <button
+                  type="button"
+                  onClick={() => void removeRow(row.key)}
+                  aria-label={`Delete the ${row.name.trim() || "new"} link`}
+                  title="Delete"
+                  className={`mb-1.5 inline-flex items-center ${ROW_BUTTON_CLASS} hover:text-danger`}
+                >
+                  <DeleteIcon className="size-3.5 shrink-0" />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {error ? (
+        <p role="alert" className="mt-1 text-xs text-danger">
+          {error}
+        </p>
+      ) : null}
+    </FormSection>
+    {confirmDialog}
+    </>
   );
 }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { ROW_BUTTON_CLASS } from "@/components/classes";
+import { useConfirm } from "@/components/confirm-dialog";
 import { CredentialValue } from "@/components/credential-value";
 import { DeleteIcon } from "@/components/delete-icon";
 import { EditIcon } from "@/components/edit-icon";
@@ -20,7 +21,6 @@ import {
   ProfileNameRow,
   ProfileTable,
   StateChipCell,
-  type ProfilePassword,
 } from "@/components/profile-shell";
 import { ProfileStateMap, TableMapToggle, type PanelView } from "@/components/profile-state-map";
 import { StateLicensesPanel } from "@/components/state-licenses-panel";
@@ -40,18 +40,14 @@ import {
   licenseDatesOf,
   licenseLinesOf,
   licenseNumbersOf,
+  licenseStatusesOf,
   type StateLicense,
 } from "@/lib/state-licenses";
 import { US_STATE_NAMES, US_STATES, writableStates } from "@/lib/us-states";
 import { byName } from "@/lib/text";
 import { deleteCertification, listAgentCertifications, saveCertification } from "../../certifications/actions";
-import { deletePassword, savePassword } from "../../passwords/actions";
-import {
-  PasswordDialog,
-  type PasswordEditor,
-  type PasswordError,
-  type PasswordValues,
-} from "../../passwords/password-dialog";
+import { deletePassword } from "../../passwords/actions";
+import { AddPasswordDialog } from "../../passwords/password-dialog";
 import { saveAgentLicenses } from "../actions";
 import { AgentLicenseDialog, type AgentLicenseEditor, type AgentLicenseValues } from "./license-dialog";
 import {
@@ -62,6 +58,7 @@ import {
 } from "../../certifications/certification-dialog";
 import {
   CertificationsTable,
+  certificationLabel,
   certificationsByYear,
   compareCertifications,
 } from "../../certifications/certifications-table";
@@ -86,7 +83,7 @@ import { AGENT_FIELD_LABELS } from "../agent-dialog";
  *   section cards   — a navbar of equal cards under the name, each naming a
  *                     section and its current count: Details, Pending,
  *                     Carriers, State licences, Certifications (only for a
- *                     role that can see them), Passwords, Notes. They stretch
+ *                     role that can see them), Passwords, History. They stretch
  *                     across the row and scroll sideways when they cannot.
  *                     Picking one swaps the panel below; only that section
  *                     renders, across the full width. The choice is React
@@ -147,9 +144,10 @@ import { AGENT_FIELD_LABELS } from "../agent-dialog";
  * AgentLicenseDialog (./license-dialog.tsx) for one licence; its save sends
  * the whole list, with that row changed, through saveAgentLicenses — the same
  * call the edit page makes when a licence is deleted — and the saved agent
- * comes back, so the carriers' writable states follow at once. Passwords
- * open the shared PasswordDialog with this agent the only choice, saving
- * through savePassword like the Passwords page.
+ * comes back, so the carriers' writable states follow at once. A carrier
+ * password's Add opens the shared AddPasswordDialog popup with this agent
+ * fixed; Edit opens /passwords/[id]/edit?from=agent, which comes back here.
+ * Site passwords are on the Passwords page only.
  *
  * The agent, their licence rows, certifications and passwords are kept in
  * state, each started again when a fresh server render brings new props
@@ -166,7 +164,9 @@ import { AGENT_FIELD_LABELS } from "../agent-dialog";
  * page then opens on the first section left.
  */
 
-type CarrierOption = Pick<CarrierRecord, "id" | "name" | "status" | "availableStates" | "agentAccessible">;
+/** `licenses` (each state's lines) feeds the Carriers map's badges; the agent's own home doesn't load it. */
+type CarrierOption = Pick<CarrierRecord, "id" | "name" | "status" | "availableStates" | "agentAccessible"> &
+  Partial<Pick<CarrierRecord, "licenses">>;
 
 type AgentProfileProps = {
   initialAgent: AgentRecord;
@@ -180,8 +180,8 @@ type AgentProfileProps = {
   initialCertifications: CertificationRecord[] | null;
   /** Every carrier with its lines, for the certification dialog. */
   certificationCarriers: CertifiableCarrier[];
-  /** This agent's passwords, the carrier as the party, sorted by carrier name; null hides the section. */
-  passwords: ProfilePassword[] | null;
+  /** This agent's passwords, sorted by carrier name; null hides the section. */
+  passwords: PasswordRecord[] | null;
   /** This agent's notes, newest first; null hides the section. */
   notes: AgentNote[] | null;
   /** The agent's own view: nothing edits and nothing links into the staff app. */
@@ -297,91 +297,6 @@ function CarrierMapCard({
   );
 }
 
-/** A password as the profile lists it: the carrier as the party, linking to its profile. */
-function profilePassword(record: PasswordRecord): ProfilePassword {
-  return { ...record, partyName: record.carrierName, partyHref: `/carriers/${record.carrierId}` };
-}
-
-/**
- * The Passwords panel with Edit and Delete on every row and Add password in
- * its header. Same columns as the shared PasswordsPanel (components/profile-shell.tsx).
- */
-function EditablePasswordsPanel({
-  passwords,
-  onAdd,
-  onEdit,
-  onDelete,
-}: {
-  passwords: ProfilePassword[];
-  onAdd: () => void;
-  onEdit: (record: ProfilePassword) => void;
-  onDelete: (record: ProfilePassword) => void;
-}) {
-  return (
-    <Panel
-      title="Passwords"
-      count={passwords.length}
-      action={
-        <button type="button" onClick={onAdd} className={PROFILE_BUTTON_CLASS}>
-          <span aria-hidden="true">+ </span>Add password
-        </button>
-      }
-    >
-      {passwords.length === 0 ? (
-        <PanelEmpty>No passwords recorded.</PanelEmpty>
-      ) : (
-        <ProfileTable
-          columns={["Action", "Carrier", "Portal username", "Password", "Link", "Status"]}
-          rows={passwords}
-          rowKey={(record) => record.id}
-        >
-          {(record) => (
-            <>
-              <RowActions
-                editLabel={`Edit the ${record.partyName} password`}
-                onEdit={() => onEdit(record)}
-                deleteLabel={`Delete the ${record.partyName} password`}
-                onDelete={() => onDelete(record)}
-              />
-              <td className="min-w-24 whitespace-nowrap px-3 py-2.5">
-                {record.partyHref ? (
-                  <Link href={record.partyHref} className={PROFILE_LINK_CLASS}>
-                    {record.partyName}
-                  </Link>
-                ) : (
-                  record.partyName
-                )}
-              </td>
-              <td className="px-3 py-2.5 text-fg-muted">
-                <CredentialValue value={record.username} label="username" />
-              </td>
-              <td className="px-3 py-2.5 text-fg-muted">
-                <CredentialValue value={record.portalPassword} label="password" secret />
-              </td>
-              <td className="px-3 py-2.5">
-                {record.link ? (
-                  <a
-                    href={record.link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={record.link}
-                    className={`block max-w-48 truncate ${PROFILE_LINK_CLASS}`}
-                  >
-                    {record.link}
-                  </a>
-                ) : null}
-              </td>
-              <td className="px-3 py-2.5">
-                <StatusBadge status={record.status} />
-              </td>
-            </>
-          )}
-        </ProfileTable>
-      )}
-    </Panel>
-  );
-}
-
 /** One row of the Details table: the field's label and its text, a link, or "—". */
 type DetailRow = {
   key: string;
@@ -429,8 +344,9 @@ type PendingInput = {
   agentCarriers: (CarrierOption & {
     writable: string[];
     writingNumber: string;
+    contract: Pick<CarrierContractRecord, "status">;
   })[];
-  passwords: ProfilePassword[];
+  passwords: PasswordRecord[];
 };
 
 /**
@@ -487,7 +403,8 @@ function pendingItems({ agent, agentCarriers, passwords }: PendingInput): Pendin
     });
   }
 
-  const withoutNumber = agentCarriers.filter((carrier) => !carrier.writingNumber);
+  // Only an active contract needs its writing number.
+  const withoutNumber = agentCarriers.filter((carrier) => carrier.contract.status === "active" && !carrier.writingNumber);
   if (withoutNumber.length > 0) {
     items.push({
       key: "no-writing-number",
@@ -516,7 +433,7 @@ function pendingItems({ agent, agentCarriers, passwords }: PendingInput): Pendin
     if (!agentCarriers.some((carrier) => carrier.id === record.carrierId)) {
       items.push({
         key: `uncontracted-${record.id}`,
-        title: `${record.partyName} password has no contract`,
+        title: `${record.carrierName} password has no contract`,
         detail: "A password is recorded, but this agent isn't appointed with the carrier.",
       });
     }
@@ -527,7 +444,7 @@ function pendingItems({ agent, agentCarriers, passwords }: PendingInput): Pendin
       const writingNumber = agentCarriers.find((carrier) => carrier.id === record.carrierId)?.writingNumber ?? "";
       items.push({
         key: `pending-${record.id}`,
-        title: `${record.partyName} password is pending`,
+        title: `${record.carrierName} password is pending`,
         detail: writingNumber
           ? `Writing number ${writingNumber}. Mark it active once the carrier confirms.`
           : "Mark it active once the carrier confirms.",
@@ -566,8 +483,8 @@ export function AgentProfile({
   const router = useRouter();
   const [certificationEditor, setCertificationEditor] = useState<CertificationEditor | null>(null);
   const [licenseEditor, setLicenseEditor] = useState<AgentLicenseEditor | null>(null);
-  const [passwordEditor, setPasswordEditor] = useState<PasswordEditor | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [addingPassword, setAddingPassword] = useState(false);
   // Which section the panel shows. Carriers first: it is what the page is opened for.
   const [section, setSection] = useState<SectionKey | null>(null);
   // Carriers opens on its map (with the table under it); State licences on its table.
@@ -617,6 +534,21 @@ export function AgentProfile({
   const licenceByState = new Map(licenses.map((license) => [license.state, license]));
   const licenceCounts = Object.fromEntries(licenses.map((license) => [license.state, 1]));
   const mapCarrier = agentCarriers.find((carrier) => carrier.id === mapCarrierId) ?? null;
+
+  // The Carriers map's badges: the lines the carriers cover in each state the
+  // agent can write with them (only the picked carrier's, when one is picked).
+  const carrierLinesAt = (code: string) => {
+    const lines = { life: false, health: false };
+    let any = false;
+    for (const carrier of mapCarrier ? [mapCarrier] : agentCarriers) {
+      if (!carrier.writable.includes(code)) continue;
+      any = true;
+      const row = carrier.licenses?.find((license) => license.state === code);
+      lines.life ||= Boolean(row?.life);
+      lines.health ||= Boolean(row?.health);
+    }
+    return any ? lines : null;
+  };
   // Both maps disable the states the agency isn't licensed in.
   const agencyUnlicensed = agencyLicensedStates
     ? US_STATES.map((state) => state.code).filter((code) => !agencyLicensedStates.includes(code))
@@ -739,6 +671,12 @@ export function AgentProfile({
       value: agent.ssnLast4 ? <CredentialValue value={agent.ssnLast4} label="SSN" secret /> : empty,
       filled: Boolean(agent.ssnLast4),
     },
+    {
+      key: "remarks",
+      label: AGENT_FIELD_LABELS.remarks,
+      value: agent.remarks ? <span className="whitespace-pre-wrap">{agent.remarks}</span> : empty,
+      filled: Boolean(agent.remarks),
+    },
   ];
   const filledCount = details.filter((row) => row.filled).length;
 
@@ -766,7 +704,7 @@ export function AgentProfile({
           },
         ]
       : []),
-    ...(notes ? [{ key: "notes" as const, label: "Notes", count: notes.length }] : []),
+    ...(notes ? [{ key: "notes" as const, label: "History", count: notes.length }] : []),
   ];
   const sections = allSections.filter((item) => !hiddenSections.includes(item.key));
   // The chosen section while it is listed; before a choice, Carriers or else the first one.
@@ -794,6 +732,7 @@ export function AgentProfile({
     const result = await saveAgentLicenses(agent.id, {
       licensedStates: licensedStatesOf(rows),
       licenseNumbers: licenseNumbersOf(rows),
+      licenseStatuses: licenseStatusesOf(rows),
       licenseLines: licenseLinesOf(rows),
       licenseDates: licenseDatesOf(rows),
     });
@@ -808,25 +747,21 @@ export function AgentProfile({
   const saveLicence = (values: AgentLicenseValues, previousState: string | null) =>
     saveLicenceRows([
       ...licenses.filter((row) => row.state !== previousState),
-      // Only the state, number, lines and dates are sent; the API keeps the rest.
-      { ...values, id: "", status: "active" },
+      // Only the state, number, status, lines and dates are sent; the API keeps the rest.
+      { ...values, id: "" },
     ]);
 
   const removeLicence = (state: string) => saveLicenceRows(licenses.filter((row) => row.state !== state));
 
-  /** Adds or edits one of this agent's passwords through the API. Resolves with the dialog's errors, if any. */
-  const saveAgentPassword = async (values: PasswordValues, editing?: PasswordRecord): Promise<PasswordError[]> => {
-    const result = await savePassword(values, editing?.id);
-    if (!result.ok) return result.errors;
-    const saved = result.password;
-    setPasswords((current) =>
-      [
-        ...(current ?? []).filter((record) => record.id !== saved.id),
-        ...(saved.agentId === agent.id ? [profilePassword(saved)] : []),
-      ].sort((a, b) => a.partyName.localeCompare(b.partyName)),
-    );
-    return [];
-  };
+  const editPassword = (password: PasswordRecord) =>
+    router.push(`/passwords/${encodeURIComponent(password.id)}/edit?from=agent`);
+  const removePassword = (password: PasswordRecord) =>
+    void runDelete("Delete password", `Delete the ${password.carrierName} password?`, async () => {
+      const result = await deletePassword(password.id);
+      if (!result.ok) return result.message;
+      setPasswords((current) => (current ?? []).filter((record) => record.id !== password.id));
+      return null;
+    });
 
   // The State licences header: Add licence at the end.
   const licencesAction = readOnly ? null : (
@@ -836,8 +771,11 @@ export function AgentProfile({
     </button>
   );
 
-  /** Runs a row delete and keeps the API's message when it fails. */
-  const runDelete = async (remove: () => Promise<string | null>) => {
+  const { confirm, confirmDialog } = useConfirm();
+
+  /** Asks first, then runs a row delete and keeps the API's message when it fails. */
+  const runDelete = async (title: string, question: string, remove: () => Promise<string | null>) => {
+    if (!(await confirm({ title, message: question }))) return;
     setActionError(null);
     const message = await remove();
     if (message) setActionError(message);
@@ -986,6 +924,7 @@ export function AgentProfile({
                             ],
                           })}
                       outlined={agent.licensedStates}
+                      lineMarkers={carrierLinesAt}
                       overlay={
                         <CarrierMapCard
                           carriers={agentCarriers}
@@ -1030,7 +969,7 @@ export function AgentProfile({
                                         )}
                                       </span>
                                       <span className="mt-1 block">
-                                        <StatusBadge status={carrier.status} />
+                                        <StatusBadge status={carrier.contract.status} />
                                       </span>
                                     </span>
                                     <span onClick={(event) => event.stopPropagation()} className="shrink-0">
@@ -1065,7 +1004,11 @@ export function AgentProfile({
                             editLabel={`Edit the ${carrier.name} contract`}
                             onEdit={() => setEditor({ mode: "edit", contract: carrier.contract })}
                             deleteLabel={`Delete the ${carrier.name} contract`}
-                            onDelete={() => void runDelete(() => removeContract(carrier.contract.id))}
+                            onDelete={() =>
+                              void runDelete("Delete contract", `Delete the ${carrier.name} contract?`, () =>
+                                removeContract(carrier.contract.id),
+                              )
+                            }
                           />
                         )}
                         <td className="min-w-0 truncate px-3 py-2.5 align-middle sm:whitespace-nowrap">
@@ -1090,7 +1033,7 @@ export function AgentProfile({
                           empty="No states yet"
                         />
                         <td className="px-3 py-2.5 align-middle">
-                          <StatusBadge status={carrier.status} />
+                          <StatusBadge status={carrier.contract.status} />
                         </td>
                       </>
                     )}
@@ -1129,6 +1072,7 @@ export function AgentProfile({
                       { bucket: 2, label: "Other status" },
                       { bucket: 0, label: "Not licensed" },
                     ]}
+                    lineMarkers={(code) => licenceByState.get(code)}
                     keepPanelOpen={licenseEditor !== null}
                     renderPanelSubtitle={(code) => <LicenseNumber value={licenceByState.get(code)?.licenseNumber} />}
                     renderPanel={(code) => {
@@ -1187,7 +1131,14 @@ export function AgentProfile({
               action={licencesAction}
               onEdit={readOnly ? undefined : (license) => setLicenseEditor({ mode: "edit", license })}
               onDelete={
-                readOnly ? undefined : (license) => void runDelete(() => removeLicence(license.state))
+                readOnly
+                  ? undefined
+                  : (license) =>
+                      void runDelete(
+                        "Delete licence",
+                        `Delete the ${US_STATE_NAMES[license.state] ?? license.state} licence?`,
+                        () => removeLicence(license.state),
+                      )
               }
             />
           ) : shown === "certifications" && certifications ? (
@@ -1233,14 +1184,18 @@ export function AgentProfile({
                           readOnly
                             ? undefined
                             : (certification) =>
-                                void runDelete(async () => {
+                                void runDelete(
+                                  "Delete certification",
+                                  `Delete the ${certificationLabel(certification)} certification?`,
+                                  async () => {
                                   const result = await deleteCertification(certification.id);
                                   if (!result.ok) return result.message;
                                   setCertifications((current) =>
                                     (current ?? []).filter((row) => row.id !== certification.id),
                                   );
                                   return null;
-                                })
+                                  },
+                                )
                         }
                         // The download needs certifications access, which an agent's sign-in doesn't have.
                         fileLinks={!readOnly}
@@ -1252,24 +1207,19 @@ export function AgentProfile({
             </Panel>
           ) : shown === "passwords" && passwords ? (
             readOnly ? (
-              <PasswordsPanel passwords={passwords} partyHeading="Carrier" />
+              // The agent's own portal can't open carrier profiles.
+              <PasswordsPanel passwords={passwords} party="carrier" linkParties={false} />
             ) : (
-              <EditablePasswordsPanel
+              <PasswordsPanel
                 passwords={passwords}
-                onAdd={() => setPasswordEditor({ mode: "add", agentId: agent.id })}
-                onEdit={(password) => setPasswordEditor({ mode: "edit", password })}
-                onDelete={(password) =>
-                  void runDelete(async () => {
-                    const result = await deletePassword(password.id);
-                    if (!result.ok) return result.message;
-                    setPasswords((current) => (current ?? []).filter((record) => record.id !== password.id));
-                    return null;
-                  })
-                }
+                party="carrier"
+                onAdd={() => setAddingPassword(true)}
+                onEdit={editPassword}
+                onDelete={removePassword}
               />
             )
           ) : shown === "notes" && notes ? (
-            <Panel title="Notes" count={notes.length}>
+            <Panel title="History" count={notes.length}>
               {/* Cancels NoteList's own top margin; the panel body already pads. */}
               <div className="-mt-2">
                 <HydratedNoteList notes={notes} labels={AGENT_FIELD_LABELS} />
@@ -1282,6 +1232,8 @@ export function AgentProfile({
 
       {readOnly ? null : (
         <>
+          {confirmDialog}
+
           {/* Agent fixed to this profile. */}
           <CertificationDialog
             editor={certificationEditor}
@@ -1291,22 +1243,23 @@ export function AgentProfile({
             onClose={() => setCertificationEditor(null)}
           />
 
+          {/* This agent is the only choice, so a password added here is always theirs. */}
+          <AddPasswordDialog
+            editor={addingPassword ? { kind: "carrier", agentId: agent.id } : null}
+            agents={[{ id: agent.id, name: agent.name, status: agent.status }]}
+            agency={null}
+            carriers={carriers}
+            onSaved={() => router.refresh()}
+            onClose={() => setAddingPassword(false)}
+          />
+
           <AgentLicenseDialog
             editor={licenseEditor}
             licensedStates={agent.licensedStates}
+            agencyStates={agencyLicensedStates}
             onSave={saveLicence}
             onRemove={removeLicence}
             onClose={() => setLicenseEditor(null)}
-          />
-
-          {/* This agent is the only choice, so a password here is always theirs. */}
-          <PasswordDialog
-            editor={passwordEditor}
-            agents={[{ id: agent.id, name: agent.name, status: agent.status }]}
-            carriers={carriers}
-            agency={null}
-            onSave={saveAgentPassword}
-            onClose={() => setPasswordEditor(null)}
           />
 
           {/* Agent locked to this profile: the only option, already chosen. */}

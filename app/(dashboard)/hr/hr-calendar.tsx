@@ -12,9 +12,14 @@ import {
   WEEKDAY_NAMES,
   type YearMonth,
 } from "@/lib/calendar";
+import { statusLabel } from "@/components/status-badge";
 import { REQUEST_STATUSES } from "@/lib/request-options";
 import type { RequestStatus } from "@/lib/requests";
-import { formatLicenceDate, type StateLicenseStatus } from "@/lib/state-licenses";
+import {
+  AGENT_LICENCE_STATUSES,
+  formatLicenceDate,
+  type StateLicenseStatus,
+} from "@/lib/state-licenses";
 import { US_STATE_NAMES } from "@/lib/us-states";
 
 /*
@@ -23,16 +28,16 @@ import { US_STATE_NAMES } from "@/lib/us-states";
  *
  *   day off   — a request's range, drawn on every day it covers as a bar
  *               that is rounded only at its first and last day, coloured by
- *               the request's status (pending amber, approved green). A
- *               denied request stays in the list and is not drawn. The
- *               agent's name sits on the first day and again on each Sunday
- *               the range runs into, so a long range stays labelled on
- *               every row.
+ *               the request's status (pending amber, approved green, denied
+ *               muted with a strike-through). The agent's name sits on the
+ *               first day and again on each Sunday the range runs into, so a
+ *               long range stays labelled on every row.
  *   expiry    — a state licence's end date, one chip on that day.
  *
  * Clicking a name opens a panel from the right. A day off's status uses the
  * same dropdown as the request list, through the same status change. A
- * licence expiry is not a request, so that dropdown is not on its panel.
+ * licence expiry's status uses the agent licence statuses, through
+ * onLicenseStatusChange.
  *
  * Contract requests have no date, so they never appear here; the list below
  * the calendar has them.
@@ -49,6 +54,7 @@ export type DayOffMark = {
 
 export type ExpiryMark = {
   key: string;
+  agentId: string;
   agentName: string;
   state: string;
   date: string;
@@ -65,8 +71,15 @@ type HrCalendarProps = {
   today: string;
   dayOffs: DayOffMark[];
   expiries: ExpiryMark[];
-  /** The request list's status change. A day off's key is that request's id. */
-  onStatusChange: (id: string, status: RequestStatus) => void;
+  /**
+   * The request list's status change. A day off's key is that request's id.
+   * Omit for a read-only calendar (agents see status as a badge).
+   */
+  onStatusChange?: (id: string, status: RequestStatus) => void;
+  /**
+   * A licence expiry's status change. Omit for a read-only calendar.
+   */
+  onLicenseStatusChange?: (licenseId: string, agentId: string, status: StateLicenseStatus) => void;
 };
 
 const DAY_OFF_CLASSES: Record<RequestStatus, string> = {
@@ -92,7 +105,15 @@ const MARK_BUTTON_CLASS =
 const rangeText = (start: string, end: string) =>
   start === end ? formatLicenceDate(start) : `${formatLicenceDate(start)} – ${formatLicenceDate(end)}`;
 
-export function HrCalendar({ month, onMonthChange, today, dayOffs, expiries, onStatusChange }: HrCalendarProps) {
+export function HrCalendar({
+  month,
+  onMonthChange,
+  today,
+  dayOffs,
+  expiries,
+  onStatusChange,
+  onLicenseStatusChange,
+}: HrCalendarProps) {
   const captionId = useId();
   const weeks = monthGrid(month);
   const todayMonth = monthKey({ year: Number(today.slice(0, 4)), month: Number(today.slice(5, 7)) });
@@ -251,11 +272,17 @@ export function HrCalendar({ month, onMonthChange, today, dayOffs, expiries, onS
       <ul className="flex flex-wrap gap-1.5 border-t border-line bg-surface-muted/50 px-3 py-2 text-xs text-fg-muted sm:px-4">
         <LegendItem className={DAY_OFF_CLASSES.pending}>Day off, pending</LegendItem>
         <LegendItem className={DAY_OFF_CLASSES.approved}>Day off, approved</LegendItem>
+        <LegendItem className={DAY_OFF_CLASSES.denied}>Day off, denied</LegendItem>
         <LegendItem className={EXPIRY_CLASS}>Licence expires</LegendItem>
       </ul>
 
       {detail ? (
-        <DetailDrawer detail={detail} onStatusChange={onStatusChange} onClose={() => setOpen(null)} />
+        <DetailDrawer
+          detail={detail}
+          onStatusChange={onStatusChange}
+          onLicenseStatusChange={onLicenseStatusChange}
+          onClose={() => setOpen(null)}
+        />
       ) : null}
     </section>
   );
@@ -264,10 +291,12 @@ export function HrCalendar({ month, onMonthChange, today, dayOffs, expiries, onS
 function DetailDrawer({
   detail,
   onStatusChange,
+  onLicenseStatusChange,
   onClose,
 }: {
   detail: CalendarDetail;
-  onStatusChange: (id: string, status: RequestStatus) => void;
+  onStatusChange?: (id: string, status: RequestStatus) => void;
+  onLicenseStatusChange?: (licenseId: string, agentId: string, status: StateLicenseStatus) => void;
   onClose: () => void;
 }) {
   const titleId = useId();
@@ -309,7 +338,7 @@ function DetailDrawer({
           {detail.kind === "dayOff" ? (
             <DayOffDetails mark={detail.mark} onStatusChange={onStatusChange} />
           ) : (
-            <ExpiryDetails mark={detail.mark} />
+            <ExpiryDetails mark={detail.mark} onLicenseStatusChange={onLicenseStatusChange} />
           )}
         </dl>
       </div>
@@ -322,23 +351,29 @@ function DayOffDetails({
   onStatusChange,
 }: {
   mark: DayOffMark;
-  onStatusChange: (id: string, status: RequestStatus) => void;
+  onStatusChange?: (id: string, status: RequestStatus) => void;
 }) {
   return (
     <>
       <DetailRow label="Status">
-        <select
-          value={mark.status}
-          onChange={(event) => onStatusChange(mark.key, event.target.value as RequestStatus)}
-          aria-label={`Status of ${mark.agentName}'s day off request`}
-          className={`${TOOLBAR_INPUT_CLASS} py-1 text-xs font-medium capitalize ${STATUS_TEXT_CLASSES[mark.status]}`}
-        >
-          {REQUEST_STATUSES.map((status) => (
-            <option key={status} value={status}>
-              {status}
-            </option>
-          ))}
-        </select>
+        {onStatusChange ? (
+          <select
+            value={mark.status}
+            onChange={(event) => onStatusChange(mark.key, event.target.value as RequestStatus)}
+            aria-label={`Status of ${mark.agentName}'s day off request`}
+            className={`${TOOLBAR_INPUT_CLASS} py-1 text-xs font-medium capitalize ${STATUS_TEXT_CLASSES[mark.status]}`}
+          >
+            {REQUEST_STATUSES.map((status) => (
+              <option key={status} value={status}>
+                {status}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span className={`text-sm font-medium capitalize ${STATUS_TEXT_CLASSES[mark.status]}`}>
+            {mark.status}
+          </span>
+        )}
       </DetailRow>
       <DetailRow label="Dates">{rangeText(mark.startDate, mark.endDate)}</DetailRow>
       {mark.note ? <DetailRow label="Note">{mark.note}</DetailRow> : null}
@@ -346,7 +381,17 @@ function DayOffDetails({
   );
 }
 
-function ExpiryDetails({ mark }: { mark: ExpiryMark }) {
+function ExpiryDetails({
+  mark,
+  onLicenseStatusChange,
+}: {
+  mark: ExpiryMark;
+  onLicenseStatusChange?: (licenseId: string, agentId: string, status: StateLicenseStatus) => void;
+}) {
+  const statuses = AGENT_LICENCE_STATUSES.includes(mark.licenseStatus)
+    ? AGENT_LICENCE_STATUSES
+    : [...AGENT_LICENCE_STATUSES, mark.licenseStatus];
+
   return (
     <>
       <DetailRow label="State">
@@ -354,7 +399,24 @@ function ExpiryDetails({ mark }: { mark: ExpiryMark }) {
         {US_STATE_NAMES[mark.state] ? <span className="text-fg-muted"> · {US_STATE_NAMES[mark.state]}</span> : null}
       </DetailRow>
       <DetailRow label="Status">
-        <StatusBadge status={mark.licenseStatus} />
+        {onLicenseStatusChange ? (
+          <select
+            value={mark.licenseStatus}
+            onChange={(event) =>
+              onLicenseStatusChange(mark.key, mark.agentId, event.target.value as StateLicenseStatus)
+            }
+            aria-label={`Status of ${mark.agentName}'s ${mark.state} licence`}
+            className={`${TOOLBAR_INPUT_CLASS} py-1 text-xs font-medium`}
+          >
+            {statuses.map((status) => (
+              <option key={status} value={status}>
+                {statusLabel(status)}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <StatusBadge status={mark.licenseStatus} />
+        )}
       </DetailRow>
       <DetailRow label="Expires">{formatLicenceDate(mark.date)}</DetailRow>
       {mark.startDate ? <DetailRow label="Starts">{formatLicenceDate(mark.startDate)}</DetailRow> : null}

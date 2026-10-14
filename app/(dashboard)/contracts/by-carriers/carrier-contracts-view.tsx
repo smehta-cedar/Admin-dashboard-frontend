@@ -132,7 +132,7 @@ export function CarrierContractsView({
 
   const allAgents = [...agents].sort(byName);
   // Coverage is measured against these; inactive agents are listed but never counted.
-  const activeAgents = allAgents.filter((agent) => agent.status === "active");
+  const activeAgents = allAgents.filter((agent) => agent.status !== "inactive");
 
   /**
    * One carrier's contracted agents, given a set of contracts: how many known

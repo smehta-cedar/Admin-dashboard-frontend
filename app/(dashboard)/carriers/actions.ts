@@ -39,7 +39,7 @@ const ERROR_FIELDS: Record<string, CarrierError["field"]> = {
   aliases: "aliases",
   lines_of_business: "linesOfBusiness",
   certification_lines: "certificationLines",
-  link: "link",
+  links: "links",
   // The state rows sit under Available states on the form.
   licenses: "availableStates",
   status: "status",
@@ -52,7 +52,7 @@ export async function saveCarrier(values: CarrierValues, editingId?: string): Pr
     aliases: values.aliases,
     lines_of_business: values.linesOfBusiness,
     certification_lines: values.certificationLines,
-    link: values.link,
+    links: values.links,
     licenses: values.licenses.map((row) => ({
       state: row.state,
       license_number: row.licenseNumber,

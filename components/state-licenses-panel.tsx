@@ -10,9 +10,9 @@ import { US_STATE_NAMES } from "@/lib/us-states";
 
 /*
  * A profile's "State licences" panel (agent, agency and carrier): one row
- * per licence — State, Licence #, Lines (agents and carriers: Life, Health or both),
- * Status, Start, End. Dates are formatted from the stored string, never
- * through Date, so the server and the browser agree.
+ * per licence — State, Licence #, Lines (Life, Health or both when
+ * `showLines`), Status, Start, End. Dates are formatted from the stored
+ * string, never through Date, so the server and the browser agree.
  *
  * Read-only by itself. An agent's rows are edited through the producer form
  * on the profile's Edit button, which updates the rows this renders. The
@@ -25,7 +25,7 @@ import { US_STATE_NAMES } from "@/lib/us-states";
 type StateLicensesPanelProps = {
   /** The owner's rows, in ID order. */
   licenses: StateLicense[];
-  /** Show the Lines column: the agent and carrier profiles, whose rows record Life / Health. */
+  /** Show the Lines column: agent, agency and carrier profiles whose rows record Life / Health. */
   showLines?: boolean;
   /** Shown at the right of the panel title, e.g. an Add button. */
   action?: ReactNode;

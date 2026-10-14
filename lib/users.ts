@@ -8,10 +8,9 @@ import "server-only";
  * add, every edit that changed something, every block / unblock and every
  * password set (the password only as "set" / "changed").
  *
- * A user's role is one of the API's Role rows (lib: `RoleOption`), which
- * decide what the API lets them do per module; the frontend shows the role
- * name and does not gate anything by it yet. Agents and the agency don't
- * sign in; that is a later phase.
+ * A user holds any number of the API's Role rows (lib: `RoleOption`); what
+ * they grant adds up. Only a superuser can change them. Agents sign in on
+ * their own accounts, which are not users here and take the Agent role.
  *
  * Passwords are never returned by the API: the list has no password column
  * any more, and the form sets one on add or when a new one is typed on edit.
@@ -36,24 +35,25 @@ export type UserRecord = {
   /** What they sign in with. Unique, ignoring case. */
   email: string;
   phone: string;
-  /** The assigned role, or null when none. */
-  role: RoleOption | null;
+  /** The assigned roles, by name; empty when none. */
+  roles: RoleOption[];
   /** The API's is_active. An inactive (blocked) user can't sign in. */
   status: UserStatus;
-  /** A superuser has every permission whatever their role; only a superuser can change one. */
+  /** A superuser has every permission whatever their roles; only a superuser can change one. */
   isSuperuser: boolean;
 };
 
 /** User fields a note can record. */
-export type UserField = "name" | "email" | "phone" | "role" | "status" | "password";
+/** "role" is on notes written before users could hold several roles. */
+export type UserField = "name" | "email" | "phone" | "roles" | "role" | "status" | "password";
 
 /** What the add / edit form submits. `password` is empty on an edit that keeps it. */
 export type UserValues = {
   name: string;
   email: string;
   phone: string;
-  /** A role's ID, or "" for none. */
-  roleId: string;
+  /** The roles' IDs; empty for none. */
+  roleIds: string[];
   status: UserStatus;
   password: string;
 };
@@ -90,7 +90,7 @@ type ApiUserNote = {
   created_at: string;
 };
 
-const NOTE_FIELDS: readonly string[] = ["name", "email", "phone", "role", "status", "password"] satisfies UserField[];
+const NOTE_FIELDS: readonly string[] = ["name", "email", "phone", "roles", "role", "status", "password"] satisfies UserField[];
 
 /** An API user as the Users page holds them. */
 export function toUserRecord(user: ApiUser): UserRecord {
@@ -99,7 +99,7 @@ export function toUserRecord(user: ApiUser): UserRecord {
     name: user.full_name?.trim() || user.email,
     email: user.email,
     phone: user.phone,
-    role: user.role,
+    roles: [...user.roles].sort((a, b) => a.name.localeCompare(b.name)),
     status: user.is_active ? "active" : "inactive",
     isSuperuser: user.is_superuser,
   };

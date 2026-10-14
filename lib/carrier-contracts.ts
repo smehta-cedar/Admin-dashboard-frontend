@@ -9,8 +9,8 @@ import "server-only";
  *
  * A carrier contract says one agent is appointed with one carrier, in the
  * states listed, with the writing number (producer ID) the carrier assigned
- * them. Presence means contracted, absence means not: there is no contract
- * status. An agent has at most one contract per carrier (the API enforces
+ * them, and its status (active, applied, pending or inactive). Presence
+ * means contracted, absence means not. An agent has at most one contract per carrier (the API enforces
  * it). Empty appointedStates means appointed nowhere yet, never "every
  * state". Empty writingNumber means none recorded yet. Whether the agent is
  * active comes from AgentRecord.status, edited only on Agents.
@@ -35,6 +35,9 @@ import { apiGet, apiGetAll } from "@/lib/api-server";
 import type { CarrierRecord } from "@/lib/carriers";
 import type { FieldChange } from "@/lib/change-notes";
 
+/** Where an appointment stands; the API's CONTRACT_STATUSES. */
+export type ContractStatus = "active" | "applied" | "pending" | "inactive";
+
 export type CarrierContractRecord = {
   /** The API's UUID. */
   id: string;
@@ -49,6 +52,7 @@ export type CarrierContractRecord = {
    * set (ignoring case). Empty when none recorded yet.
    */
   writingNumber: string;
+  status: ContractStatus;
   /**
    * US state codes from lib/us-states.ts the agent is appointed in with this
    * carrier, unique and in code order. Empty when appointed nowhere yet (not
@@ -65,7 +69,7 @@ export type AppointmentValues = Pick<CarrierContractRecord, CarrierContractField
 
 /** A save error, shown under the field it names, or under the form for `form`. */
 export type AppointmentError = {
-  field: "agentId" | "carrierId" | "writingNumber" | "appointedStates" | "form";
+  field: "agentId" | "carrierId" | "writingNumber" | "status" | "appointedStates" | "form";
   message: string;
 };
 
@@ -93,6 +97,7 @@ export type ApiContract = {
   agent: { id: string; name: string; is_active: boolean };
   carrier: { id: string; name: string; status: string; is_active: boolean };
   writing_number: string;
+  status: ContractStatus;
   appointed_states: string[];
   created_at: string;
   updated_at: string;
@@ -113,6 +118,7 @@ const NOTE_FIELDS: Record<string, CarrierContractField> = {
   agent: "agentId",
   carrier: "carrierId",
   writing_number: "writingNumber",
+  status: "status",
   appointed_states: "appointedStates",
 };
 
@@ -125,6 +131,7 @@ export function toContractRecord(contract: ApiContract): CarrierContractRecord {
     carrierId: contract.carrier.id,
     carrierName: contract.carrier.name,
     writingNumber: contract.writing_number,
+    status: contract.status ?? "active",
     appointedStates: [...new Set(contract.appointed_states)].sort(),
   };
 }

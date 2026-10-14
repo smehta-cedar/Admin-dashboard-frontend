@@ -41,6 +41,7 @@ const ERROR_FIELDS: Record<string, AppointmentError["field"]> = {
   // "Add a contract number before an agent can use this carrier."
   carrier: "carrierId",
   writing_number: "writingNumber",
+  status: "status",
   appointed_states: "appointedStates",
 };
 
@@ -53,6 +54,7 @@ export async function saveAppointment(
     agent_id: values.agentId,
     carrier_id: values.carrierId,
     writing_number: values.writingNumber,
+    status: values.status,
     appointed_states: values.appointedStates,
   };
   const result = editingId

@@ -4,6 +4,7 @@ import { useId, useMemo, useState, useTransition, type FormEvent } from "react";
 import { BrandLogo } from "@/components/brand-logo";
 import { GHOST_BUTTON_CLASS, INPUT_CLASS, PRIMARY_BUTTON_CLASS } from "@/components/classes";
 import { Field } from "@/components/field";
+import { useRequestsStore } from "@/components/requests-store";
 import {
   PRODUCT_CATEGORIES,
   PRODUCT_TYPES,
@@ -25,9 +26,10 @@ import { placeOrder, type PlaceOrderResult } from "./actions";
  *             (or the drawn tee). Checkout keeps the pick.
  *   details – name, email, phone and shipping address. Submit files the order
  *             through the server action; the same `validateOrder` runs here
- *             first so a typo is caught before the round trip.
- *   done    – the office has the request and will be in touch. No email is
- *             sent; the office follows up by hand from the HR page.
+ *             first so a typo is caught before the round trip. On success the
+ *             row is appended to the requests store and admins are notified.
+ *   done    – the office has the request and will be in touch. No buyer email
+ *             is sent; the office follows up by hand from the HR page.
  *
  * The selection is state on this component, so going back and forward loses
  * nothing. No payment: the office settles that with the buyer. The page
@@ -378,6 +380,7 @@ type DetailsStepProps = {
 
 function DetailsStep({ product, selection, onBack, onPlaced }: DetailsStepProps) {
   const id = useId();
+  const { appendRequest } = useRequestsStore();
   const [error, setError] = useState<OrderError | null>(null);
   const [failed, setFailed] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -414,6 +417,7 @@ function DetailsStep({ product, selection, onBack, onPlaced }: DetailsStepProps)
         setError(result.error);
         return;
       }
+      appendRequest(result.request);
       onPlaced(values.email);
     });
   };

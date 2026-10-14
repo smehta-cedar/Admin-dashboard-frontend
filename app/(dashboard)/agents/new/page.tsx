@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { NoAccess } from "@/components/no-access";
-import { canViewModule } from "@/lib/access";
+import { canModule } from "@/lib/access";
 import { getCarriers } from "@/lib/carriers";
 import { certifiableCarrier } from "@/lib/certification-options";
 import { NewAgentView } from "./new-agent-view";
@@ -17,7 +17,7 @@ export const metadata: Metadata = {
  * certification rows.
  */
 export default async function NewAgentPage() {
-  if (!(await canViewModule("agents"))) return <NoAccess title="Add agent" />;
+  if (!(await canModule("agents", "create"))) return <NoAccess title="Add agent" />;
   const carriers = await getCarriers();
   return <NewAgentView carriers={carriers.map(certifiableCarrier)} />;
 }

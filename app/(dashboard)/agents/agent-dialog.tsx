@@ -9,6 +9,8 @@ import {
   type ProducerFormLayout,
   type ProducerLabels,
 } from "@/components/producer-form";
+import { AGENT_STATUSES } from "@/lib/agent-statuses";
+import { AGENT_LICENCE_STATUSES } from "@/lib/state-licenses";
 import type { AgentField, AgentRecord, AgentValues } from "@/lib/agents";
 import { agentContactExtra, incompleteAddressError, type AgentContact } from "./agent-contact-fields";
 
@@ -47,6 +49,8 @@ export type AgentError = ProducerError;
 /** Also the order changes are listed in on a note. */
 export const AGENT_FIELD_LABELS: Record<AgentField, string> = {
   name: "Name",
+  firstName: "First name",
+  lastName: "Last name",
   aliases: "Aliases",
   status: "Status",
   npn: "NPN",
@@ -59,8 +63,10 @@ export const AGENT_FIELD_LABELS: Record<AgentField, string> = {
   joinDate: "Join date",
   startDate: "Start date",
   ssnLast4: "SSN",
+  remarks: "Notes",
   licensedStates: "Licensed states",
   licenseNumbers: "Licence numbers",
+  licenseStatuses: "Licence statuses",
   licenseLines: "Lines of business",
   licenseDates: "Licence dates",
 };
@@ -104,7 +110,7 @@ type AgentFormProps = {
   onLicencesChange?: (
     licences: Pick<
       AgentValues,
-      "licensedStates" | "licenseNumbers" | "licenseLines" | "licenseDates"
+      "licensedStates" | "licenseNumbers" | "licenseStatuses" | "licenseLines" | "licenseDates"
     >,
   ) => Promise<string | null>;
 };
@@ -125,6 +131,9 @@ export function AgentForm({
       id={id}
       layout={layout}
       licenceEntry={licenceEntry}
+      nameParts
+      statuses={AGENT_STATUSES}
+      licenceStatuses={AGENT_LICENCE_STATUSES}
       pageExtra={pageExtra}
       onLicencesChange={onLicencesChange}
       title={editing ? `Edit ${editing.name}` : "Add agent"}

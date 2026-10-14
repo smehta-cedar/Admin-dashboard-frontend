@@ -7,7 +7,7 @@ import { getAgents } from "@/lib/agents";
 export default async function AgentProfileIndexPage() {
   if (!(await canViewModule("agents"))) return <NoAccess title="Agent profile" />;
   const agents = await getAgents();
-  const agent = agents.find((a) => a.status === "active") ?? agents[0];
+  const agent = agents.find((a) => a.status !== "inactive") ?? agents[0];
   if (!agent) notFound();
   redirect(`/agents/${agent.id}`);
 }

@@ -4,7 +4,7 @@
  * carries a token or a password.
  */
 
-import type { RolePermissions } from "@/lib/roles";
+import type { PermissionAction, RolePermissions } from "@/lib/roles";
 
 /** A user as the API serialises them (UserSerializer). */
 export type ApiUser = {
@@ -12,7 +12,7 @@ export type ApiUser = {
   email: string;
   full_name: string;
   phone: string;
-  role: { id: string; name: string } | null;
+  roles: { id: string; name: string }[];
   designation: { id: string; name: string } | null;
   is_active: boolean;
   is_superuser: boolean;
@@ -33,8 +33,8 @@ export type SessionUser = {
   /** Display name; falls back to the email when the profile has no name. */
   name: string;
   email: string;
-  /** The role's name, or null when none is assigned. */
-  role: string | null;
+  /** The roles' names; empty when none is assigned. */
+  roles: string[];
   designation: string | null;
   isSuperuser: boolean;
   /** The agent this account signs in as. Null for staff. */
@@ -48,7 +48,7 @@ export function toSessionUser(user: ApiUser): SessionUser {
     id: user.id,
     name: user.full_name?.trim() || user.email,
     email: user.email,
-    role: user.role?.name ?? null,
+    roles: user.roles.map((role) => role.name),
     designation: user.designation?.name ?? null,
     isSuperuser: user.is_superuser,
     agentId: user.agent_id,
@@ -59,4 +59,14 @@ export function toSessionUser(user: ApiUser): SessionUser {
 /** Whether the role lets this user see `module` (an API module code, e.g. "agents"). */
 export function canView(user: SessionUser, module: string): boolean {
   return Boolean(user.permissions[module]?.view);
+}
+
+/** Whether the role lets this user create in `module`. */
+export function canCreate(user: SessionUser, module: string): boolean {
+  return Boolean(user.permissions[module]?.create);
+}
+
+/** Whether the roles let this user do `action` in `module`. */
+export function can(user: SessionUser, module: string, action: PermissionAction): boolean {
+  return Boolean(user.permissions[module]?.[action]);
 }

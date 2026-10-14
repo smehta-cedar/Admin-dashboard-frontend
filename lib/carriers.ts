@@ -57,8 +57,8 @@ export type CarrierRecord = {
    * certification for each of these, and only these.
    */
   certificationLines: LineOfBusiness[];
-  /** The carrier's site or agent portal, a full URL. Empty when none. */
-  link: string;
+  /** Named links (portal, website, …), in the order entered; each name once. */
+  links: CarrierLink[];
   /**
    * US state codes from lib/us-states.ts the carrier is available in for the
    * agency, unique and in code order. Empty when none yet (not "all states").
@@ -86,7 +86,7 @@ export type CarrierField =
   | "aliases"
   | "linesOfBusiness"
   | "certificationLines"
-  | "link"
+  | "links"
   | "status"
   | "availableStates"
   | "licenseNumbers"
@@ -94,13 +94,16 @@ export type CarrierField =
   | "licenseLines"
   | "licenseDates";
 
+/** One of a carrier's named links: what it is, e.g. "Portal", and a full URL. */
+export type CarrierLink = { name: string; url: string };
+
 /** One state row as the form edits it: everything but the row's ID. */
 export type CarrierLicenseValues = Omit<StateLicense, "id">;
 
 /** What the add / edit form submits. The available states come from the rows. */
 export type CarrierValues = Pick<
   CarrierRecord,
-  "name" | "aliases" | "linesOfBusiness" | "certificationLines" | "link" | "status"
+  "name" | "aliases" | "linesOfBusiness" | "certificationLines" | "links" | "status"
 > & {
   licenses: CarrierLicenseValues[];
 };
@@ -133,7 +136,7 @@ export type ApiCarrier = {
   aliases: string[];
   lines_of_business: string[];
   certification_lines: string[];
-  link: string;
+  links: CarrierLink[];
   available_states: string[];
   licenses: ApiCarrierLicense[];
   agent_accessible: boolean;
@@ -172,7 +175,9 @@ const NOTE_FIELDS: Record<string, CarrierField> = {
   aliases: "aliases",
   lines_of_business: "linesOfBusiness",
   certification_lines: "certificationLines",
-  link: "link",
+  // Notes from before links had names recorded the single "link".
+  link: "links",
+  links: "links",
   available_states: "availableStates",
   license_numbers: "licenseNumbers",
   license_statuses: "licenseStatuses",
@@ -197,7 +202,7 @@ export function toCarrierRecord(carrier: ApiCarrier): CarrierRecord {
     certificationLines: LINES_OF_BUSINESS.filter(
       (line) => carrier.lines_of_business.includes(line) && (carrier.certification_lines ?? []).includes(line),
     ),
-    link: carrier.link,
+    links: carrier.links ?? [],
     availableStates: [...new Set(carrier.available_states)].sort(),
     licenses: carrier.licenses
       .map((row) => toStateLicense(row, carrier.name))

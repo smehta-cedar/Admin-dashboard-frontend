@@ -1,16 +1,25 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { TOOLBAR_INPUT_CLASS } from "@/components/classes";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { PageHeader } from "@/components/page-header";
 import { useRequestsStore } from "@/components/requests-store";
 import type { AgentStateLicenseRecord } from "@/lib/agent-state-licenses";
-import { yearMonthOf } from "@/lib/calendar";
+import { localDateString, yearMonthOf } from "@/lib/calendar";
 import { REQUEST_STATUSES, REQUEST_TYPE_LABELS } from "@/lib/request-options";
 import type { MerchRequestRecord, RequestRecord, RequestStatus } from "@/lib/requests";
-import { formatLicenceDate } from "@/lib/state-licenses";
+import {
+  formatLicenceDate,
+  licenseDatesOf,
+  licenseLinesOf,
+  licenseNumbersOf,
+  licenseStatusesOf,
+  licensedStatesOf,
+  type StateLicenseStatus,
+} from "@/lib/state-licenses";
 import { US_STATE_NAMES } from "@/lib/us-states";
+import { saveAgentLicenses } from "../agents/actions";
 import { HrCalendar, type DayOffMark, type ExpiryMark } from "./hr-calendar";
 
 /*
@@ -19,13 +28,15 @@ import { HrCalendar, type DayOffMark, type ExpiryMark } from "./hr-calendar";
  * Requests come from the requests store on the dashboard layout, so one
  * filed from the navbar on any page is already here, and a status set here
  * is what the calendar draws a day off in. Licence expirations are the end
- * dates of the agents' state licence rows, passed in by page.tsx. Every
- * request is listed, whatever its type or status; contracts have no date so
- * the list is the only place they show. Merch orders from the shop
- * (the merch type) list too, with the buyer in the Person column and the
- * shipping and contact details in the row; only day-off requests that are
- * not denied reach the calendar. Status changes go to the API through the store; one the API
- * refuses is put back and its message shown above the calendar.
+ * dates of the agents' state licence rows, passed in by page.tsx; their
+ * status can be changed from the calendar's side panel. Every request is
+ * listed, whatever its type or status; contracts have no date so the list
+ * is the only place they show. Merch orders from the shop (the merch type)
+ * list too, with the buyer in the Person column and the shipping and contact
+ * details in the row; day-off requests of every status reach the calendar
+ * (denied struck through). Status changes go to the API through the store
+ * (requests) or saveAgentLicenses (licence rows); one the API refuses is put
+ * back and its message shown above the calendar.
  */
 
 type HrViewProps = {
@@ -45,11 +56,54 @@ const STATUS_TEXT_CLASSES: Record<RequestStatus, string> = {
 const rangeText = (start: string, end: string) =>
   start === end ? formatLicenceDate(start) : `${formatLicenceDate(start)} – ${formatLicenceDate(end)}`;
 
-export function HrView({ licenses, today }: HrViewProps) {
-  const { requests, agents, setStatus, statusError } = useRequestsStore();
-  const [month, setMonth] = useState(() => yearMonthOf(today));
+export function HrView({ licenses: initialLicenses, today: serverToday }: HrViewProps) {
+  const { requests, setStatus, statusError } = useRequestsStore();
+  // Server today can be UTC; after mount, prefer the browser's local calendar day.
+  const [today, setToday] = useState(serverToday);
+  const [month, setMonth] = useState(() => yearMonthOf(serverToday));
+  const [licenses, setLicenses] = useState(initialLicenses);
+  const [licenseStatusError, setLicenseStatusError] = useState<string | null>(null);
 
-  const agentName = (id: string) => agents.find((agent) => agent.id === id)?.name ?? `Agent ${id}`;
+  useEffect(() => {
+    setLicenses(initialLicenses);
+  }, [initialLicenses]);
+
+  useEffect(() => {
+    const local = localDateString();
+    setToday(local);
+    // Jump the month only when the user is still on the server's "today" month.
+    setMonth((current) => {
+      const serverMonth = yearMonthOf(serverToday);
+      const onServerTodayMonth =
+        current.year === serverMonth.year && current.month === serverMonth.month;
+      return onServerTodayMonth ? yearMonthOf(local) : current;
+    });
+  }, [serverToday]);
+
+  const setLicenseStatus = async (licenseId: string, agentId: string, status: StateLicenseStatus) => {
+    const agentRows = licenses.filter((row) => row.agentId === agentId);
+    const current = agentRows.find((row) => row.id === licenseId);
+    if (!current || current.status === status) return;
+
+    const updatedRows = agentRows.map((row) => (row.id === licenseId ? { ...row, status } : row));
+    const previous = licenses;
+    setLicenses((rows) => rows.map((row) => (row.id === licenseId ? { ...row, status } : row)));
+    setLicenseStatusError(null);
+
+    const result = await saveAgentLicenses(agentId, {
+      licensedStates: licensedStatesOf(updatedRows),
+      licenseNumbers: licenseNumbersOf(updatedRows),
+      licenseStatuses: licenseStatusesOf(updatedRows),
+      licenseLines: licenseLinesOf(updatedRows),
+      licenseDates: licenseDatesOf(updatedRows),
+    });
+
+    if (!result.ok) {
+      setLicenses(previous);
+      setLicenseStatusError(result.error.message);
+    }
+  };
+
   /** Who the request is for: the agent, or the tee buyer for a merch order. Names come with the record. */
   const personOf = (request: RequestRecord) =>
     request.type === "merch" ? request.buyerName : request.agentName;
@@ -71,7 +125,7 @@ export function HrView({ licenses, today }: HrViewProps) {
   const merchContact = (request: MerchRequestRecord) => [request.address, `${request.email} · ${request.phone}`];
 
   const dayOffs: DayOffMark[] = requests.flatMap((request) =>
-    request.type === "dayOff" && request.status !== "denied"
+    request.type === "dayOff"
       ? [
           {
             key: request.id,
@@ -89,7 +143,8 @@ export function HrView({ licenses, today }: HrViewProps) {
     .filter((license) => license.endDate)
     .map((license) => ({
       key: license.id,
-      agentName: agentName(license.agentId),
+      agentId: license.agentId,
+      agentName: license.agentName,
       state: license.state,
       date: license.endDate,
       startDate: license.startDate,
@@ -192,10 +247,15 @@ export function HrView({ licenses, today }: HrViewProps) {
         }
       />
 
-      <div role="alert" className="mb-4">
+      <div role="alert" className="mb-4 space-y-2">
         {statusError ? (
           <p className="rounded-md bg-warn-soft px-3 py-2 text-sm text-warn-ink">
             The status change was refused: {statusError}
+          </p>
+        ) : null}
+        {licenseStatusError ? (
+          <p className="rounded-md bg-warn-soft px-3 py-2 text-sm text-warn-ink">
+            The licence status change was refused: {licenseStatusError}
           </p>
         ) : null}
       </div>
@@ -207,6 +267,7 @@ export function HrView({ licenses, today }: HrViewProps) {
         dayOffs={dayOffs}
         expiries={expiries}
         onStatusChange={setStatus}
+        onLicenseStatusChange={setLicenseStatus}
       />
 
       <section aria-labelledby="hr-requests-heading" className="mt-8">

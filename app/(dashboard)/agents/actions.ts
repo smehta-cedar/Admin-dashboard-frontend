@@ -39,16 +39,20 @@ export type SaveAgentResult =
 /** API field name -> form field, for a 400's errors. Anything else goes under the form. */
 const ERROR_FIELDS: Record<string, ProducerError["field"]> = {
   name: "name",
+  first_name: "name",
+  last_name: "name",
   npn: "npn",
   address: "address",
   licenses: "licenseNumbers",
 };
 
 /** The licence list as the API replaces it. A blank date is left to the API. */
-function licenseBody(values: Pick<AgentValues, "licensedStates" | "licenseNumbers" | "licenseLines" | "licenseDates">) {
+function licenseBody(values: Pick<AgentValues, "licensedStates" | "licenseNumbers" | "licenseStatuses" | "licenseLines" | "licenseDates">) {
   return values.licensedStates.map((state) => ({
     state,
     license_number: values.licenseNumbers[state] ?? "",
+    // Missing (a state with no status yet) is left to the API: active for a new row.
+    status: values.licenseStatuses[state] ?? null,
     life: values.licenseLines[state]?.life ?? false,
     health: values.licenseLines[state]?.health ?? false,
     start_date: values.licenseDates[state]?.startDate || null,
@@ -59,7 +63,9 @@ function licenseBody(values: Pick<AgentValues, "licensedStates" | "licenseNumber
 /** Adds an agent, or edits the one with `editingId`. Resolves with the saved agent and their licence rows. */
 export async function saveAgent(values: AgentValues, editingId?: string): Promise<SaveAgentResult> {
   const body = {
-    name: values.name,
+    // The API builds the full name from the parts.
+    first_name: values.firstName ?? "",
+    last_name: values.lastName ?? "",
     aliases: values.aliases,
     npn: values.npn,
     email: values.email,
@@ -71,7 +77,8 @@ export async function saveAgent(values: AgentValues, editingId?: string): Promis
     join_date: values.joinDate || null,
     start_date: values.startDate || null,
     ssn_last4: values.ssnLast4 ?? "",
-    is_active: values.status === "active",
+    remarks: values.remarks ?? "",
+    status: values.status,
     licenses: licenseBody(values),
   };
   const result = editingId
@@ -102,7 +109,7 @@ export async function saveAgent(values: AgentValues, editingId?: string): Promis
  */
 export async function saveAgentLicenses(
   agentId: string,
-  values: Pick<AgentValues, "licensedStates" | "licenseNumbers" | "licenseLines" | "licenseDates">,
+  values: Pick<AgentValues, "licensedStates" | "licenseNumbers" | "licenseStatuses" | "licenseLines" | "licenseDates">,
 ): Promise<SaveAgentResult> {
   const result = await apiFetch<ApiAgent>(`/agents/${encodeURIComponent(agentId)}/`, {
     method: "PATCH",

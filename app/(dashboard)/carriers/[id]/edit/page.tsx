@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { NoAccess } from "@/components/no-access";
-import { canViewModule } from "@/lib/access";
+import { canModule } from "@/lib/access";
 import { getCarrier } from "@/lib/carriers";
 import { CarrierFormPage } from "../../carrier-form";
 
@@ -12,7 +12,7 @@ type EditCarrierPageProps = {
 
 export async function generateMetadata(props: EditCarrierPageProps): Promise<Metadata> {
   const { id } = await props.params;
-  if (!(await canViewModule("carriers"))) return { title: "No access" };
+  if (!(await canModule("carriers", "update"))) return { title: "No access" };
   const carrier = await getCarrier(id);
   return { title: carrier ? `Edit ${carrier.name}` : "Carrier not found" };
 }
@@ -23,7 +23,7 @@ export async function generateMetadata(props: EditCarrierPageProps): Promise<Met
  * profile.
  */
 export default async function EditCarrierPage(props: EditCarrierPageProps) {
-  if (!(await canViewModule("carriers"))) return <NoAccess title="Edit carrier" />;
+  if (!(await canModule("carriers", "update"))) return <NoAccess title="Edit carrier" />;
   const { id } = await props.params;
   const { from } = await props.searchParams;
   const carrier = await getCarrier(id);

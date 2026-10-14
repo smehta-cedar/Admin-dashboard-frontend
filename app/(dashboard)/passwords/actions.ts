@@ -41,7 +41,6 @@ const ERROR_FIELDS: Record<string, PasswordError["field"]> = {
   carrier: "carrierId",
   username: "username",
   portal_password: "portalPassword",
-  link: "link",
   status: "status",
 };
 
@@ -54,7 +53,6 @@ export async function savePassword(values: PasswordValues, editingId?: string): 
     carrier_id: values.carrierId,
     username: values.username,
     portal_password: values.portalPassword,
-    link: values.link,
     status: values.status,
   };
   const result = editingId

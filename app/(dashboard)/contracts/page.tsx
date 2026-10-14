@@ -35,12 +35,14 @@ export default async function ContractsPage() {
         licensedStates,
         licenseNumbers,
       }))}
-      carriers={carriers.map(({ id, name, status, availableStates, agentAccessible }) => ({
+      carriers={carriers.map(({ id, name, status, availableStates, agentAccessible, licenses }) => ({
         id,
         name,
         status,
         availableStates,
         agentAccessible,
+        // Each state's Life / Health lines, for the map's Lines colouring.
+        licenses,
       }))}
       agencyLicenseNumbers={agency?.licenseNumbers ?? {}}
       // No agency record yet: nothing is striped.

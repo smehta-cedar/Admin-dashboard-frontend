@@ -2,6 +2,7 @@
 
 import { useId, useState, type FormEvent } from "react";
 import { GHOST_BUTTON_CLASS, INPUT_CLASS, PRIMARY_BUTTON_CLASS } from "@/components/classes";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Field } from "@/components/field";
 import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
 import type {
@@ -22,7 +23,9 @@ import type {
  * The view passes `onSave` and `onDelete`, which call the server actions
  * (./actions.ts) and update its own state. Delete asks once more inside the
  * dialog before it runs; the API refuses it while any user holds the role.
- * While a save or delete is in flight the buttons are disabled.
+ * A built-in role (Admin, Operations, Agent) keeps its name and stays active,
+ * and has no Delete. While a save or delete is in flight the buttons are
+ * disabled.
  */
 
 /** Which dialog is open. Edit holds the role as it was when the dialog opened. */
@@ -32,6 +35,9 @@ export type { RoleError, RoleValues } from "@/lib/roles";
 
 /** Column order in the grid; also the order the API stores them in. */
 export const PERMISSION_ACTIONS: PermissionAction[] = ["view", "create", "update", "delete"];
+
+/** A built-in role's name and status, shown but not editable. */
+const LOCKED_CLASS = "cursor-not-allowed bg-surface-muted text-fg-muted";
 
 const NO_ACCESS: PermissionFlags = { view: false, create: false, update: false, delete: false };
 
@@ -78,6 +84,7 @@ function initialPermissions(modules: ModuleOption[], role?: RoleRecord): RolePer
 /** The dialog's form. Mounted per open, so its errors start clear each time. */
 function RoleForm({ id, editor, modules, onSave, onDelete, close }: RoleFormProps) {
   const editing = editor.mode === "edit" ? editor.role : undefined;
+  const builtIn = editing?.builtIn ?? false;
   const [permissions, setPermissions] = useState(() => initialPermissions(modules, editing));
   const [error, setError] = useState<RoleError | null>(null);
   const [busy, setBusy] = useState(false);
@@ -152,19 +159,13 @@ function RoleForm({ id, editor, modules, onSave, onDelete, close }: RoleFormProp
   };
 
   const handleDelete = async () => {
-    if (!editing || busy) return;
-    setBusy(true);
-    try {
-      const deleteError = await onDelete(editing);
-      if (deleteError) {
-        setConfirmingDelete(false);
-        setError(deleteError);
-        return;
-      }
-      close();
-    } finally {
-      setBusy(false);
+    if (!editing) return;
+    const deleteError = await onDelete(editing);
+    if (deleteError) {
+      setError(deleteError);
+      return;
     }
+    close();
   };
 
   return (
@@ -184,10 +185,11 @@ function RoleForm({ id, editor, modules, onSave, onDelete, close }: RoleFormProp
             maxLength={100}
             autoComplete="off"
             defaultValue={editing?.name}
+            readOnly={builtIn}
             aria-invalid={nameError ? true : undefined}
             aria-describedby={nameError ? `${id}-name-error` : undefined}
             onChange={clear}
-            className={INPUT_CLASS}
+            className={builtIn ? `${INPUT_CLASS} ${LOCKED_CLASS}` : INPUT_CLASS}
           />
         </Field>
         <Field label="Status" htmlFor={`${id}-status`}>
@@ -195,8 +197,10 @@ function RoleForm({ id, editor, modules, onSave, onDelete, close }: RoleFormProp
             id={`${id}-status`}
             name="status"
             defaultValue={editing?.status ?? "active"}
+            // Disabled sends no status, which saves as active.
+            disabled={builtIn}
             onChange={clear}
-            className={INPUT_CLASS}
+            className={builtIn ? `${INPUT_CLASS} ${LOCKED_CLASS}` : INPUT_CLASS}
           >
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
@@ -282,37 +286,15 @@ function RoleForm({ id, editor, modules, onSave, onDelete, close }: RoleFormProp
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
         <div>
-          {editing ? (
-            confirmingDelete ? (
-              <span className="flex flex-wrap items-center gap-2 text-sm text-fg-muted">
-                Delete {editing.name}?
-                <button
-                  type="button"
-                  onClick={handleDelete}
-                  disabled={busy}
-                  className="rounded-md bg-danger-strong px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
-                >
-                  {busy ? "Deleting…" : "Yes, delete"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmingDelete(false)}
-                  disabled={busy}
-                  className={GHOST_BUTTON_CLASS}
-                >
-                  Keep
-                </button>
-              </span>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setConfirmingDelete(true)}
-                disabled={busy}
-                className={`${GHOST_BUTTON_CLASS} text-danger hover:text-danger`}
-              >
-                Delete role
-              </button>
-            )
+          {editing && !builtIn ? (
+            <button
+              type="button"
+              onClick={() => setConfirmingDelete(true)}
+              disabled={busy}
+              className={`${GHOST_BUTTON_CLASS} text-danger hover:text-danger`}
+            >
+              Delete role
+            </button>
           ) : null}
         </div>
         <div className="flex gap-2">
@@ -320,10 +302,17 @@ function RoleForm({ id, editor, modules, onSave, onDelete, close }: RoleFormProp
             Cancel
           </button>
           <button type="submit" disabled={busy} className={`${PRIMARY_BUTTON_CLASS} disabled:opacity-60`}>
-            {busy && !confirmingDelete ? "Saving…" : editing ? "Save changes" : "Add role"}
+            {busy ? "Saving…" : editing ? "Save changes" : "Add role"}
           </button>
         </div>
       </div>
+      <ConfirmDialog
+        open={confirmingDelete}
+        title="Delete role"
+        message={editing ? `Delete the ${editing.name} role?` : ""}
+        onConfirm={handleDelete}
+        onClose={() => setConfirmingDelete(false)}
+      />
     </form>
   );
 }

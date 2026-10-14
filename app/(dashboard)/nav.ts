@@ -13,6 +13,8 @@ const NAV_ITEMS: NavItem[] = [
   {
     href: "/agents",
     label: "Agents",
+    listLabel: "Agent list",
+    listIcon: "list",
     icon: "agents",
     module: "agents",
     searchable: true,
@@ -22,6 +24,7 @@ const NAV_ITEMS: NavItem[] = [
       {
         href: "/agents/profile",
         label: "Agent profile",
+        icon: "profile",
         activePrefix: "/agents/",
         activeExcept: ["/agents/new", "/edit"],
       },
@@ -30,6 +33,8 @@ const NAV_ITEMS: NavItem[] = [
   {
     href: "/carriers",
     label: "Carriers",
+    listLabel: "Carrier list",
+    listIcon: "list",
     icon: "carriers",
     module: "carriers",
     searchable: true,
@@ -39,6 +44,7 @@ const NAV_ITEMS: NavItem[] = [
       {
         href: "/carriers/profile",
         label: "Carrier profile",
+        icon: "profile",
         activePrefix: "/carriers/",
         activeExcept: ["/carriers/new", "/edit"],
       },
@@ -50,22 +56,26 @@ const NAV_ITEMS: NavItem[] = [
   {
     href: "/contracts",
     label: "Contracts",
+    listLabel: "By state",
+    listIcon: "map",
     icon: "contracts",
     module: "contracts",
     searchable: true,
     // Contracts itself is the by-state view; by-carriers is the one sub-link.
-    children: [{ href: "/contracts/by-carriers", label: "By carriers" }],
+    children: [{ href: "/contracts/by-carriers", label: "By carriers", icon: "carriers" }],
   },
   // Requests and the calendar they land on.
-  { href: "/hr", label: "HR", icon: "hr", module: "requests" },
+  { href: "/hr", label: "Calendar", icon: "hr", module: "requests" },
   // What the shop sells, and the shop itself; orders land on HR. The shop's
   // catalog is open to everyone, so it stays when Storefront is hidden.
   {
     href: "/storefront",
     label: "Storefront",
+    listLabel: "Products",
+    listIcon: "tag",
     icon: "storefront",
     module: "storefront",
-    children: [{ href: "/storefront/shop", label: "Shop", module: null }],
+    children: [{ href: "/storefront/shop", label: "Shop", icon: "cart", module: null }],
   },
   { href: "/users", label: "Users", icon: "users", module: "users", searchable: true },
 ];

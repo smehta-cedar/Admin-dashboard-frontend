@@ -48,12 +48,14 @@ export default async function AgentProfilePage(props: PageProps<"/agents/[id]">)
       // profile picks out this agent's contracts; states come only from those
       // appointments, as there are no carrier-less licenses.
       carriers={carriers
-        .map(({ id, name, status, availableStates, agentAccessible }) => ({
+        .map(({ id, name, status, availableStates, agentAccessible, licenses }) => ({
           id,
           name,
           status,
           availableStates,
           agentAccessible,
+          // Each state's Life / Health lines, for the Carriers map's badges.
+          licenses,
         }))
         .sort(byName)}
       initialContracts={carrierContracts}
@@ -62,12 +64,7 @@ export default async function AgentProfilePage(props: PageProps<"/agents/[id]">)
       certificationCarriers={carriers.map(certifiableCarrier)}
       passwords={passwords
         .filter((record) => record.agentId === id)
-        .map((record) => ({
-          ...record,
-          partyName: record.carrierName,
-          partyHref: `/carriers/${record.carrierId}`,
-        }))
-        .sort((a, b) => a.partyName.localeCompare(b.partyName))}
+        .sort((a, b) => a.carrierName.localeCompare(b.carrierName))}
       notes={notes}
       agencyLicensedStates={agency ? agency.licensedStates : null}
     />

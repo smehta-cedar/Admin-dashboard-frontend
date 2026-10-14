@@ -7,6 +7,7 @@ import { getAgents } from "@/lib/agents";
 import { allowForbidden } from "@/lib/api-server";
 import { getCarriers } from "@/lib/carriers";
 import { getPasswords } from "@/lib/passwords";
+import { getSitePasswords, getSites } from "@/lib/site-passwords";
 import { PasswordsView } from "./passwords-view";
 
 export const metadata: Metadata = {
@@ -15,21 +16,24 @@ export const metadata: Metadata = {
 
 export default async function PasswordsPage() {
   if (!(await canViewModule("passwords"))) return <NoAccess title="Passwords" />;
-  // The carrier filter (?carrier=) reads search params with useSearchParams.
-  // Rendering per request lets the server render the filtered table; a
-  // prerendered page would need a Suspense boundary and render the whole table
-  // on the client instead.
+  // The agent and carrier filters (?agent=, ?carrier=) read search params with
+  // useSearchParams. Rendering per request lets the server render the
+  // filtered tables; a prerendered page would need a Suspense boundary and
+  // render them on the client instead.
   await connection();
 
-  const [passwords, agencyRecord, agents, carriers] = await Promise.all([
+  const [passwords, sitePasswords, sites, agencyRecord, agents, carriers] = await Promise.all([
     getPasswords(),
+    getSitePasswords(),
+    // For the Add site password popup's Site select.
+    getSites(),
     allowForbidden(getAgency()),
     getAgents(),
     getCarriers(),
   ]);
   // The agency, for its own passwords. A role that can't read the agency still
   // gets it from an agency password it can see.
-  const agencyPassword = passwords.find((password) => password.agencyId);
+  const agencyPassword = [...passwords, ...sitePasswords].find((password) => password.agencyId);
   const agency = agencyRecord
     ? { id: agencyRecord.id, name: agencyRecord.name }
     : agencyPassword?.agencyId
@@ -38,7 +42,9 @@ export default async function PasswordsPage() {
 
   return (
     <PasswordsView
-      initialPasswords={passwords}
+      passwords={passwords}
+      sitePasswords={sitePasswords}
+      sites={sites}
       agency={agency}
       agents={agents.map(({ id, name, status }) => ({ id, name, status }))}
       carriers={carriers.map(({ id, name, status, agentAccessible }) => ({ id, name, status, agentAccessible }))}

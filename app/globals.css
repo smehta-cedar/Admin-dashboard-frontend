@@ -37,13 +37,13 @@
   /* ---- Surfaces ------------------------------------------------------- */
   /* The page behind everything. A cool grey-green rather than white, so the
      frosted cards (the `glass` utility) read as raised off it. */
-  --color-canvas: #e9efec;
+  --color-canvas: #e1e8e4;
   /* Cards, tables, dialogs, popovers — anything raised off the canvas. */
-  --color-surface: #ffffff;
+  --color-surface: #f6f8f7;
   /* Tinted recessed surface: nav rail, table headers, expanded rows. */
-  --color-surface-muted: #f7faf9;
+  --color-surface-muted: #eef2f0;
   /* Hover wash for ghost buttons and rows. */
-  --color-surface-hover: #eef2f1;
+  --color-surface-hover: #e6ebe9;
 
   /* ---- Text ----------------------------------------------------------- */
   /* Headings and body copy. */
@@ -134,6 +134,16 @@
   --color-map-pick-line: #b45309;
   --color-map-pick-soft: #fef3c7;
   --color-map-pick-soft-ink: #92400e;
+  /* Lines of business on a carrier's states map: categories, not a ramp,
+     so each is its own hue (blue, crimson, teal) and none is amber (the pick).
+     `none` is an available state with no line ticked. */
+  --color-map-life: #2563eb;
+  --color-map-health: #db2763;
+  --color-map-both: #0d9488;
+  --color-map-none: #9ca3af;
+  /* Icon colours for the Life (heart) and Health (cross) map badges. */
+  --color-line-life: #e11d48;
+  --color-line-health: #0284c7;
 
   --gradient-brand: linear-gradient(135deg, #30b48f, #73bd66);
   /* Filled part of a card's coverage bar; the unfilled remainder is the
@@ -148,8 +158,8 @@
  */
 /* Glass cards and the page glow behind them (see the `glass` utility). */
 :root {
-  --glass-bg: rgb(255 255 255 / 0.62);
-  --glass-line: rgb(255 255 255 / 0.75);
+  --glass-bg: rgb(246 248 247 / 0.62);
+  --glass-line: rgb(246 248 247 / 0.75);
   --page-glow:
     radial-gradient(60rem 40rem at 5% -10%, rgb(55 179 143 / 0.2), transparent 60%),
     radial-gradient(50rem 36rem at 100% 0%, rgb(115 189 102 / 0.16), transparent 60%),
@@ -244,6 +254,12 @@ html.dark {
   --color-map-pick-line: #fde68a;
   --color-map-pick-soft: #2a2312;
   --color-map-pick-soft-ink: #fcd34d;
+  --color-map-life: #4b8ff0;
+  --color-map-health: #e2557f;
+  --color-map-both: #2bb3a3;
+  --color-map-none: #6b7280;
+  --color-line-life: #fb7185;
+  --color-line-health: #38bdf8;
 }
 
 @theme inline {

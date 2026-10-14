@@ -9,7 +9,6 @@ import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge, statusRank } from "@/components/status-badge";
 import type { CarrierRecord } from "@/lib/carriers";
-import { rowNumbers } from "@/lib/row-numbers";
 import { US_STATE_NAMES, stateSummary } from "@/lib/us-states";
 
 /*
@@ -31,11 +30,6 @@ type CarriersViewProps = {
 };
 
 export function CarriersView({ carriers }: CarriersViewProps) {
-  // The ID shown is the carrier's place in the name-sorted list, 1…n, not the
-  // API's UUID (that only appears in the profile URL). It moves when a name
-  // sorts elsewhere, so it is a row number, not a key.
-  const numbers = useMemo(() => rowNumbers(carriers), [carriers]);
-
   // Sort and search run in DataTable. Search covers aliases, so a carrier can be
   // found by any name it appears under on statements.
   const columns = useMemo<DataTableColumn<CarrierRecord>[]>(
@@ -52,14 +46,6 @@ export function CarriersView({ carriers }: CarriersViewProps) {
             <EditIcon className="size-3.5 shrink-0" />
           </Link>
         ),
-      },
-      {
-        id: "number",
-        header: "ID",
-        cell: (carrier) => numbers.get(carrier.id),
-        className: "font-mono text-fg-muted",
-        sortValue: (carrier) => numbers.get(carrier.id) ?? 0,
-        searchText: (carrier) => String(numbers.get(carrier.id) ?? ""),
       },
       {
         id: "name",
@@ -104,7 +90,7 @@ export function CarriersView({ carriers }: CarriersViewProps) {
         searchText: (carrier) => carrier.status,
       },
     ],
-    [numbers],
+    [],
   );
 
   const addButton = (

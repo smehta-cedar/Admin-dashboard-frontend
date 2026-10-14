@@ -1,27 +1,38 @@
 "use client";
 
 import { useId, useState, type FormEvent } from "react";
-import { GHOST_BUTTON_CLASS, INPUT_CLASS, PRIMARY_BUTTON_CLASS } from "@/components/classes";
-import { Field } from "@/components/field";
 import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
-import { StateSelect } from "@/components/state-select";
-import type { StateLicense } from "@/lib/state-licenses";
+import { STATE_LICENSE_DIALOG_CLASS, StateLicenseForm } from "@/components/state-license-form";
+import {
+  AGENT_LICENCE_STATUSES,
+  licenceDetailsRequired,
+  statusForEndDate,
+  todayIso,
+  type StateLicense,
+  type StateLicenseStatus,
+} from "@/lib/state-licenses";
 import { US_STATE_NAMES } from "@/lib/us-states";
 
 /*
  * One agent state licence, added or edited on its own from the profile's
- * State licences panel: the state, the licence number, the lines (Health,
- * Life) and the start and end dates — the same fields as a row on the agent
- * form. There is no status: the agent API doesn't take one. Editing a listed
+ * State licences panel: the state, the licence number, the status, the lines
+ * (Health, Life) and the start and end dates — the same fields as a row on
+ * the agent form. Editing a listed
  * licence can also remove it, behind a second click so a slip doesn't drop
  * a row.
  *
  * The profile passes `onSave` and `onRemove`, which replace the agent's
  * licence list through saveAgentLicenses (../actions.ts); each resolves with
  * the message to show under the form, or null to close. Before saving, the
- * form checks a state is picked, the state isn't already licensed (unless it
- * is this row's own) and the end date isn't before the start date.
+ * form checks a state is picked, the number and end date are filled when the
+ * licence is active (other statuses may leave them blank), the state isn't
+ * already licensed (unless it is this row's own) and the end date isn't
+ * before the start date. An end date before today makes the status Expired.
  *
+ * The state list holds only the agency's licensed states (`agencyStates`),
+ * plus the row's own state when editing one outside them.
+ *
+ * Layout comes from StateLicenseForm (components/state-license-form.tsx).
  * Mounted per open inside a ModalDialog, so its fields and errors start
  * fresh each time.
  */
@@ -30,6 +41,7 @@ import { US_STATE_NAMES } from "@/lib/us-states";
 export type AgentLicenseValues = {
   state: string;
   licenseNumber: string;
+  status: StateLicenseStatus;
   life: boolean;
   health: boolean;
   startDate: string;
@@ -44,6 +56,8 @@ type AgentLicenseDialogProps = {
   editor: AgentLicenseEditor | null;
   /** The states already licensed, so a second row for one can't be added. */
   licensedStates: string[];
+  /** The agency's licensed states, the only ones offered. Null offers every state. */
+  agencyStates: string[] | null;
   /** Saves the licence; `previousState` is the row being edited, or null for a new one. Resolves with the error to show. */
   onSave: (values: AgentLicenseValues, previousState: string | null) => Promise<string | null>;
   /** Removes the row for `state`. Resolves with the error to show. */
@@ -52,18 +66,24 @@ type AgentLicenseDialogProps = {
   onClose: () => void;
 };
 
-export function AgentLicenseDialog({ editor, licensedStates, onSave, onRemove, onClose }: AgentLicenseDialogProps) {
+export function AgentLicenseDialog({ editor, licensedStates, agencyStates, onSave, onRemove, onClose }: AgentLicenseDialogProps) {
   const { dialogRef, close } = useModalDialog(editor !== null);
   const id = useId();
 
   // Clearing `editor` unmounts the form, which resets it.
   return (
-    <ModalDialog dialogRef={dialogRef} labelledBy={`${id}-title`} onClose={onClose}>
+    <ModalDialog
+      dialogRef={dialogRef}
+      labelledBy={`${id}-title`}
+      onClose={onClose}
+      className={STATE_LICENSE_DIALOG_CLASS}
+    >
       {editor ? (
         <LicenseForm
           id={id}
           license={editor.mode === "edit" ? editor.license : null}
           licensedStates={licensedStates}
+          agencyStates={agencyStates}
           onSave={onSave}
           onRemove={onRemove}
           close={close}
@@ -78,27 +98,27 @@ type LicenseFormProps = {
   /** The row being edited, or null for a new licence. */
   license: StateLicense | null;
   licensedStates: string[];
+  agencyStates: string[] | null;
   onSave: AgentLicenseDialogProps["onSave"];
   onRemove: AgentLicenseDialogProps["onRemove"];
   close: () => void;
 };
 
-/** The line checkboxes, in the order the agent form shows them. */
-const LINES = [
-  { key: "health", label: "Health" },
-  { key: "life", label: "Life" },
-] as const;
-
-function LicenseForm({ id, license, licensedStates, onSave, onRemove, close }: LicenseFormProps) {
+function LicenseForm({ id, license, licensedStates, agencyStates, onSave, onRemove, close }: LicenseFormProps) {
   const [state, setState] = useState(license?.state ?? "");
+  const [status, setStatus] = useState<StateLicenseStatus>(license?.status ?? "active");
+  const detailsRequired = licenceDetailsRequired(status);
   // The dates are controlled so the end date's `min` can follow the start.
-  const [startDate, setStartDate] = useState(license?.startDate ?? "");
+  const [startDate, setStartDate] = useState(license ? license.startDate : todayIso());
   const [endDate, setEndDate] = useState(license?.endDate ?? "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmingRemove, setConfirmingRemove] = useState(false);
 
   const stateName = US_STATE_NAMES[state] ?? state;
+  // An edited row keeps its own state on the list even if the agency has since lost it.
+  const allowedStates =
+    agencyStates && license && !agencyStates.includes(license.state) ? [...agencyStates, license.state] : agencyStates;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -107,6 +127,7 @@ function LicenseForm({ id, license, licensedStates, onSave, onRemove, close }: L
     const values: AgentLicenseValues = {
       state,
       licenseNumber: String(data.get("licenseNumber") ?? "").trim(),
+      status,
       life: data.get("life") === "on",
       health: data.get("health") === "on",
       startDate,
@@ -115,6 +136,14 @@ function LicenseForm({ id, license, licensedStates, onSave, onRemove, close }: L
 
     if (!values.state) {
       setError("Pick a state.");
+      return;
+    }
+    if (!values.licenseNumber && detailsRequired) {
+      setError(`Enter the ${stateName} licence number.`);
+      return;
+    }
+    if (!values.endDate && detailsRequired) {
+      setError(`Enter the ${stateName} licence end date.`);
       return;
     }
     if (values.state !== license?.state && licensedStates.includes(values.state)) {
@@ -141,142 +170,55 @@ function LicenseForm({ id, license, licensedStates, onSave, onRemove, close }: L
   };
 
   const handleRemove = async () => {
-    if (!license || busy) return;
-    setBusy(true);
+    if (!license) return;
     setError(null);
-    try {
-      const message = await onRemove(license.state);
-      if (message) {
-        setError(message);
-        setConfirmingRemove(false);
-        return;
-      }
-      close();
-    } finally {
-      setBusy(false);
+    const message = await onRemove(license.state);
+    if (message) {
+      setError(message);
+      return;
     }
+    close();
   };
 
-  const title = license ? `Edit ${US_STATE_NAMES[license.state] ?? license.state} licence` : "Add licence";
+  const title = license ? `Edit ${US_STATE_NAMES[license.state] ?? license.state} licence` : "Add State licence";
 
   return (
-    <form onSubmit={handleSubmit} className="p-6">
-      <h2 id={`${id}-title`} className="text-base font-semibold text-fg">
-        {title}
-      </h2>
-
-      <div className="mt-5 grid gap-4 sm:grid-cols-2">
-        <Field label="State" required htmlFor={`${id}-state`}>
-          <StateSelect
-            id={`${id}-state`}
-            name="state"
-            defaultValue={license?.state}
-            onChange={(code) => {
-              setState(code);
-              setError(null);
-            }}
-            invalid={Boolean(error) && !state}
-            describedBy={error ? `${id}-error` : undefined}
-          />
-        </Field>
-        <Field label="Licence number" htmlFor={`${id}-number`}>
-          <input
-            id={`${id}-number`}
-            name="licenseNumber"
-            type="text"
-            autoComplete="off"
-            defaultValue={license?.licenseNumber}
-            onChange={() => setError(null)}
-            className={INPUT_CLASS}
-          />
-        </Field>
-        <Field label="Start date" htmlFor={`${id}-start`}>
-          <input
-            id={`${id}-start`}
-            type="date"
-            value={startDate}
-            onChange={(event) => {
-              setStartDate(event.target.value);
-              setError(null);
-            }}
-            className={INPUT_CLASS}
-          />
-        </Field>
-        <Field label="End date" htmlFor={`${id}-end`}>
-          <input
-            id={`${id}-end`}
-            type="date"
-            min={startDate || undefined}
-            value={endDate}
-            onChange={(event) => {
-              setEndDate(event.target.value);
-              setError(null);
-            }}
-            className={INPUT_CLASS}
-          />
-        </Field>
-      </div>
-
-      <div role="group" aria-label="Lines" className="mt-4 flex items-center gap-4 text-sm text-fg">
-        {LINES.map((line) => (
-          <label key={line.key} className="flex items-center gap-1.5">
-            <input
-              type="checkbox"
-              name={line.key}
-              defaultChecked={license?.[line.key] ?? false}
-              className="size-4 accent-brand-strong"
-            />
-            {line.label}
-          </label>
-        ))}
-      </div>
-
-      <div id={`${id}-error`} role="alert" className="mt-4">
-        {error ? <p className="text-sm text-danger">{error}</p> : null}
-      </div>
-
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        {license ? (
-          confirmingRemove ? (
-            <>
-              <span className="text-sm text-fg-muted">Remove the {stateName} licence?</span>
-              <button
-                type="button"
-                onClick={handleRemove}
-                disabled={busy}
-                className={`${GHOST_BUTTON_CLASS} text-danger hover:text-danger`}
-              >
-                Yes, remove
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirmingRemove(false)}
-                disabled={busy}
-                className={GHOST_BUTTON_CLASS}
-              >
-                Keep it
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setConfirmingRemove(true)}
-              disabled={busy}
-              className={`${GHOST_BUTTON_CLASS} text-danger hover:text-danger`}
-            >
-              Remove
-            </button>
-          )
-        ) : null}
-        <div className="ml-auto flex gap-2">
-          <button type="button" onClick={close} disabled={busy} className={GHOST_BUTTON_CLASS}>
-            Cancel
-          </button>
-          <button type="submit" disabled={busy} className={`${PRIMARY_BUTTON_CLASS} disabled:opacity-60`}>
-            {busy ? "Saving…" : license ? "Save changes" : "Add licence"}
-          </button>
-        </div>
-      </div>
-    </form>
+    <StateLicenseForm
+      id={id}
+      title={title}
+      state={state}
+      onStateChange={setState}
+      defaultState={license?.state}
+      allowedStates={allowedStates ?? undefined}
+      stateInvalid={Boolean(error) && !state}
+      defaultLicenseNumber={license?.licenseNumber}
+      numberRequired={detailsRequired}
+      endDateRequired={detailsRequired}
+      status={status}
+      onStatusChange={setStatus}
+      statuses={AGENT_LICENCE_STATUSES}
+      showLines
+      defaultHealth={license?.health ?? false}
+      defaultLife={license?.life ?? false}
+      startDate={startDate}
+      endDate={endDate}
+      onStartDateChange={setStartDate}
+      onEndDateChange={(value) => {
+        setEndDate(value);
+        setStatus((current) => statusForEndDate(current, value));
+      }}
+      error={error}
+      onClearError={() => setError(null)}
+      busy={busy}
+      canRemove={Boolean(license)}
+      onRequestRemove={() => setConfirmingRemove(true)}
+      onCancel={close}
+      submitLabel={license ? "Save changes" : "Add licence"}
+      onSubmit={handleSubmit}
+      confirmingRemove={confirmingRemove}
+      removeMessage={license ? `Delete the ${US_STATE_NAMES[license.state] ?? license.state} licence?` : ""}
+      onConfirmRemove={handleRemove}
+      onCloseConfirmRemove={() => setConfirmingRemove(false)}
+    />
   );
 }

@@ -41,7 +41,7 @@ Shared pieces (extracted when Carriers landed — use these, don't copy):
 | `components/note-list.tsx` | `NoteList` (generic; pass `labels={FIELD_LABELS}`) |
 | `components/data-table.tsx` | `DataTable`, `DataTableColumn<T>`, `DataTableRowContext` (sort + search + pagination + expandable rows, §6) |
 | `components/table-pagination.tsx` | `TablePagination`, `useTablePagination` (5 / 10 / 20 page sizes; used by `DataTable` and `ProfileTable`) |
-| `components/status-badge.tsx` | `StatusBadge`, `statusLabel`, `statusRank` (sort order: active, review, pending, applied, jit, expired, cancelled, inactive; review, applied, expired, cancelled and jit are state-licence only, and JIT renders uppercase) |
+| `components/status-badge.tsx` | `StatusBadge`, `statusLabel`, `statusRank` (sort order: active, pending, applied, expired, cancelled, inactive; applied, expired and cancelled are state-licence only) |
 | `components/modal-dialog.tsx` | `useModalDialog(open)` → `{ dialogRef, close }`, `ModalDialog` |
 | `components/classes.ts` | `INPUT_CLASS`, `PRIMARY_BUTTON_CLASS`, `GHOST_BUTTON_CLASS`, `ROW_BUTTON_CLASS`, `TOOLBAR_INPUT_CLASS` |
 | `lib/change-notes.ts` | `nextId`, `fieldText`, `diffValues(FIELDS, before, after, redact?)`, `FieldChange<F>` |
@@ -52,7 +52,8 @@ Shared pieces (extracted when Carriers landed — use these, don't copy):
 | `components/license-number.tsx` | `LicenseNumber` (a licensed-state card's number, click to copy, or "No number yet"; agent and agency profiles) |
 | `components/producer-form.tsx` | `ProducerForm` — the one agent/agency form (see Agency). Fields grouped into three titled sections with no help text (it is an internal form; the one hint is "Separate by comma." under the aliases): Identity (name, NPN, aliases on one line; the status select in the header), Contact (email, phone, then the producer's `extra` fields), Licences (an entry row — state dropdown, licence number, with `dates` a start and an end date, with `lines` Health and Life checkboxes, and an Add button — over the list of licences added, each with Edit and Remove; the list is what submits). `layout="dialog"` stacks them under rules in a modal; `layout="page"` (Add agent) lays them out as one card per row capped at the 2xl breakpoint, the Contact fields over four columns from `xl` (`FieldSpans`) with a sticky button bar. The licence entry row is one line in both layouts; required fields carry a red star (`Field required`) and nothing says "(optional)" |
 | `components/state-select.tsx` | `StateSelect` — searchable one-state combobox (type a name or code, pick from the list); submits the code through a hidden input under `name`. The agent address's State field |
-| `components/profile-shell.tsx` | Profile layout pieces: `ProfileNameRow`, `ProfileHeader`, `ProducerDetails`, `Detail`, `LicenseCards`, `StateChip`, `Count`, `Panel`, `PanelEmpty`, `ProfileTable` (paginated), `StateChipCell`, `PasswordsPanel`, `PROFILE_BUTTON_CLASS` (see Contracts → Profiles) |
+| `components/profile-shell.tsx` | Profile layout pieces: `ProfileNameRow`, `ProfileHeader`, `ProducerDetails`, `Detail`, `LicenseCards`, `StateChip`, `Count`, `Panel`, `PanelEmpty`, `ProfileTable` (paginated), `StateChipCell`, `PasswordsPanel` (wraps `PasswordsTable`), `PROFILE_BUTTON_CLASS` (see Contracts → Profiles) |
+| `components/passwords-table.tsx` | `PasswordsTable`: the one passwords table (Agent / Carrier, Links, username, password, status; Edit / Delete when given handlers). The Passwords page uses it directly; `PasswordsPanel` wraps it on agent and carrier profiles |
 | `app/(dashboard)/contracts/use-appointments.ts` | `useAppointments` — contracts + notes state, the open `AppointmentDialog` editor, and its `saveContract` (see Contracts → One dialog) |
 
 Constants a client view needs from an entity (like `LINES_OF_BUSINESS`) go in
@@ -200,9 +201,9 @@ Styling (inside `DataTable`):
   Primary name: `text-fg`, `whitespace-nowrap`.
 - Status badge: `rounded-md px-2 py-0.5 text-xs font-medium` +
   `active: bg-brand-soft text-brand-ink`, `inactive: bg-surface-hover text-fg-muted`
-  (and `pending: bg-warn-soft text-warn-ink` for Passwords; `review` and `applied:
+  (and `pending: bg-warn-soft text-warn-ink` for Passwords; `applied:
   bg-info-soft text-info-ink`, `expired: bg-danger-soft text-danger-ink` and an
-  outlined neutral `cancelled` / `jit` for state licences).
+  outlined neutral `cancelled` for state licences).
 - Row action: the first column, heading **Action**, icon-only edit button
   with the entity name in an `sr-only` span.
 - Secondary/list data (aliases, notes) does **not** go in the main row — see §7.
@@ -520,7 +521,9 @@ Same pattern as Carriers; the differences:
 - **Shop orders** go to `POST /requests/merch/` from
   `app/(dashboard)/storefront/shop/actions.ts` as the signed-in user, the
   same way HR files every other request (a 401 redirects to sign-in, a 403
-  reads "Your account can't place orders"). The shop used to be public at
+  reads "Your account can't place orders"). The API notifies admins; the
+  action returns the merch `RequestRecord` and the shop view
+  `appendRequest`s it into the requests store. The shop used to be public at
   `/shop` and post as a `Shop` service account (`SHOP_API_EMAIL` /
   `SHOP_API_PASSWORD`); the frontend no longer needs those variables.
   `lib/merch-requests.ts` and the writable `data/merch-requests.json` are
@@ -631,7 +634,9 @@ Same pattern as Carriers; the differences:
 - **Shop orders** go to `POST /requests/merch/` from
   `app/(dashboard)/storefront/shop/actions.ts` as the signed-in user, the
   same way HR files every other request (a 401 redirects to sign-in, a 403
-  reads "Your account can't place orders"). The shop used to be public at
+  reads "Your account can't place orders"). The API notifies admins; the
+  action returns the merch `RequestRecord` and the shop view
+  `appendRequest`s it into the requests store. The shop used to be public at
   `/shop` and post as a `Shop` service account (`SHOP_API_EMAIL` /
   `SHOP_API_PASSWORD`); the frontend no longer needs those variables.
   `lib/merch-requests.ts` and the writable `data/merch-requests.json` are
@@ -888,8 +893,10 @@ section list. The agent profile, top to bottom:
     this agent locked.
   - **State licences**: `StateLicensesPanel`, still edited through the
     profile's Edit button, not from the panel.
-  - **Passwords**: `PasswordsPanel`, read-only here; its links go to the
-    Passwords page.
+  - **Passwords**: `PasswordsPanel` (carrier passwords only). Add opens the
+    `AddPasswordDialog` popup with this agent fixed; Edit opens the carrier
+    password page with `from=agent`, which comes back here; Delete stays on
+    the panel. Site passwords are on the Passwords page.
   - **Notes**: `HydratedNoteList` with `AGENT_FIELD_LABELS`.
 - **Pending** is derived by `pendingItems`, not stored — there are no task
   records yet: no licences, licensed states with no licence number, an appointment with no writable states, licensed
@@ -918,11 +925,12 @@ is allowed on both.
 ### Requests (HR)
 
 Files: [lib/requests.ts](../lib/requests.ts) (server-only: types,
-`getRequests()`), [lib/request-options.ts](../lib/request-options.ts)
-(client-safe: `REQUEST_TYPES`, `REQUEST_TYPE_LABELS`, `REQUEST_STATUSES`, the
-pure `newRequest`), [data/requests.json](../data/requests.json),
-[components/requests-store.tsx](../components/requests-store.tsx),
+`getRequests()`, `toRequestRecord`), [lib/request-options.ts](../lib/request-options.ts)
+(client-safe: `REQUEST_TYPES`, `REQUEST_TYPE_LABELS`, `REQUEST_STATUSES`,
+`checkRequestValues`), [components/requests-store.tsx](../components/requests-store.tsx),
 [components/request-dialog.tsx](../components/request-dialog.tsx).
+`data/requests.json` / `data/merch-requests.json` are seed input for
+`python manage.py seed_requests`, not runtime reads.
 
 A request is one agent asking for one thing. `RequestRecord` is a union on
 `type`: `licensing` and `contract` each carry a `state` code and a `carrierId`,
@@ -937,42 +945,46 @@ shop under Storefront
 copy and options in [lib/shop.ts](../lib/shop.ts)). It has no `agentId`; it
 carries `buyerName`, `email`, `phone`, `address`, `size`, `color` and
 `quantity`. The shop's server action (its `actions.ts`) posts it as pending
-to `POST /requests/merch/` as the signed-in user, and `getRequests()` lists
-it with the rest. `REQUEST_TYPES` leaves merch out, so the dialog never
-offers it;
+to `POST /requests/merch/` as the signed-in user (admins are notified the same
+way as agent filings), returns the `MerchRequestRecord`, and the shop view
+appends it into the requests store. `getRequests()` also lists it with the
+rest. `REQUEST_TYPES` leaves merch out, so the dialog never offers it;
 `REQUEST_TYPE_LABELS` has it for the HR Type column.
 
-- **Filed from anywhere.** The navbar's "+" (`CreateRequestButton`, just
-  left of the theme toggle, label "Create a request") opens `RequestDialog`
-  in the existing `ModalDialog`: type first, then that type's fields (state
-  and carrier for licensing and contract), the
-  agent, an optional note. `newRequest` checks the agent, the type's fields
-  and that a day off ends on or after it starts, and returns a
-  `RequestError` shown under the field.
+- **Filed from anywhere (when allowed).** The navbar's "+" (`CreateRequestButton`,
+  just left of the theme toggle, label "Create a request") shows only for
+  users with `requests` create permission (and not agent accounts). It opens
+  `RequestDialog` in the existing `ModalDialog`: type first, then that type's
+  fields (state and carrier for licensing and contract), the agent, an
+  optional note. `checkRequestValues` checks the agent, the type's fields and
+  that a day off ends on or after it starts, and returns a `RequestError`
+  shown under the field. `addRequest` then calls `fileRequest`.
 - **Held above every page.** Because the button is global, the list lives in
-  `RequestsProvider`, mounted by the dashboard layout around `AppShell`
-  with the JSON plus slim `{ id, name, status }` agent and carrier options
-  (sorted by name; inactive ones marked in the selects).
-  `useRequestsStore()` gives `requests`, `agents`, `carriers`,
-  `unsavedCount`, `addRequest(values)` and `setStatus(id, status)`. A
-  request filed on any page is there when HR is opened; a refresh drops it.
-- No change notes yet: statuses change in place and the count feeds an
-  unsaved banner on the HR page.
+  `RequestsProvider`, mounted by the dashboard layout around `AppShell` with
+  the API list plus slim `{ id, name, status }` agent and carrier options
+  (sorted by name; inactive ones marked in the selects; a 403 on any of those
+  loads becomes an empty list). `useRequestsStore()` gives `requests`,
+  `agents`, `carriers`, `addRequest(values)`, `appendRequest(request)` and
+  `setStatus(id, status)`. A request filed on any page is there when HR is
+  opened; statuses persist through the API (no unsaved banner).
 
 **HR page** ([app/(dashboard)/hr/](../app/(dashboard)/hr/): `page.tsx`,
-`hr-view.tsx`, `hr-calendar.tsx`; sidebar item "HR" with the `hr` icon; no
-role gate). `page.tsx` loads every agent's licence rows and today's date;
-the view takes requests and names from the store.
+`hr-view.tsx`, `hr-calendar.tsx`; sidebar item "HR" with the `hr` icon; gated
+with `canViewModule("requests")`). `page.tsx` loads every agent's licence rows
+(with `agentName` on each row) and today's local date; the view takes requests
+from the store and realigns "today" to the browser's local calendar day after
+mount when the host timezone differs.
 
 - **Calendar** (`HrCalendar`): a plain `<table>` month grid from
-  `lib/calendar.ts` (`monthGrid`, `addMonths`, `monthLabel`, all on
-  `YYYY-MM-DD` strings, Sunday first, padded weeks), with previous / Today /
-  next. A day-off request draws on every day it covers as a bar rounded only
-  at its first and last day, coloured by status (pending amber, approved
-  green, denied struck through), the agent's name on the first day and on
-  each Sunday it runs into. A licence's `endDate` draws one chip that day
-  ("TX expires · Maria Alva"). Contracts have no date and stay on the list.
-  The month starts on the server's today (a prop) so the first render agrees.
+  `lib/calendar.ts` (`monthGrid`, `addMonths`, `monthLabel`, `localDateString`,
+  all on `YYYY-MM-DD` strings, Sunday first, padded weeks), with previous /
+  Today / next. A day-off request of any status draws on every day it covers
+  as a bar rounded only at its first and last day, coloured by status
+  (pending amber, approved green, denied muted and struck through), the
+  agent's name on the first day and on each Sunday it runs into. A licence's
+  `endDate` draws one chip that day ("TX expires · Maria Alva"). Licensing,
+  contract and merch have no date and stay on the list. The month starts on
+  today's date (a prop) so the first render agrees.
 - **List**: a `DataTable` of every request — Type, Person (the agent, or a
   tee order's buyer), Details (state with its name and the carrier name, the
   date range, or for merch the tee with quantity, size and color over the
@@ -1104,103 +1116,116 @@ Start, End; dates formatted from the string with `formatLicenceDate`, not
 
 ### Passwords
 
-Distinct from `app/login` (sign-in to this app). Passwords are carrier
-portal credentials stored in the dashboard.
+Distinct from `app/login` (sign-in to this app). Passwords are portal
+credentials stored in the dashboard, in two kinds that sit side by side:
 
-Files: [lib/passwords.ts](../lib/passwords.ts),
-[app/(dashboard)/passwords/page.tsx](../app/(dashboard)/passwords/page.tsx),
-[app/(dashboard)/passwords/passwords-view.tsx](../app/(dashboard)/passwords/passwords-view.tsx),
-[app/(dashboard)/passwords/password-dialog.tsx](../app/(dashboard)/passwords/password-dialog.tsx)
-(`PasswordDialog` + pure `savePassword`, which returns every error at once like
-`saveCarrier`; `PASSWORD_FIELD_LABELS` lives there; Add starts on the filtered
-carrier via `{ mode: "add", carrierId }`),
+- **Carrier passwords**: one agent's (or the agency's) login at one carrier.
+- **Site passwords**: one agent's (or the agency's) login at one **site**, for
+  logins that aren't at a carrier. A site is its own small record (a name,
+  unique whatever its case, and an optional link) added and edited only from
+  the site password form: no sidebar link, no list, no profile.
+
+Files: [lib/passwords.ts](../lib/passwords.ts) (carrier passwords),
+[lib/site-passwords.ts](../lib/site-passwords.ts) (sites and site passwords),
+[app/(dashboard)/passwords/](../app/(dashboard)/passwords/): `page.tsx`,
+`passwords-view.tsx`, `password-dialog.tsx` (`AddPasswordDialog`, the Add
+popup for both kinds), `password-form.tsx` (`PasswordFormPage`,
+`PASSWORD_FIELD_LABELS`), `site-password-form.tsx`, `site-dialog.tsx`
+(Add / Edit site), `actions.ts` and `site-actions.ts` (server actions),
+`return-to.ts`, and the route pages `new/`, `[id]/edit/`,
+`site-passwords/new/`, `site-passwords/[id]/edit/`.
+Tables: [components/passwords-table.tsx](../components/passwords-table.tsx)
+and [components/site-passwords-table.tsx](../components/site-passwords-table.tsx)
+(`SitePasswordsTable`);
 [components/credential-value.tsx](../components/credential-value.tsx).
 
-Passwords is the first entity that points at other entities. A password is one
-agent's portal access at one carrier. The writing number (producer ID) lives
-on the carrier contract.
+| Carrier password field | Required | Notes |
+| --- | --- | --- |
+| `agentId` / `agencyId` | one of them | Shown by name; the agency's own logins have `agencyId`. |
+| `carrierId` | yes | Shown by carrier name. One password per agent + carrier, and one per agency + carrier. |
+| `username` | unless pending | Portal username. |
+| `portalPassword` | unless pending | Stored exactly as typed. Dummy values only (see Security). |
+| `status` | yes | `"active" \| "pending" \| "inactive"`; `"active"` on add. |
 
-| Field | Required | Type | Notes |
-| --- | --- | --- | --- |
-| `agentId` | yes | string | Shown by agent name. |
-| `carrierId` | yes | string | Shown by carrier name. One password per agent + carrier. |
-| `username` | yes | string | Portal username. |
-| `portalPassword` | yes | string | Portal password, stored exactly as typed. Dummy values only (see Security). |
-| `status` | yes | `"active" \| "pending" \| "inactive"` | Default `"active"` on add. |
+A site password has the same fields with `siteId` (a dropdown of sites, not
+free text) in place of `carrierId`: one per agent + site, and one per
+agency + site.
 
-**Loading.** `page.tsx` loads passwords, notes, agents and carriers, and passes
-slim `{ id, name, status }` options; the form's agent and carrier `<select>`s
-are sorted by name with inactive ones marked "(inactive)". `page.tsx` also
-calls `await connection()` so the route renders per request: the view reads
-`?carrier=` with `useSearchParams`, and on a prerendered page that needs a
-Suspense boundary (or the build fails) and would render the table on the
-client. `getPasswords()` returns ID order; a record missing `portalPassword`
-loads as `""`, and a missing or unknown `status` loads as `"active"` with a
-`console.warn` naming the password ID (server log, not the browser).
+**The page.** `page.tsx` loads carrier passwords, site passwords, the
+agency, agents and carriers, and calls `await connection()` so the route
+renders per request (the view reads `?agent=` / `?carrier=` with
+`useSearchParams`). Two `Panel`s, full width:
 
-**Status.** `PasswordStatus` in `lib/passwords.ts` adds `pending`; it is
-Passwords-only. The Agent and Carrier status types are unchanged
-(`active | inactive`). `StatusBadge` accepts all three (pending is amber, §6).
+1. **Carrier passwords**: Action, Agent, Carrier, Links (the carrier's named
+   links), Portal username, Password, Status. The carrier filter and
+   "+ Add carrier password" sit in the panel header.
+2. **Site passwords**: laid out like carrier passwords, column for column:
+   Action (Edit, Delete), Agent, Site, Links (the site's one link, as
+   "Portal"), Portal username, Password, Status; "+ Add site password".
 
-**Table.**
+Both tables pass `aligned`, which gives every column its share from
+`PASSWORD_COLUMN_WIDTHS` (components/passwords-table.tsx; Carrier and Site
+share a slot). A `DataTable` column with a `width` switches the table to a
+fixed layout (`table-fixed`, at least `min-w-5xl`, scrolling sideways on
+narrow screens), so the two tables line up.
 
-- Columns: **Action, Agent, Carrier, Portal username, Password, Status**.
-  No ID column; agent and carrier show names.
-- Default sort: agent name, then carrier name. Rows are rebuilt from state on
-  every render, so an add or edit lands in its sorted place at once.
-- Rows do not expand: agent and carrier are plain text (notes still record on
-  add/edit, same as Agents and Carriers).
+Both password tables list the agency's logins first, then agent name, then
+carrier / site. The agent filter in the page header narrows both; the
+carrier filter narrows carrier passwords only. Both live in the URL
+(`?agent=<id>` or `?agent=agency`, `?carrier=<id>`), seeded on first render
+and kept with `window.history.replaceState`. The navbar search (`?q=`)
+narrows every table on the page.
 
-**Carrier filter.**
+**Add popup.** "+ Add carrier password", "+ Add site password" and the
+agent profile's "+ Add password" all open `AddPasswordDialog`, one design for
+both kinds: the title with Status at the top right, then Agent beside
+Carrier (or Site, with "+ Add site" / "Edit site" opening `SiteDialog` on
+top), Portal username beside Portal password; Cancel / Add password. It starts on the list's agent and carrier
+filters (the agent profile fixes its agent) and refreshes the page after a
+save. The carrier select offers only carriers open to agents unless the
+agency is chosen.
 
-- A `<select>` in `PageHeader` actions, left of Add password. Styled as
-  `INPUT_CLASS` without `mt-1` and `w-full`; sr-only label "Filter by carrier".
-  Options: "All carriers", then every carrier sorted by name (including ones
-  with no passwords), with " (inactive)" after inactive carriers.
-- Stored as `?carrier=<carrierId>`. The value is React state seeded from the
-  URL on first render, so the server and first client render agree (no flash
-  of all passwords, no hydration mismatch). A change sets state and calls
-  `window.history.replaceState`: no reload, no refetch. "All carriers" removes
-  the param. State drives the controlled select, rather than reading
-  `useSearchParams` on each render, so it updates on the same render.
-- Missing or unknown ID means all carriers; an unknown ID is left in the URL
-  but the dropdown shows "All carriers".
-- Filtering is client-side on the loaded list, before the sort. A password edited
-  so it no longer matches drops out of the list; the filter is not reset.
-- A filtered carrier with no passwords shows one table row:
-  "No passwords for <carrier name>." (`EmptyState` is still used when there are no
-  passwords at all.)
-- **Add pre-fill:** with a valid filter, Add opens with that carrier selected
-  (inactive carriers too), still editable. With no filter it starts empty.
-  Edit always starts on the password's own carrier. The form remounts on every
-  open, so it uses the filter at that moment.
-- **Hidden-record message:** when Add saves a password for a carrier other than the
-  filter, a gray notice ("Password added for UHC. It's hidden by the current
-  filter.") shows in the `role="status"` region under the unsaved banner. It
-  clears on the next filter change or after 6 seconds; it is keyed by password
-  ID, so a second hidden add restarts the timer.
+**Edit pages.** In the carrier page layout: cards plus the sticky Cancel /
+Save changes bar, returning to `returnTo`. (`/passwords/new` and
+`/passwords/site-passwords/new` still work as pages, but nothing links to
+them.)
+
+- Carrier password (`/passwords/new`, `/passwords/[id]/edit`): Identity
+  (Agent with the agency first, Carrier; Status in the header) and
+  Credentials (Portal username, Portal password). For an agent the carrier
+  select offers only carriers open to agents (`agentAccessible`: the agency's
+  contract has a number), plus an edited password's own carrier; the
+  agency's own password can be at any carrier. The list's Add and Edit carry
+  `?agent=` / `?carrier=`, which start the form there and come back to the
+  same filtered list; the agent profile adds `from=agent`, which returns to
+  the profile (`passwordReturnTo` in `return-to.ts`).
+- Site password (`/passwords/site-passwords/new`, `.../[id]/edit`): the same
+  cards with a Site dropdown. Under it, "+ Add site" and (for the chosen
+  site) "Edit site" open `SiteDialog` (Name, Link); a saved site joins the
+  dropdown and is chosen, and the chosen site's link shows beside the
+  buttons. Returns to the list, keeping `?agent=`.
+- Status **Pending** makes Portal username and Portal password optional on
+  both forms (the login isn't issued yet); Active and Inactive require both.
+  The status select is controlled so the required marks follow it.
 
 **Validation.**
 
-- Username is trimmed and uses `pattern=".*\S.*"`.
-- The password is **not** trimmed or lowercased and has no `pattern`.
-  `onSubmit` rejects it when it is blank after trimming ("Password can't be
-  blank."); otherwise it is saved exactly as typed, spaces included.
-- One password per agent + carrier, error under Carrier:
-  "Maria Alva already has a password at Humana."
-- Messages use agent and carrier names, never IDs.
+- Usernames and site names are trimmed and use `pattern=".*\S.*"`.
+- The password is **not** trimmed or lowercased. Unless the status is
+  pending, `onSubmit` rejects it when it is blank after trimming ("Password
+  can't be blank."); otherwise it is saved exactly as typed. The API applies
+  the same rule to both fields ("Username can't be blank." too), checked
+  against the values a PATCH leaves, so leaving Pending needs both.
+- A taken pair comes back under the Carrier (or Site) field, naming both:
+  "Maria Alva already has a password at Humana." An agent at a carrier
+  whose agency contract has no number gets "Add a contract number before an
+  agent can use this carrier." under Carrier.
+- A taken site name: "A site with this name already exists." under Name;
+  a bad link: "Enter a valid URL." under Link.
 
-**Notes.**
-
-- Agent and carrier are recorded **by name**, not ID: the view maps IDs to
-  names before `diffValues`, so a note still reads well if a name changes later.
-- The password is passed as a redacted field:
-  `diffValues(FIELDS, before, after, ["portalPassword"])` compares the real
-  values but records `{ field, from: "", to: "", redacted: true }`. `NoteList`
-  renders a redacted change as "Password set" on an added note and "Password
-  changed" on an edited one, alone or alongside other changes. The password
-  value is never written to a note. Agents and Carriers don't pass `redact`.
-- Status changes show as usual: "Status: active → pending".
+**Notes.** The API records both kinds' notes: the agent and carrier (or
+site) by name, the password redacted (`NoteList` renders "Password set" /
+"Password changed"). No page shows them yet.
 
 **Hide/show and copy** (`credential-value.tsx`).
 
@@ -1224,7 +1249,7 @@ Passwords-only. The Agent and Carrier status types are unchanged
 - The clipboard needs a secure context: HTTPS or `localhost`. Over plain http
   on a network address, every copy shows "Couldn't copy".
 - The form uses `PasswordInput`: `type="password"` until its eye button shows
-  it, hidden again every time the dialog opens, `autoComplete="new-password"`
+  it, hidden again every time the form opens, `autoComplete="new-password"`
   so the browser doesn't fill in the signed-in user's own saved password.
 - Icons are inline SVGs in the chevron's style (`aria-hidden`); no icon library.
 
