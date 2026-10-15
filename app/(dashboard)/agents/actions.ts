@@ -46,8 +46,16 @@ const ERROR_FIELDS: Record<string, ProducerError["field"]> = {
   licenses: "licenseNumbers",
 };
 
+type LicenceBodyValues = Pick<
+  AgentValues,
+  "licensedStates" | "licenseNumbers" | "licenseStatuses" | "licenseLines" | "licenseDates"
+> & {
+  /** Renewing by state code; a state left out keeps the row's own (the agent form doesn't edit it). */
+  licenseRenewing?: Record<string, boolean>;
+};
+
 /** The licence list as the API replaces it. A blank date is left to the API. */
-function licenseBody(values: Pick<AgentValues, "licensedStates" | "licenseNumbers" | "licenseStatuses" | "licenseLines" | "licenseDates">) {
+function licenseBody(values: LicenceBodyValues) {
   return values.licensedStates.map((state) => ({
     state,
     license_number: values.licenseNumbers[state] ?? "",
@@ -57,6 +65,7 @@ function licenseBody(values: Pick<AgentValues, "licensedStates" | "licenseNumber
     health: values.licenseLines[state]?.health ?? false,
     start_date: values.licenseDates[state]?.startDate || null,
     end_date: values.licenseDates[state]?.endDate || null,
+    renewing: values.licenseRenewing?.[state] ?? null,
   }));
 }
 
@@ -107,10 +116,7 @@ export async function saveAgent(values: AgentValues, editingId?: string): Promis
  * Replaces this agent's licences and leaves every other field alone. Used when
  * a licence is deleted on the edit page, so the row is gone before Save.
  */
-export async function saveAgentLicenses(
-  agentId: string,
-  values: Pick<AgentValues, "licensedStates" | "licenseNumbers" | "licenseStatuses" | "licenseLines" | "licenseDates">,
-): Promise<SaveAgentResult> {
+export async function saveAgentLicenses(agentId: string, values: LicenceBodyValues): Promise<SaveAgentResult> {
   const result = await apiFetch<ApiAgent>(`/agents/${encodeURIComponent(agentId)}/`, {
     method: "PATCH",
     body: { licenses: licenseBody(values) },

@@ -734,6 +734,7 @@ export function AgentProfile({
       licenseStatuses: licenseStatusesOf(rows),
       licenseLines: licenseLinesOf(rows),
       licenseDates: licenseDatesOf(rows),
+      licenseRenewing: Object.fromEntries(rows.map((row) => [row.state, row.renewing])),
     });
     if (!result.ok) return result.error.message;
     // The saved agent too: its licensed states decide each carrier's writable states.
@@ -1113,7 +1114,7 @@ export function AgentProfile({
                               {
                                 key: "status",
                                 label: "Status",
-                                value: <StatusBadge status={license.status} />,
+                                value: <StatusBadge status={license.status} renewing={license.renewing} />,
                                 filled: true,
                               },
                               {

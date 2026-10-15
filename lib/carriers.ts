@@ -155,6 +155,7 @@ type ApiCarrierLicense = {
   status: string;
   start_date: string | null;
   end_date: string | null;
+  renewing?: boolean;
   life: boolean;
   health: boolean;
 };
@@ -225,6 +226,7 @@ function toStateLicense(row: ApiCarrierLicense, carrierName: string): StateLicen
     status: knownStatus ? (row.status as StateLicenseStatus) : "active",
     startDate: row.start_date ?? "",
     endDate: row.end_date ?? "",
+    renewing: row.renewing ?? false,
     life: row.life,
     health: row.health,
   };

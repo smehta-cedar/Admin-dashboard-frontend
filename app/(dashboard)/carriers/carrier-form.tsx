@@ -361,6 +361,7 @@ const EMPTY_ROW: CarrierLicenseValues = {
   status: "active",
   startDate: "",
   endDate: "",
+  renewing: false,
   life: false,
   health: false,
 };

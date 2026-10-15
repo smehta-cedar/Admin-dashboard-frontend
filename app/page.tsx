@@ -160,7 +160,11 @@ export default async function LandingPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-canvas">
-      <SiteNav sections={SECTIONS} phone={PHONE} />
+      <SiteNav
+        sections={SECTIONS}
+        phone={PHONE}
+        pageLinks={[{ href: "/careers", label: "Careers" }]}
+      />
 
       <main className="flex-1">
         {/* Hero, on the gradient. */}
@@ -361,6 +365,9 @@ export default async function LandingPage() {
             <a href={FACEBOOK} target="_blank" rel="noopener noreferrer" className="hover:text-fg hover:underline">
               Facebook
             </a>
+            <Link href="/careers" className="hover:text-fg hover:underline">
+              Careers
+            </Link>
             <Link href="/login" className="hover:text-fg hover:underline">
               Log in
             </Link>

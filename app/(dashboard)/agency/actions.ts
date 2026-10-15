@@ -135,6 +135,7 @@ function toApiLicense(row: AgencyLicenseValues | AgencyStateLicenseRecord) {
     status: row.status,
     start_date: row.startDate || null,
     end_date: row.endDate || null,
+    renewing: row.renewing,
     life: row.life,
     health: row.health,
   };

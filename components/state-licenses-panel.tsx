@@ -112,7 +112,7 @@ export function StateLicensesPanel({
                 </td>
               ) : null}
               <td className="px-3 py-2.5 align-middle">
-                <StatusBadge status={license.status} />
+                <StatusBadge status={license.status} renewing={license.renewing} />
               </td>
               <td className="px-3 py-2.5 align-middle text-fg-muted">
                 <time dateTime={license.startDate}>{formatLicenceDate(license.startDate)}</time>

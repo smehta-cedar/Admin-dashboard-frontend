@@ -75,6 +75,8 @@ export type StateLicense = {
   startDate: string;
   /** YYYY-MM-DD. When it expires. */
   endDate: string;
+  /** A renewal is under way; the status keeps its own value. Only sticks while `renewalOpen(endDate)`. */
+  renewing: boolean;
   /** Whether the licence covers life insurance. */
   life: boolean;
   /** Whether the licence covers health insurance. */
@@ -93,9 +95,6 @@ export type LicenceValues = {
 export function licenceLinesText(lines: LicenceLines) {
   return [lines.life ? "Life" : "", lines.health ? "Health" : ""].filter(Boolean).join(" & ");
 }
-
-/** How long a new licence runs from its start date, until the form asks for dates. */
-const LICENCE_TERM_YEARS = 2;
 
 /** A row's owner's `licensedStates`: unique codes in code order. */
 export function licensedStatesOf(rows: StateLicense[]): string[] {
@@ -157,6 +156,17 @@ export function todayIso() {
   return isoDate(new Date());
 }
 
+/** How many days before its end date a licence can be marked renewing; the API's RENEWAL_WINDOW_DAYS. */
+const RENEWAL_WINDOW_DAYS = 60;
+
+/** Whether a licence ending on `endDate` can be marked renewing: it has an end date at most 60 days away, or passed. */
+export function renewalOpen(endDate: string, now = new Date()) {
+  if (!endDate) return false;
+  const last = new Date(now);
+  last.setDate(last.getDate() + RENEWAL_WINDOW_DAYS);
+  return endDate <= isoDate(last);
+}
+
 type ApplyInput<T extends StateLicense> = {
   /** Every row, every owner: new IDs must be unique across them all. */
   rows: T[];
@@ -172,8 +182,8 @@ type ApplyInput<T extends StateLicense> = {
 /**
  * The rows after the producer form is saved, pure. A checked state keeps its
  * row, with the number as entered; an unchecked state's row is dropped; a
- * newly checked state gets a new active row starting today and running
- * LICENCE_TERM_YEARS. Other owners' rows and the order are untouched, and
+ * newly checked state gets a new active row starting today, with no end
+ * date. Other owners' rows and the order are untouched, and
  * new rows go at the end, so the list stays in ID order.
  */
 export function applyLicenceEdits<T extends StateLicense>({
@@ -198,8 +208,6 @@ export function applyLicenceEdits<T extends StateLicense>({
   });
 
   const have = new Set(rows.filter(isOwn).map((row) => row.state));
-  const end = new Date(now);
-  end.setFullYear(end.getFullYear() + LICENCE_TERM_YEARS);
   // Numbered past every row that came in, so a dropped row's ID isn't reused.
   let id = Number(nextId(rows));
   const next = kept;
@@ -212,7 +220,8 @@ export function applyLicenceEdits<T extends StateLicense>({
         licenseNumber: numberFor(state),
         status: "active",
         startDate: isoDate(now),
-        endDate: isoDate(end),
+        endDate: "",
+        renewing: false,
         ...linesFor(state),
       }),
     );

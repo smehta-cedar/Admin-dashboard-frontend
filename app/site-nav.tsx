@@ -6,24 +6,27 @@ import { BrandLogo } from "@/components/brand-logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 /*
- * The public homepage's navbar (app/page.tsx). Sticky, on the canvas with a
+ * Public-site navbar (landing and careers). Sticky, on the canvas with a
  * light blur so the gradient bands show through as the page scrolls. Left,
- * the logo back to the top; middle, the page's sections; right, the theme
- * toggle, staff sign-in, and a Call button with the office number.
+ * the logo back to home; middle, in-page sections plus optional page links
+ * (e.g. Careers); right, the theme toggle, staff sign-in, and a Call button.
  *
  * The section link whose section is most in view is marked current, from an
  * IntersectionObserver on the section elements, so the bar doubles as a
- * progress marker. Below `lg` the sections and the sign-in link fold
- * into a panel under the bar; a link click, Escape, or widening the
- * viewport closes it.
+ * progress marker. Below `lg` the links and sign-in fold into a panel under
+ * the bar; a link click, Escape, or widening the viewport closes it.
  */
 
 export type SiteNavSection = { id: string; label: string };
+
+export type SiteNavPageLink = { href: string; label: string };
 
 type SiteNavProps = {
   sections: SiteNavSection[];
   /** As printed, e.g. "985-282-1000"; also used for the tel: link. */
   phone: string;
+  /** Extra routes in the middle nav (e.g. /careers), after section anchors. */
+  pageLinks?: SiteNavPageLink[];
 };
 
 const SECTION_LINK_CLASS =
@@ -33,7 +36,7 @@ const SECTION_LINK_ACTIVE = "bg-brand-soft text-brand-ink";
 const CALL_BUTTON_CLASS =
   "inline-flex items-center gap-2 rounded-md bg-brand-strong px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
 
-export function SiteNav({ sections, phone }: SiteNavProps) {
+export function SiteNav({ sections, phone, pageLinks = [] }: SiteNavProps) {
   const panelId = useId();
   const [open, setOpen] = useState(false);
   const [current, setCurrent] = useState<string | null>(null);
@@ -101,6 +104,20 @@ export function SiteNav({ sections, phone }: SiteNavProps) {
       );
     });
 
+  const routeLinks = (onClick?: () => void, className = "") =>
+    pageLinks.map((link) => (
+      <Link
+        key={link.href}
+        href={link.href}
+        onClick={onClick}
+        className={`${SECTION_LINK_CLASS} ${SECTION_LINK_IDLE} ${className}`}
+      >
+        {link.label}
+      </Link>
+    ));
+
+  const hasMiddleNav = sections.length > 0 || pageLinks.length > 0;
+
   return (
     <header className="sticky top-0 z-20 border-b border-line bg-canvas/90 backdrop-blur supports-[backdrop-filter]:bg-canvas/80">
       <div className="mx-auto flex h-16 w-full max-w-(--breakpoint-2xl) items-center gap-4 px-4 sm:px-6 lg:px-10">
@@ -108,10 +125,15 @@ export function SiteNav({ sections, phone }: SiteNavProps) {
           <BrandLogo height={34} />
         </Link>
 
-        {/* Section links: inline from lg. */}
-        <nav aria-label="Page sections" className="hidden flex-1 items-center justify-center gap-1 lg:flex">
-          {sectionLinks()}
-        </nav>
+        {/* Section + page links: inline from lg. */}
+        {hasMiddleNav ? (
+          <nav aria-label="Site" className="hidden flex-1 items-center justify-center gap-1 lg:flex">
+            {sectionLinks()}
+            {routeLinks()}
+          </nav>
+        ) : (
+          <div className="hidden flex-1 lg:block" />
+        )}
 
         <div className="ml-auto flex items-center gap-2 sm:gap-3">
           <ThemeToggle />
@@ -142,8 +164,9 @@ export function SiteNav({ sections, phone }: SiteNavProps) {
       {/* Folded panel below `lg`. Rendered always, hidden when closed, so the
           aria-controls target exists. */}
       <div id={panelId} hidden={!open} className="border-t border-line bg-canvas lg:hidden">
-        <nav aria-label="Page sections" className="mx-auto flex max-w-(--breakpoint-2xl) flex-col gap-1 px-4 py-3 sm:px-6 lg:px-10">
+        <nav aria-label="Site" className="mx-auto flex max-w-(--breakpoint-2xl) flex-col gap-1 px-4 py-3 sm:px-6 lg:px-10">
           {sectionLinks(() => setOpen(false), "block")}
+          {routeLinks(() => setOpen(false), "block")}
           <div className="mt-2 flex flex-col gap-1 border-t border-line pt-3">
             <Link
               href="/login"

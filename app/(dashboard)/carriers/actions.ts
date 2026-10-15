@@ -59,6 +59,7 @@ export async function saveCarrier(values: CarrierValues, editingId?: string): Pr
       status: row.status,
       start_date: row.startDate || null,
       end_date: row.endDate || null,
+      renewing: row.renewing,
       life: row.life,
       health: row.health,
     })),

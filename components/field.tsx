@@ -20,19 +20,32 @@ type FieldProps = {
   hint?: string;
   hintId?: string;
   error?: boolean;
+  /** Shown at the right end of the label row, e.g. a checkbox that goes with the field. */
+  action?: ReactNode;
   className?: string;
   children: ReactNode;
 };
 
 /** Form label, input, and optional hint or error text. */
-export function Field({ label, htmlFor, required, optional, hint, hintId, error, className, children }: FieldProps) {
+export function Field({ label, htmlFor, required, optional, hint, hintId, error, action, className, children }: FieldProps) {
+  const labelElement = (
+    <label htmlFor={htmlFor} className="block text-sm font-medium text-fg">
+      {label}
+      {required ? <RequiredStar /> : null}
+      {optional ? <span className="font-normal text-fg-subtle"> (optional)</span> : null}
+    </label>
+  );
+
   return (
     <div className={className}>
-      <label htmlFor={htmlFor} className="block text-sm font-medium text-fg">
-        {label}
-        {required ? <RequiredStar /> : null}
-        {optional ? <span className="font-normal text-fg-subtle"> (optional)</span> : null}
-      </label>
+      {action ? (
+        <div className="flex items-center justify-between gap-2">
+          {labelElement}
+          {action}
+        </div>
+      ) : (
+        labelElement
+      )}
       {children}
       {hint ? (
         <p id={hintId} className={`mt-1 text-xs ${error ? "text-danger" : "text-fg-subtle"}`}>

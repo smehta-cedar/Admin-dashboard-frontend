@@ -6,6 +6,7 @@ import { STATE_LICENSE_DIALOG_CLASS, StateLicenseForm } from "@/components/state
 import {
   AGENT_LICENCE_STATUSES,
   licenceDetailsRequired,
+  renewalOpen,
   statusForEndDate,
   todayIso,
   type StateLicense,
@@ -46,6 +47,8 @@ export type AgentLicenseValues = {
   health: boolean;
   startDate: string;
   endDate: string;
+  /** Sent only while the end date is within the renewal window. */
+  renewing: boolean;
 };
 
 /** What the dialog is open for: a new licence, or one of the listed rows. */
@@ -111,6 +114,7 @@ function LicenseForm({ id, license, licensedStates, agencyStates, onSave, onRemo
   // The dates are controlled so the end date's `min` can follow the start.
   const [startDate, setStartDate] = useState(license ? license.startDate : todayIso());
   const [endDate, setEndDate] = useState(license?.endDate ?? "");
+  const [renewing, setRenewing] = useState(license?.renewing ?? false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmingRemove, setConfirmingRemove] = useState(false);
@@ -132,6 +136,7 @@ function LicenseForm({ id, license, licensedStates, agencyStates, onSave, onRemo
       health: data.get("health") === "on",
       startDate,
       endDate,
+      renewing: renewing && renewalOpen(endDate),
     };
 
     if (!values.state) {
@@ -203,6 +208,8 @@ function LicenseForm({ id, license, licensedStates, agencyStates, onSave, onRemo
       startDate={startDate}
       endDate={endDate}
       onStartDateChange={setStartDate}
+      renewing={renewing}
+      onRenewingChange={setRenewing}
       onEndDateChange={(value) => {
         setEndDate(value);
         setStatus((current) => statusForEndDate(current, value));

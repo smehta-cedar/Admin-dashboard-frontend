@@ -6,11 +6,13 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Field } from "@/components/field";
 import { StateSelect } from "@/components/state-select";
 import { statusLabel } from "@/components/status-badge";
-import type { StateLicenseStatus } from "@/lib/state-licenses";
+import { renewalOpen, type StateLicenseStatus } from "@/lib/state-licenses";
 
 /*
  * Shared add/edit state-licence form layout: State | Status, Licence number |
- * Lines (optional), Start | End. Used by the agent and agency licence dialogs.
+ * Lines (optional), Start | End. While the end date is within the renewal
+ * window, a Renewing checkbox sits at the right of the Status label. Used by
+ * the agent and agency licence dialogs.
  */
 
 const LINES = [
@@ -44,6 +46,8 @@ type StateLicenseFormProps = {
   endDate: string;
   onStartDateChange: (value: string) => void;
   onEndDateChange: (value: string) => void;
+  renewing: boolean;
+  onRenewingChange: (value: boolean) => void;
   error: string | null;
   onClearError: () => void;
   busy: boolean;
@@ -82,6 +86,8 @@ export function StateLicenseForm({
   endDate,
   onStartDateChange,
   onEndDateChange,
+  renewing,
+  onRenewingChange,
   error,
   onClearError,
   busy,
@@ -120,7 +126,25 @@ export function StateLicenseForm({
             describedBy={error ? `${id}-error` : undefined}
           />
         </Field>
-        <Field label="Status" required htmlFor={`${id}-status`}>
+        <Field
+          label="Status"
+          required
+          htmlFor={`${id}-status`}
+          action={
+            renewalOpen(endDate) ? (
+              <label className="flex items-center gap-1.5 text-sm text-fg">
+                <input
+                  type="checkbox"
+                  name="renewing"
+                  checked={renewing}
+                  onChange={(event) => onRenewingChange(event.target.checked)}
+                  className="size-4 accent-brand-strong"
+                />
+                Renewing
+              </label>
+            ) : null
+          }
+        >
           <select
             id={`${id}-status`}
             name="status"

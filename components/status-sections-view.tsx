@@ -16,6 +16,8 @@ export type StatusRow = {
   name: string;
   detail: string;
   status: Status;
+  /** A licence whose renewal is under way. */
+  renewing?: boolean;
   /** The list page the record lives in, searched for it; left out when the role can't open it. */
   href?: string;
 };
@@ -61,7 +63,7 @@ export function StatusSectionsView({ sections, empty }: { sections: StatusSectio
                   </td>
                   <td className="min-w-0 truncate px-3 py-2.5 align-middle text-fg-muted">{row.detail || "—"}</td>
                   <td className="px-3 py-2.5 align-middle">
-                    <StatusBadge status={row.status} />
+                    <StatusBadge status={row.status} renewing={row.renewing} />
                   </td>
                 </>
               )}

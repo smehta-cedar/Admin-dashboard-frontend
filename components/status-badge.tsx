@@ -41,10 +41,18 @@ export const statusLabel = (status: Status) =>
 export const statusRank = (status: Status) =>
   ["active", "onboarding", "sdr", "pending", "applied", "expired", "cancelled", "inactive"].indexOf(status);
 
-export function StatusBadge({ status }: { status: Status }) {
-  return (
+/** `renewing` adds a muted "Renewing" after the badge: a licence renewal is under way, whatever the status. */
+export function StatusBadge({ status, renewing = false }: { status: Status; renewing?: boolean }) {
+  const badge = (
     <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[status]}`}>
       {statusLabel(status)}
+    </span>
+  );
+  if (!renewing) return badge;
+  return (
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+      {badge}
+      <span className="text-xs text-fg-subtle">Renewing</span>
     </span>
   );
 }

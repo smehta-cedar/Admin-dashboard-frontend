@@ -7,6 +7,7 @@ import type { AgencyStateLicenseRecord } from "@/lib/agency-state-licenses";
 import {
   AGENCY_LICENCE_STATUSES,
   licenceDetailsRequired,
+  renewalOpen,
   statusForEndDate,
   todayIso,
   type StateLicenseStatus,
@@ -50,6 +51,8 @@ export type AgencyLicenseValues = {
   health: boolean;
   startDate: string;
   endDate: string;
+  /** Sent only while the end date is within the renewal window. */
+  renewing: boolean;
   /** Agents to give a pending licence in the state; ones already licensed there are skipped. */
   agentIds: string[];
 };
@@ -127,6 +130,7 @@ function LicenseForm({ id, license, licensedStates, agents, onSave, onRemove, cl
   // The dates are controlled so the end date's `min` can follow the start.
   const [startDate, setStartDate] = useState(license ? license.startDate : todayIso());
   const [endDate, setEndDate] = useState(license?.endDate ?? "");
+  const [renewing, setRenewing] = useState(license?.renewing ?? false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmingRemove, setConfirmingRemove] = useState(false);
@@ -151,6 +155,7 @@ function LicenseForm({ id, license, licensedStates, agents, onSave, onRemove, cl
       health: data.get("health") === "on",
       startDate,
       endDate,
+      renewing: renewing && renewalOpen(endDate),
       agentIds: agentIds.filter((agentId) => !licensedAgentIds.has(agentId)),
     };
 
@@ -223,6 +228,8 @@ function LicenseForm({ id, license, licensedStates, agents, onSave, onRemove, cl
       startDate={startDate}
       endDate={endDate}
       onStartDateChange={setStartDate}
+      renewing={renewing}
+      onRenewingChange={setRenewing}
       onEndDateChange={(value) => {
         setEndDate(value);
         setStatus((current) => statusForEndDate(current, value));

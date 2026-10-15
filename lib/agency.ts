@@ -106,6 +106,7 @@ type ApiAgencyLicense = {
   status: string;
   start_date: string | null;
   end_date: string | null;
+  renewing?: boolean;
   life: boolean;
   health: boolean;
 };
@@ -163,6 +164,7 @@ export function toAgencyLicenseRecords(agency: ApiAgency): AgencyStateLicenseRec
       status: knownStatus ? (row.status as StateLicenseStatus) : "active",
       startDate: row.start_date ?? "",
       endDate: row.end_date ?? "",
+      renewing: row.renewing ?? false,
       life: Boolean(row.life),
       health: Boolean(row.health),
     };
