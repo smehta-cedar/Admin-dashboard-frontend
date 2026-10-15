@@ -935,7 +935,7 @@ Files: [lib/requests.ts](../lib/requests.ts) (server-only: types,
 A request is one agent asking for one thing. `RequestRecord` is a union on
 `type`: `licensing` and `contract` each carry a `state` code and a `carrierId`,
 `dayOff` an inclusive `startDate` / `endDate` (`YYYY-MM-DD`). Every request has `id`,
-`agentId`, `status` (`pending | approved | denied`, pending when filed),
+`agentId`, `status` (`pending | applied | approved | denied`, pending when filed),
 `createdAt` and an optional `note`. A missing or unknown status loads as
 pending with a `console.warn`.
 
@@ -990,7 +990,7 @@ mount when the host timezone differs.
   date range, or for merch the tee with quantity, size and color over the
   shipping address and the buyer's email and phone; the note under it),
   Filed (the UTC date of `createdAt`, formatted from the string), Status as
-  a `<select>` of pending / approved / denied that calls `setStatus`. HR is
+  a `<select>` of pending / applied / approved / denied that calls `setStatus`. HR is
   not a `searchable` nav item, so the table has no search of its own.
 
 ### Add page format (Add agent)
@@ -1180,7 +1180,11 @@ narrows every table on the page.
 agent profile's "+ Add password" all open `AddPasswordDialog`, one design for
 both kinds: the title with Status at the top right, then Agent beside
 Carrier (or Site, with "+ Add site" / "Edit site" opening `SiteDialog` on
-top), Portal username beside Portal password; Cancel / Add password. It starts on the list's agent and carrier
+top), a site password's **Link** (the chosen site's, full width, editable in
+place: a changed link is saved on the site before the password, so every
+password at that site shows it), Portal username beside Portal password;
+Cancel / Add password. The Edit site password page has the same Link field
+under its Site dropdown. Carrier links stay on the carrier. It starts on the list's agent and carrier
 filters (the agent profile fixes its agent) and refreshes the page after a
 save. The carrier select offers only carriers open to agents unless the
 agency is chosen.
@@ -1222,6 +1226,12 @@ them.)
   agent can use this carrier." under Carrier.
 - A taken site name: "A site with this name already exists." under Name;
   a bad link: "Enter a valid URL." under Link.
+
+**Pending passwords from contracts.** Adding a carrier to an agent (an
+appointment) or to the agency (an agency contract) makes the API add a
+pending carrier password for them there, blank username and password, unless
+one exists. The contract actions revalidate the dashboard, so it shows in the
+Passwords table and the agent profile's panel (and in Pending) at once.
 
 **Notes.** The API records both kinds' notes: the agent and carrier (or
 site) by name, the password redacted (`NoteList` renders "Password set" /

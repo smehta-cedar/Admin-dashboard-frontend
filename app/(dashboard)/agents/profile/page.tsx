@@ -5,7 +5,7 @@ import { getAgents } from "@/lib/agents";
 
 /** The sidebar's "Agent profile" link: opens the first active agent. */
 export default async function AgentProfileIndexPage() {
-  if (!(await canViewModule("agents"))) return <NoAccess title="Agent profile" />;
+  if (!(await canViewModule("agents.profile"))) return <NoAccess title="Agent profile" />;
   const agents = await getAgents();
   const agent = agents.find((a) => a.status !== "inactive") ?? agents[0];
   if (!agent) notFound();

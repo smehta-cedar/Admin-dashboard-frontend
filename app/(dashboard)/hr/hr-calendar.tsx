@@ -39,8 +39,10 @@ import { US_STATE_NAMES } from "@/lib/us-states";
  * licence expiry's status uses the agent licence statuses, through
  * onLicenseStatusChange.
  *
- * Contract requests have no date, so they never appear here; the list below
- * the calendar has them.
+ * Contract requests have no date, so they never appear on the grid; the list
+ * below the calendar has them. On the left, a Pending and an Applied card list
+ * those requests, whatever their type or month; a day off there opens the
+ * same panel.
  */
 
 export type DayOffMark = {
@@ -63,6 +65,15 @@ export type ExpiryMark = {
   licenseStatus: StateLicenseStatus;
 };
 
+/** One request in the status sidebar. `key` is the request id. */
+export type StatusItem = {
+  key: string;
+  person: string;
+  typeLabel: string;
+  detail: string;
+  status: RequestStatus;
+};
+
 type CalendarDetail = { kind: "dayOff"; mark: DayOffMark } | { kind: "expiry"; mark: ExpiryMark };
 
 type HrCalendarProps = {
@@ -71,6 +82,8 @@ type HrCalendarProps = {
   today: string;
   dayOffs: DayOffMark[];
   expiries: ExpiryMark[];
+  /** Every request, for the status cards on the left. */
+  requests: StatusItem[];
   /**
    * The request list's status change. A day off's key is that request's id.
    * Omit for a read-only calendar (agents see status as a badge).
@@ -84,14 +97,19 @@ type HrCalendarProps = {
 
 const DAY_OFF_CLASSES: Record<RequestStatus, string> = {
   pending: "bg-warn-soft text-warn-ink",
+  applied: "bg-stat-indigo-soft text-stat-indigo-ink",
   approved: "bg-brand-soft text-brand-ink",
   denied: "bg-surface-hover text-fg-muted line-through",
 };
+
+/** The sidebar cards: only the requests still open. */
+const SIDEBAR_STATUSES: RequestStatus[] = ["pending", "applied"];
 
 const EXPIRY_CLASS = "bg-info-soft text-info-ink";
 
 const STATUS_TEXT_CLASSES: Record<RequestStatus, string> = {
   pending: "text-warn-ink",
+  applied: "text-stat-indigo-ink",
   approved: "text-brand-ink",
   denied: "text-fg-muted",
 };
@@ -111,6 +129,7 @@ export function HrCalendar({
   today,
   dayOffs,
   expiries,
+  requests,
   onStatusChange,
   onLicenseStatusChange,
 }: HrCalendarProps) {
@@ -129,162 +148,218 @@ export function HrCalendar({
   })();
 
   return (
-    <section aria-labelledby={captionId} className="overflow-hidden rounded-xl border glass shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-surface-muted/80 px-3 py-2 sm:px-4">
-        <div className="flex min-w-0 items-center gap-1">
-          <span
-            aria-hidden="true"
-            className="mr-1.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-brand-soft text-brand-ink"
-          >
-            <CalendarGlyph />
-          </span>
+    <div className="grid items-start gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
+      <aside aria-label="Requests by status" className="space-y-3">
+        {SIDEBAR_STATUSES.map((status) => {
+          const items = requests.filter((item) => item.status === status);
+          return (
+            <section key={status} className="overflow-hidden rounded-xl border glass shadow-sm">
+              <h3 className="flex items-center justify-between gap-2 border-b border-line bg-surface-muted/80 px-3 py-2 text-sm font-semibold text-fg">
+                <span className="inline-flex items-center gap-2 capitalize">
+                  <span aria-hidden="true" className={`inline-block h-2 w-4 rounded-full ${DAY_OFF_CLASSES[status]}`} />
+                  {status}
+                </span>
+                <span className="text-xs font-medium tabular-nums text-fg-muted">{items.length}</span>
+              </h3>
+              {items.length === 0 ? (
+                <p className="px-3 py-2 text-xs text-fg-subtle">None.</p>
+              ) : (
+                <ul className="max-h-80 divide-y divide-line overflow-y-auto">
+                  {items.map((item) => {
+                    const isDayOff = dayOffs.some((mark) => mark.key === item.key);
+                    const body = (
+                      <>
+                        <span className={`block truncate text-sm font-medium ${STATUS_TEXT_CLASSES[status]}`}>
+                          {item.person}
+                        </span>
+                        <span className="block truncate text-xs text-fg-muted">
+                          {item.typeLabel} · {item.detail}
+                        </span>
+                      </>
+                    );
+                    return (
+                      <li key={item.key}>
+                        {isDayOff ? (
+                          <button
+                            type="button"
+                            onClick={() => setOpen({ kind: "dayOff", key: item.key })}
+                            className="block w-full cursor-pointer px-3 py-2 text-left hover:bg-surface-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand"
+                          >
+                            {body}
+                          </button>
+                        ) : (
+                          <div className="px-3 py-2" title={`${item.typeLabel} · ${item.detail}`}>
+                            {body}
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          );
+        })}
+      </aside>
+
+      <section aria-labelledby={captionId} className="overflow-hidden rounded-xl border glass shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-surface-muted/80 px-3 py-2 sm:px-4">
+          <div className="flex min-w-0 items-center gap-1">
+            <span
+              aria-hidden="true"
+              className="mr-1.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-brand-soft text-brand-ink"
+            >
+              <CalendarGlyph />
+            </span>
+            <button
+              type="button"
+              onClick={() => onMonthChange(addMonths(month, -1))}
+              aria-label="Previous month"
+              className={NAV_BUTTON_CLASS}
+            >
+              <Chevron direction="left" />
+            </button>
+            <h2 id={captionId} className="truncate px-1 text-base font-semibold tracking-tight text-fg">
+              <time dateTime={monthKey(month)}>{monthLabel(month)}</time>
+            </h2>
+            <button
+              type="button"
+              onClick={() => onMonthChange(addMonths(month, 1))}
+              aria-label="Next month"
+              className={NAV_BUTTON_CLASS}
+            >
+              <Chevron direction="right" />
+            </button>
+          </div>
           <button
             type="button"
-            onClick={() => onMonthChange(addMonths(month, -1))}
-            aria-label="Previous month"
-            className={NAV_BUTTON_CLASS}
+            onClick={() => onMonthChange({ year: Number(today.slice(0, 4)), month: Number(today.slice(5, 7)) })}
+            disabled={monthKey(month) === todayMonth}
+            className={`${GHOST_BUTTON_CLASS} px-2.5 py-1.5 text-xs ring-1 ring-inset ring-line focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-40 disabled:hover:bg-transparent`}
           >
-            <Chevron direction="left" />
-          </button>
-          <h2 id={captionId} className="truncate px-1 text-base font-semibold tracking-tight text-fg">
-            <time dateTime={monthKey(month)}>{monthLabel(month)}</time>
-          </h2>
-          <button
-            type="button"
-            onClick={() => onMonthChange(addMonths(month, 1))}
-            aria-label="Next month"
-            className={NAV_BUTTON_CLASS}
-          >
-            <Chevron direction="right" />
+            Today
           </button>
         </div>
-        <button
-          type="button"
-          onClick={() => onMonthChange({ year: Number(today.slice(0, 4)), month: Number(today.slice(5, 7)) })}
-          disabled={monthKey(month) === todayMonth}
-          className={`${GHOST_BUTTON_CLASS} px-2.5 py-1.5 text-xs ring-1 ring-inset ring-line focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-40 disabled:hover:bg-transparent`}
-        >
-          Today
-        </button>
-      </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[40rem] table-fixed border-collapse text-sm">
-          <thead>
-            <tr>
-              {WEEKDAY_NAMES.map((name, column) => (
-                <th
-                  key={name}
-                  scope="col"
-                  className={`border-b border-line bg-surface px-1 py-1.5 text-center text-[11px] font-semibold uppercase tracking-wider text-fg-muted ${
-                    column < 6 ? "border-r" : ""
-                  }`}
-                >
-                  {name}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {weeks.map((week, index) => (
-              <tr key={index}>
-                {week.map((cell, column) => {
-                  const gridLine = `${index < weeks.length - 1 ? "border-b" : ""} border-line ${
-                    column < 6 ? "border-r" : ""
-                  }`;
-                  return cell === null ? (
-                    <td key={`pad-${column}`} className={`${gridLine} bg-surface-muted`} />
-                  ) : (
-                    <td
-                      key={cell.date}
-                      className={`h-24 p-1 align-top ${gridLine} ${
-                        cell.date === today
-                          ? "bg-brand-soft/45"
-                          : cell.weekday === 0 || cell.weekday === 6
-                            ? "bg-surface-muted/80"
-                            : "bg-surface"
-                      }`}
-                    >
-                      <time
-                        dateTime={cell.date}
-                        className={`mb-1 inline-flex size-6 items-center justify-center rounded-full text-xs tabular-nums ${
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[40rem] table-fixed border-collapse text-sm">
+            <thead>
+              <tr>
+                {WEEKDAY_NAMES.map((name, column) => (
+                  <th
+                    key={name}
+                    scope="col"
+                    className={`border-b border-line bg-surface px-1 py-1.5 text-center text-[11px] font-semibold uppercase tracking-wider text-fg-muted ${
+                      column < 6 ? "border-r" : ""
+                    }`}
+                  >
+                    {name}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {weeks.map((week, index) => (
+                <tr key={index}>
+                  {week.map((cell, column) => {
+                    const gridLine = `${index < weeks.length - 1 ? "border-b" : ""} border-line ${
+                      column < 6 ? "border-r" : ""
+                    }`;
+                    return cell === null ? (
+                      <td key={`pad-${column}`} className={`${gridLine} bg-surface-muted`} />
+                    ) : (
+                      <td
+                        key={cell.date}
+                        className={`h-24 p-1 align-top ${gridLine} ${
                           cell.date === today
-                            ? "bg-brand-strong font-semibold text-white shadow-[0_0_0_2px_var(--color-surface)]"
+                            ? "bg-brand-soft/45"
                             : cell.weekday === 0 || cell.weekday === 6
-                              ? "font-medium text-fg-subtle"
-                              : "font-medium text-fg"
+                              ? "bg-surface-muted/80"
+                              : "bg-surface"
                         }`}
                       >
-                        {cell.day}
-                      </time>
-                      <ul className="space-y-0.5">
-                        {dayOffs
-                          .filter((mark) => dateInRange(cell.date, mark.startDate, mark.endDate))
-                          .map((mark) => {
-                            const isStart = mark.startDate === cell.date;
-                            const isEnd = mark.endDate === cell.date;
-                            const labelled = isStart || cell.weekday === 0;
-                            return (
+                        <time
+                          dateTime={cell.date}
+                          className={`mb-1 inline-flex size-6 items-center justify-center rounded-full text-xs tabular-nums ${
+                            cell.date === today
+                              ? "bg-brand-strong font-semibold text-white shadow-[0_0_0_2px_var(--color-surface)]"
+                              : cell.weekday === 0 || cell.weekday === 6
+                                ? "font-medium text-fg-subtle"
+                                : "font-medium text-fg"
+                          }`}
+                        >
+                          {cell.day}
+                        </time>
+                        <ul className="space-y-0.5">
+                          {dayOffs
+                            .filter((mark) => dateInRange(cell.date, mark.startDate, mark.endDate))
+                            .map((mark) => {
+                              const isStart = mark.startDate === cell.date;
+                              const isEnd = mark.endDate === cell.date;
+                              const labelled = isStart || cell.weekday === 0;
+                              return (
+                                <li key={mark.key}>
+                                  <button
+                                    type="button"
+                                    title={`${mark.agentName}: day off, ${mark.status}`}
+                                    aria-label={`${mark.agentName}, day off, ${mark.status}`}
+                                    onClick={() => setOpen({ kind: "dayOff", key: mark.key })}
+                                    className={`${MARK_BUTTON_CLASS} px-1.5 py-0.5 text-xs font-medium leading-4 ${DAY_OFF_CLASSES[mark.status]} ${
+                                      isStart ? "ml-0.5 rounded-l-md border-l-[3px] border-l-current" : "-ml-1"
+                                    } ${isEnd ? "mr-0.5 rounded-r-md" : "-mr-1"}`}
+                                  >
+                                    {labelled ? mark.agentName : <span className="sr-only">{mark.agentName}</span>}
+                                    {labelled ? null : <span aria-hidden="true">&nbsp;</span>}
+                                  </button>
+                                </li>
+                              );
+                            })}
+                          {expiries
+                            .filter((mark) => mark.date === cell.date)
+                            .map((mark) => (
                               <li key={mark.key}>
                                 <button
                                   type="button"
-                                  title={`${mark.agentName}: day off, ${mark.status}`}
-                                  aria-label={`${mark.agentName}, day off, ${mark.status}`}
-                                  onClick={() => setOpen({ kind: "dayOff", key: mark.key })}
-                                  className={`${MARK_BUTTON_CLASS} px-1.5 py-0.5 text-xs font-medium leading-4 ${DAY_OFF_CLASSES[mark.status]} ${
-                                    isStart ? "ml-0.5 rounded-l-md border-l-[3px] border-l-current" : "-ml-1"
-                                  } ${isEnd ? "mr-0.5 rounded-r-md" : "-mr-1"}`}
+                                  title={`${mark.agentName}: ${mark.state} licence expires`}
+                                  aria-label={`${mark.agentName}, ${mark.state} licence expires`}
+                                  onClick={() => setOpen({ kind: "expiry", key: mark.key })}
+                                  className={`${MARK_BUTTON_CLASS} rounded-md px-1.5 py-0.5 text-xs font-medium leading-4 ring-1 ring-inset ring-info-ink/20 ${EXPIRY_CLASS}`}
                                 >
-                                  {labelled ? mark.agentName : <span className="sr-only">{mark.agentName}</span>}
-                                  {labelled ? null : <span aria-hidden="true">&nbsp;</span>}
+                                  <span className="font-mono tracking-tight">{mark.state}</span>
+                                  <span className="text-info-ink/80"> expires</span>
+                                  <span className="text-info-ink/50"> · </span>
+                                  {mark.agentName}
                                 </button>
                               </li>
-                            );
-                          })}
-                        {expiries
-                          .filter((mark) => mark.date === cell.date)
-                          .map((mark) => (
-                            <li key={mark.key}>
-                              <button
-                                type="button"
-                                title={`${mark.agentName}: ${mark.state} licence expires`}
-                                aria-label={`${mark.agentName}, ${mark.state} licence expires`}
-                                onClick={() => setOpen({ kind: "expiry", key: mark.key })}
-                                className={`${MARK_BUTTON_CLASS} rounded-md px-1.5 py-0.5 text-xs font-medium leading-4 ring-1 ring-inset ring-info-ink/20 ${EXPIRY_CLASS}`}
-                              >
-                                <span className="font-mono tracking-tight">{mark.state}</span>
-                                <span className="text-info-ink/80"> expires</span>
-                                <span className="text-info-ink/50"> · </span>
-                                {mark.agentName}
-                              </button>
-                            </li>
-                          ))}
-                      </ul>
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                            ))}
+                        </ul>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-      <ul className="flex flex-wrap gap-1.5 border-t border-line bg-surface-muted/50 px-3 py-2 text-xs text-fg-muted sm:px-4">
-        <LegendItem className={DAY_OFF_CLASSES.pending}>Day off, pending</LegendItem>
-        <LegendItem className={DAY_OFF_CLASSES.approved}>Day off, approved</LegendItem>
-        <LegendItem className={DAY_OFF_CLASSES.denied}>Day off, denied</LegendItem>
-        <LegendItem className={EXPIRY_CLASS}>Licence expires</LegendItem>
-      </ul>
+        <ul className="flex flex-wrap gap-1.5 border-t border-line bg-surface-muted/50 px-3 py-2 text-xs text-fg-muted sm:px-4">
+          <LegendItem className={DAY_OFF_CLASSES.pending}>Day off, pending</LegendItem>
+          <LegendItem className={DAY_OFF_CLASSES.applied}>Day off, applied</LegendItem>
+          <LegendItem className={DAY_OFF_CLASSES.approved}>Day off, approved</LegendItem>
+          <LegendItem className={DAY_OFF_CLASSES.denied}>Day off, denied</LegendItem>
+          <LegendItem className={EXPIRY_CLASS}>Licence expires</LegendItem>
+        </ul>
 
-      {detail ? (
-        <DetailDrawer
-          detail={detail}
-          onStatusChange={onStatusChange}
-          onLicenseStatusChange={onLicenseStatusChange}
-          onClose={() => setOpen(null)}
-        />
-      ) : null}
-    </section>
+        {detail ? (
+          <DetailDrawer
+            detail={detail}
+            onStatusChange={onStatusChange}
+            onLicenseStatusChange={onLicenseStatusChange}
+            onClose={() => setOpen(null)}
+          />
+        ) : null}
+      </section>
+    </div>
   );
 }
 

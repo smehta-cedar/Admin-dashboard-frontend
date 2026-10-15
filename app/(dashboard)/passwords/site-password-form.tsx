@@ -17,16 +17,18 @@ import type {
 } from "@/lib/site-passwords";
 import { byName } from "@/lib/text";
 import { AGENCY_CHOICE, type AgencyOption, type AgentOption } from "./password-form";
-import { saveSitePassword } from "./site-actions";
+import { saveSite, saveSitePassword } from "./site-actions";
 import { SiteDialog, type SiteEditor } from "./site-dialog";
 
 /*
- * Edit site password (/passwords/site-passwords/[id]/edit), and Add at
+ * Add site password at
  * /passwords/site-passwords/new (the screens add through the
- * AddPasswordDialog popup, ./password-dialog.tsx, instead): the carrier password page
+ * AddPasswordDialog popup, ./password-dialog.tsx, instead; Edit too): the carrier password page
  * (./password-form.tsx) with a Site dropdown in place of the carrier. Add
  * site beside the dropdown, and Edit site for the chosen one, open
- * SiteDialog (./site-dialog.tsx: name and link); a saved site is added to the
+ * SiteDialog (./site-dialog.tsx: name and link), and the chosen site's Link
+ * sits under the dropdown, editable in place: saving updates the site's link
+ * before the password. A saved site from the dialog is added to the
  * dropdown and chosen. Sites have no page or list of their own. Cancel and a
  * successful save return to `returnTo`, the Passwords list.
  *
@@ -82,6 +84,14 @@ export function SitePasswordFormPage({
   });
   const [siteEditor, setSiteEditor] = useState<SiteEditor | null>(null);
   const chosenSite = sites.find((site) => site.id === siteId);
+  // The chosen site's link, edited in place; it follows the site select.
+  const [link, setLink] = useState(chosenSite?.link ?? "");
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const chooseSite = (nextId: string, from: SiteRecord[] = sites) => {
+    setSiteId(nextId);
+    setLink(from.find((site) => site.id === nextId)?.link ?? "");
+    setLinkError(null);
+  };
   // Pending: the login isn't issued yet, so username and password may be blank.
   const [statusValue, setStatusValue] = useState<string>(editing?.status ?? "active");
   const pending = statusValue === "pending";
@@ -120,6 +130,15 @@ export function SitePasswordFormPage({
     }
     setSaving(true);
     try {
+      // A changed link is saved on the site first; its error stops the password save.
+      if (chosenSite && link.trim() !== chosenSite.link) {
+        const siteResult = await saveSite({ name: chosenSite.name, link: link.trim() }, chosenSite.id);
+        if (!siteResult.ok) {
+          setLinkError(siteResult.errors[0].message);
+          return;
+        }
+        setSites((current) => current.map((site) => (site.id === siteResult.site.id ? siteResult.site : site)));
+      }
       const result = await saveSitePassword(values, editing?.id);
       if (!result.ok) {
         setErrors(result.errors);
@@ -209,7 +228,7 @@ export function SitePasswordFormPage({
                 aria-invalid={siteError ? true : undefined}
                 aria-describedby={siteError ? `${id}-site-error` : undefined}
                 onChange={(event) => {
-                  setSiteId(event.target.value);
+                  chooseSite(event.target.value);
                   clear("siteId");
                 }}
                 className={INPUT_CLASS}
@@ -234,17 +253,33 @@ export function SitePasswordFormPage({
                     Edit site<span className="sr-only"> {chosenSite.name}</span>
                   </button>
                 ) : null}
-                {chosenSite?.link ? (
-                  <a
-                    href={chosenSite.link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="truncate text-xs font-medium text-brand-ink underline underline-offset-2"
-                  >
-                    {chosenSite.link}
-                  </a>
-                ) : null}
               </div>
+            </Field>
+            {/* The chosen site's own link: changing it here updates the site on save. */}
+            <Field
+              label="Link"
+              htmlFor={`${id}-link`}
+              hint={linkError ?? undefined}
+              hintId={`${id}-link-error`}
+              error
+              className="sm:col-span-2"
+            >
+              <input
+                id={`${id}-link`}
+                type="url"
+                maxLength={2000}
+                autoComplete="off"
+                placeholder="https://"
+                value={link}
+                disabled={!chosenSite}
+                aria-invalid={linkError ? true : undefined}
+                aria-describedby={linkError ? `${id}-link-error` : undefined}
+                onChange={(event) => {
+                  setLink(event.target.value);
+                  setLinkError(null);
+                }}
+                className={`${INPUT_CLASS} disabled:opacity-60`}
+              />
             </Field>
           </FormSection>
 
@@ -327,8 +362,9 @@ export function SitePasswordFormPage({
       <SiteDialog
         editor={siteEditor}
         onSaved={(saved) => {
-          setSites((current) => [...current.filter((site) => site.id !== saved.id), saved]);
-          setSiteId(saved.id);
+          const next = [...sites.filter((site) => site.id !== saved.id), saved];
+          setSites(next);
+          chooseSite(saved.id, next);
           clear("siteId");
         }}
         onClose={() => setSiteEditor(null)}

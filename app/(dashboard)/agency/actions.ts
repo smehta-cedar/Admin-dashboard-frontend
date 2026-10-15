@@ -157,7 +157,10 @@ export async function saveAgencyLicense({
   values,
 }: LicenseInput & { previousState: string | null; values: AgencyLicenseValues }): Promise<SaveAgencyLicenseResult> {
   const kept = licenses.filter((row) => row.state !== previousState && row.state !== values.state);
-  const result = await patchAgency(agencyId, { licenses: [...kept.map(toApiLicense), toApiLicense(values)] });
+  const result = await patchAgency(agencyId, {
+    licenses: [...kept.map(toApiLicense), toApiLicense(values)],
+    agent_licenses: [{ state: values.state, agents: values.agentIds }],
+  });
   return result.ok ? result : { ok: false, message: result.message };
 }
 

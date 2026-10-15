@@ -1,47 +1,48 @@
 "use client";
 
-import { useId, useMemo, useState, useTransition, type FormEvent } from "react";
+import { useId, useMemo, useState, useTransition } from "react";
 import { BrandLogo } from "@/components/brand-logo";
-import { GHOST_BUTTON_CLASS, INPUT_CLASS, PRIMARY_BUTTON_CLASS } from "@/components/classes";
+import { INPUT_CLASS, PRIMARY_BUTTON_CLASS } from "@/components/classes";
 import { Field } from "@/components/field";
+import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
 import { useRequestsStore } from "@/components/requests-store";
 import {
   PRODUCT_CATEGORIES,
   PRODUCT_TYPES,
   colorLabel,
-  validateOrder,
-  type OrderError,
-  type OrderValues,
+  validateSelection,
   type ProductRecord,
+  type SelectionError,
+  type SelectionValues,
 } from "@/lib/shop";
 import { placeOrder, type PlaceOrderResult } from "./actions";
 
 /*
- * The shop: a catalog, then two steps, then a confirmation.
+ * The shop: a catalog, then a choose step. Checkout files a pending merch
+ * request and shows a confirmation popup; dismiss it to return to the catalog.
  *
  *   catalog – every active product as a card, with a section nav (All,
  *             Womens, Mens, …) and a type nav (All types, Polos, Shirts, …)
  *             narrowing the grid. Picking a card opens it.
  *   choose  – the product's color, size and quantity, beside its picture
- *             (or the drawn tee). Checkout keeps the pick.
- *   details – name, email, phone and shipping address. Submit files the order
- *             through the server action; the same `validateOrder` runs here
- *             first so a typo is caught before the round trip. On success the
- *             row is appended to the requests store and admins are notified.
- *   done    – the office has the request and will be in touch. No buyer email
- *             is sent; the office follows up by hand from the HR page.
+ *             (or the drawn tee). Checkout files a pending merch request
+ *             for the office; buyer contact comes from the signed-in user.
  *
  * The selection is state on this component, so going back and forward loses
  * nothing. No payment: the office settles that with the buyer. The page
  * header carries the h1, so the steps head with h2.
  */
 
-type Step = "catalog" | "choose" | "details" | "done";
+type Step = "catalog" | "choose";
 
-type Selection = Pick<OrderValues, "productId" | "size" | "color" | "quantity">;
+type PlacedOrder = {
+  product: ProductRecord;
+  selection: SelectionValues;
+  email: string;
+};
 
 /** A product with its first colour and size. */
-const defaultSelection = (product: ProductRecord): Selection => ({
+const defaultSelection = (product: ProductRecord): SelectionValues => ({
   productId: product.id,
   size: product.sizes[0] ?? "",
   color: product.colors[0]?.id ?? "",
@@ -55,60 +56,49 @@ type ShopViewProps = {
 
 export function ShopView({ products }: ShopViewProps) {
   const [step, setStep] = useState<Step>("catalog");
-  const [selection, setSelection] = useState<Selection | null>(null);
-  const [placedEmail, setPlacedEmail] = useState<string | null>(null);
+  const [selection, setSelection] = useState<SelectionValues | null>(null);
+  const [placed, setPlaced] = useState<PlacedOrder | null>(null);
 
   const product = selection ? products.find((candidate) => candidate.id === selection.productId) : undefined;
 
-  if (step === "done" && product && selection && placedEmail !== null) {
-    return <Confirmation product={product} selection={selection} email={placedEmail} />;
-  }
-
-  if (step === "catalog" || !product || !selection) {
-    return (
-      <Catalog
-        products={products}
-        onPick={(picked) => {
-          setSelection(defaultSelection(picked));
-          setStep("choose");
-        }}
-      />
-    );
-  }
+  const dismissPlaced = () => {
+    setPlaced(null);
+    setSelection(null);
+    setStep("catalog");
+  };
 
   return (
-    <div>
-      <button
-        type="button"
-        onClick={() => setStep("catalog")}
-        className="mb-4 text-sm font-medium text-fg-muted hover:text-fg hover:underline"
-      >
-        <span aria-hidden="true">← </span>All products
-      </button>
-      <div className="grid gap-8 md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] md:items-start">
-        <ProductPicture product={product} color={selection.color} />
+    <>
+      {step === "catalog" || !product || !selection ? (
+        <Catalog
+          products={products}
+          onPick={(picked) => {
+            setSelection(defaultSelection(picked));
+            setStep("choose");
+          }}
+        />
+      ) : (
         <div>
-          {step === "choose" ? (
+          <button
+            type="button"
+            onClick={() => setStep("catalog")}
+            className="mb-4 text-sm font-medium text-fg-muted hover:text-fg hover:underline"
+          >
+            <span aria-hidden="true">← </span>All products
+          </button>
+          <div className="grid gap-8 md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] md:items-start">
+            <ProductPicture product={product} color={selection.color} />
             <ChooseStep
               product={product}
               selection={selection}
               onChange={setSelection}
-              onCheckout={() => setStep("details")}
+              onPlaced={(email) => setPlaced({ product, selection, email })}
             />
-          ) : (
-            <DetailsStep
-              product={product}
-              selection={selection}
-              onBack={() => setStep("choose")}
-              onPlaced={(email) => {
-                setPlacedEmail(email);
-                setStep("done");
-              }}
-            />
-          )}
+          </div>
         </div>
-      </div>
-    </div>
+      )}
+      <RequestReceivedDialog placed={placed} onClose={dismissPlaced} />
+    </>
   );
 }
 
@@ -143,7 +133,7 @@ function Catalog({ products, onPick }: CatalogProps) {
     <div>
       <h2 className="text-2xl font-semibold text-fg">Catalog</h2>
       <p className="mt-1 text-sm text-fg-muted">
-        Pick something, choose its colour and size, and the office will confirm your order by email.
+        Pick something, choose its colour and size, and Checkout sends a request to the office.
       </p>
 
       {categories.length > 0 ? (
@@ -283,15 +273,46 @@ const PICK_OFF = "border-line-strong text-fg-muted hover:bg-surface-hover hover:
 
 type ChooseStepProps = {
   product: ProductRecord;
-  selection: Selection;
-  onChange: (selection: Selection) => void;
-  onCheckout: () => void;
+  selection: SelectionValues;
+  onChange: (selection: SelectionValues) => void;
+  onPlaced: (email: string) => void;
 };
 
-function ChooseStep({ product, selection, onChange, onCheckout }: ChooseStepProps) {
+function ChooseStep({ product, selection, onChange, onPlaced }: ChooseStepProps) {
   const id = useId();
-  const set = <K extends keyof Selection>(key: K, value: Selection[K]) =>
+  const { appendRequest } = useRequestsStore();
+  const [error, setError] = useState<SelectionError | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  const set = <K extends keyof SelectionValues>(key: K, value: SelectionValues[K]) =>
     onChange({ ...selection, [key]: value });
+
+  const handleCheckout = () => {
+    const clientError = validateSelection(selection, product);
+    if (clientError) {
+      setError(clientError);
+      return;
+    }
+
+    setError(null);
+    setFailed(false);
+    startTransition(async () => {
+      let result: PlaceOrderResult;
+      try {
+        result = await placeOrder(selection);
+      } catch {
+        setFailed(true);
+        return;
+      }
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      appendRequest(result.request);
+      onPlaced(result.request.email);
+    });
+  };
 
   return (
     <div>
@@ -360,176 +381,70 @@ function ChooseStep({ product, selection, onChange, onCheckout }: ChooseStepProp
         />
       </Field>
 
-      <button type="button" onClick={onCheckout} className={`${PRIMARY_BUTTON_CLASS} mt-8 w-full sm:w-auto`}>
-        Checkout
-      </button>
-      <p className="mt-3 text-xs text-fg-subtle">
-        No payment online. The office confirms your request by email and arranges payment and pickup or
-        shipping with you.
-      </p>
-    </div>
-  );
-}
-
-type DetailsStepProps = {
-  product: ProductRecord;
-  selection: Selection;
-  onBack: () => void;
-  onPlaced: (email: string) => void;
-};
-
-function DetailsStep({ product, selection, onBack, onPlaced }: DetailsStepProps) {
-  const id = useId();
-  const { appendRequest } = useRequestsStore();
-  const [error, setError] = useState<OrderError | null>(null);
-  const [failed, setFailed] = useState(false);
-  const [pending, startTransition] = useTransition();
-
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const text = (field: string) => String(data.get(field) ?? "").trim();
-    const values: OrderValues = {
-      ...selection,
-      buyerName: text("buyerName"),
-      email: text("email"),
-      phone: text("phone"),
-      address: text("address"),
-    };
-
-    const clientError = validateOrder(values, product);
-    if (clientError) {
-      setError(clientError);
-      return;
-    }
-
-    setError(null);
-    setFailed(false);
-    startTransition(async () => {
-      let result: PlaceOrderResult;
-      try {
-        result = await placeOrder(values);
-      } catch {
-        setFailed(true);
-        return;
-      }
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-      appendRequest(result.request);
-      onPlaced(values.email);
-    });
-  };
-
-  const errorProps = (field: OrderError["field"]) =>
-    error?.field === field
-      ? { "aria-invalid": true as const, "aria-describedby": `${id}-${field}-error` }
-      : {};
-  const hint = (field: OrderError["field"]) =>
-    error?.field === field ? { hint: error.message, hintId: `${id}-${field}-error`, error: true } : {};
-
-  return (
-    <form onSubmit={handleSubmit} noValidate>
-      <h2 className="text-2xl font-semibold text-fg">Your details</h2>
-      <p className="mt-1 text-sm text-fg-muted">
-        {product.name} · {colorLabel(product, selection.color)} · {selection.size} · Qty {selection.quantity} ·{" "}
-        {product.priceLabel} each
-      </p>
-
-      {/* A selection error can only come from the server; it has no field on this step. */}
-      {error && ["productId", "color", "size", "quantity"].includes(error.field) ? (
+      {error ? (
         <p role="alert" className="mt-4 text-sm text-danger">
-          {error.message} Go back and choose again.
+          {error.message}
         </p>
       ) : null}
 
-      <div className="mt-6 space-y-4">
-        <Field label="Full name" htmlFor={`${id}-buyerName`} {...hint("buyerName")}>
-          <input
-            id={`${id}-buyerName`}
-            name="buyerName"
-            type="text"
-            required
-            autoComplete="name"
-            autoFocus
-            className={INPUT_CLASS}
-            {...errorProps("buyerName")}
-          />
-        </Field>
-        <Field label="Email" htmlFor={`${id}-email`} {...hint("email")}>
-          <input
-            id={`${id}-email`}
-            name="email"
-            type="email"
-            required
-            autoComplete="email"
-            className={INPUT_CLASS}
-            {...errorProps("email")}
-          />
-        </Field>
-        <Field label="Phone" htmlFor={`${id}-phone`} {...hint("phone")}>
-          <input
-            id={`${id}-phone`}
-            name="phone"
-            type="tel"
-            required
-            autoComplete="tel"
-            className={INPUT_CLASS}
-            {...errorProps("phone")}
-          />
-        </Field>
-        <Field label="Shipping address" htmlFor={`${id}-address`} {...hint("address")}>
-          <textarea
-            id={`${id}-address`}
-            name="address"
-            required
-            rows={3}
-            autoComplete="street-address"
-            placeholder={"Street\nCity, State ZIP"}
-            className={INPUT_CLASS}
-            {...errorProps("address")}
-          />
-        </Field>
-      </div>
-
-      {/* Stays mounted so the message is announced when it appears. */}
       <p role="alert" className="mt-4 min-h-4 text-xs text-danger">
         {failed ? "Something went wrong and the order was not filed. Please try again." : null}
       </p>
 
-      <div className="mt-4 flex flex-col-reverse gap-3 sm:flex-row sm:items-center">
-        <button type="button" onClick={onBack} disabled={pending} className={GHOST_BUTTON_CLASS}>
-          Back
-        </button>
-        <button type="submit" disabled={pending} className={`${PRIMARY_BUTTON_CLASS} disabled:opacity-60`}>
-          {pending ? "Placing order…" : "Place order"}
-        </button>
-      </div>
-    </form>
+      <button
+        type="button"
+        onClick={handleCheckout}
+        disabled={pending}
+        className={`${PRIMARY_BUTTON_CLASS} mt-4 w-full sm:w-auto disabled:opacity-60`}
+      >
+        {pending ? "Sending request…" : "Checkout"}
+      </button>
+      <p className="mt-3 text-xs text-fg-subtle">
+        No payment online. Checkout sends a request to the office using your account details; they
+        confirm by email and arrange payment and pickup or shipping with you.
+      </p>
+    </div>
   );
 }
 
-type ConfirmationProps = {
-  product: ProductRecord;
-  selection: Selection;
-  email: string;
+type RequestReceivedDialogProps = {
+  placed: PlacedOrder | null;
+  onClose: () => void;
 };
 
-function Confirmation({ product, selection, email }: ConfirmationProps) {
+/** Success popup after Checkout; OK / Escape / backdrop returns to the catalog. */
+function RequestReceivedDialog({ placed, onClose }: RequestReceivedDialogProps) {
+  const open = placed !== null;
+  const { dialogRef, close } = useModalDialog(open);
+  const titleId = useId();
+
   return (
-    <div className="mx-auto max-w-lg rounded-lg border glass p-6 text-center sm:p-8">
-      <div className="flex justify-center">
-        <BrandLogo compact height={48} />
-      </div>
-      <h2 className="mt-4 text-2xl font-semibold text-fg">Request received</h2>
-      <p className="mt-2 text-sm text-fg-muted">
-        {product.name} · {colorLabel(product, selection.color)} · {selection.size} · Qty {selection.quantity}
-      </p>
-      <p className="mt-4 text-sm text-fg">
-        The office has your request and will be in touch at <span className="font-medium">{email}</span>{" "}
-        to confirm it.
-      </p>
-    </div>
+    <ModalDialog
+      dialogRef={dialogRef}
+      labelledBy={titleId}
+      onClose={onClose}
+      className="max-w-md overflow-y-auto"
+    >
+      {placed ? (
+        <div className="p-6">
+          <h2 id={titleId} className="text-base font-semibold text-fg">
+            Request received
+          </h2>
+          <p className="mt-1 text-sm text-fg-muted">
+            {placed.product.name} · {colorLabel(placed.product, placed.selection.color)} ·{" "}
+            {placed.selection.size} · Qty {placed.selection.quantity}
+          </p>
+          <p className="mt-3 text-sm text-fg">
+            The office has your request and will be in touch at{" "}
+            <span className="font-medium">{placed.email}</span> to confirm it.
+          </p>
+          <div className="mt-5 flex justify-end">
+            <button type="button" onClick={close} className={PRIMARY_BUTTON_CLASS} autoFocus>
+              OK
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </ModalDialog>
   );
 }

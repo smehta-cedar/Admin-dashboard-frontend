@@ -257,6 +257,11 @@ type ProfileTableProps<T> = {
   rowKey: (row: T) => string;
   /** The `<td>`s of one row, in column order. */
   children: (row: T) => ReactNode;
+  /**
+   * Makes the whole row clickable. Keep a link in a cell for keyboard users;
+   * clicks on links and buttons inside the row are theirs, not the row's.
+   */
+  onRowClick?: (row: T) => void;
 };
 
 /**
@@ -264,7 +269,7 @@ type ProfileTableProps<T> = {
  * there are more than 5 rows — default page size 5, with 10 and 20 options.
  * `table-fixed` keeps columns evenly spaced; the caller renders the cells.
  */
-export function ProfileTable<T>({ columns, rows, rowKey, children }: ProfileTableProps<T>) {
+export function ProfileTable<T>({ columns, rows, rowKey, children, onRowClick }: ProfileTableProps<T>) {
   const { pageItems, start, pageSize, setPageSize, currentPage, pageCount, setPage } = useTablePagination(rows);
 
   return (
@@ -282,7 +287,18 @@ export function ProfileTable<T>({ columns, rows, rowKey, children }: ProfileTabl
           </thead>
           <tbody className="divide-y divide-line border-t border-line">
             {pageItems.map((row) => (
-              <tr key={rowKey(row)}>{children(row)}</tr>
+              <tr
+                key={rowKey(row)}
+                onClick={
+                  onRowClick &&
+                  ((event) => {
+                    if (!(event.target as Element).closest("a, button")) onRowClick(row);
+                  })
+                }
+                className={onRowClick ? "cursor-pointer hover:bg-surface-hover" : undefined}
+              >
+                {children(row)}
+              </tr>
             ))}
           </tbody>
         </table>
@@ -336,6 +352,10 @@ type PasswordsPanelProps = {
   linkParties?: boolean;
   /** Adds Add password to the header. */
   onAdd?: () => void;
+  /** A filter shown in the header, before Add password. */
+  filter?: ReactNode;
+  /** Shown when there are no rows; defaults to "No passwords recorded." */
+  emptyText?: string;
   onEdit?: (password: PasswordRecord) => void;
   onDelete?: (password: PasswordRecord) => void;
   /** Extra classes on the panel, e.g. a column span. */
@@ -343,22 +363,37 @@ type PasswordsPanelProps = {
 };
 
 /** The Passwords panel: the shared PasswordsTable (components/passwords-table.tsx) for one agent or carrier. */
-export function PasswordsPanel({ passwords, party, linkParties, onAdd, onEdit, onDelete, className }: PasswordsPanelProps) {
+export function PasswordsPanel({
+  passwords,
+  party,
+  linkParties,
+  onAdd,
+  filter,
+  emptyText = "No passwords recorded.",
+  onEdit,
+  onDelete,
+  className,
+}: PasswordsPanelProps) {
   return (
     <Panel
       title="Passwords"
       count={passwords.length}
       className={className}
       action={
-        onAdd ? (
-          <button type="button" onClick={onAdd} className={PROFILE_BUTTON_CLASS}>
-            <span aria-hidden="true">+ </span>Add password
-          </button>
+        filter || onAdd ? (
+          <span className="flex flex-wrap items-center justify-end gap-2">
+            {filter}
+            {onAdd ? (
+              <button type="button" onClick={onAdd} className={PROFILE_BUTTON_CLASS}>
+                <span aria-hidden="true">+ </span>Add password
+              </button>
+            ) : null}
+          </span>
         ) : undefined
       }
     >
       {passwords.length === 0 ? (
-        <PanelEmpty>No passwords recorded.</PanelEmpty>
+        <PanelEmpty>{emptyText}</PanelEmpty>
       ) : (
         <PasswordsTable
           passwords={passwords}

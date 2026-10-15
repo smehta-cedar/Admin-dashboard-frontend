@@ -6,8 +6,8 @@ import { PasswordInput } from "@/components/credential-value";
 import { Field } from "@/components/field";
 import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
 import { PROFILE_BUTTON_CLASS } from "@/components/profile-shell";
-import type { PasswordStatus } from "@/lib/passwords";
-import type { SiteRecord } from "@/lib/site-passwords";
+import type { PasswordRecord, PasswordStatus } from "@/lib/passwords";
+import type { SitePasswordRecord, SiteRecord } from "@/lib/site-passwords";
 import { byName } from "@/lib/text";
 import { savePassword } from "./actions";
 import { AGENCY_CHOICE, type AgencyOption, type AgentOption, type CarrierOption } from "./password-form";
@@ -15,17 +15,17 @@ import { saveSitePassword } from "./site-actions";
 import { SiteDialog, type SiteEditor } from "./site-dialog";
 
 /*
- * The one Add password popup, for both kinds: a carrier password (Carrier
- * select) or a site password (Site select, with "+ Add site" / "Edit site"
- * opening SiteDialog on top). Same fields and layout either way: Status at
- * the top right beside the title (as on the full pages), then Agent and
- * Carrier / Site, Portal username and Portal password. While the
- * status is Pending, username and password are optional (the login isn't
- * issued yet).
+ * The one Add / Edit password popup, for both kinds: a carrier password
+ * (Carrier select) or a site password (Site select, with "+ Add site" /
+ * "Edit site" opening SiteDialog on top). Same fields and layout either way:
+ * Status at the top right beside the title, then Agent and Carrier / Site,
+ * Portal username and Portal password. A site's link is changed through
+ * "Edit site", not here. While the status is Pending, username and password
+ * are optional (the login isn't issued yet).
  *
- * Opened from the Passwords page's two Add buttons and the agent profile's
- * Add password (agent fixed). Edit stays on the full pages
- * (./password-form.tsx, ./site-password-form.tsx). Saves go through
+ * Opened from the Passwords page's Add buttons and row Edits, and the agent
+ * profile's (agent fixed). An editor with `password` set edits that password,
+ * every field filled in from it. Saves go through
  * savePassword (./actions.ts) or saveSitePassword (./site-actions.ts), which
  * revalidate the dashboard; `onSaved` runs before the popup closes so the
  * caller can refresh.
@@ -39,10 +39,14 @@ export type PasswordKind = "carrier" | "site";
 /** Which popup is open, and what it starts on. */
 export type AddPasswordEditor = {
   kind: PasswordKind;
+  /** Edit: the password to change, a carrier or site one to match `kind`. Leave out to add. */
+  password?: PasswordRecord | SitePasswordRecord;
   /** An agent's ID, or AGENCY_CHOICE. */
   agentId?: string;
   /** Carrier passwords only. */
   carrierId?: string;
+  /** Site passwords only. */
+  siteId?: string;
 };
 
 type AddPasswordDialogProps = {
@@ -55,6 +59,8 @@ type AddPasswordDialogProps = {
   carriers: CarrierOption[];
   /** For site passwords. */
   sites?: SiteRecord[];
+  /** Offer "+ Add site" / "Edit site" under the Site select. Off on the agent profile. */
+  manageSites?: boolean;
   onSaved: () => void;
   /** Runs for every close: Cancel, Escape, backdrop click, or a save. */
   onClose: () => void;
@@ -89,15 +95,35 @@ type AddPasswordFormProps = Omit<AddPasswordDialogProps, "editor" | "onClose"> &
   close: () => void;
 };
 
-function AddPasswordForm({ id, editor, agents, agency, carriers, sites: initialSites = [], onSaved, close }: AddPasswordFormProps) {
+function AddPasswordForm({
+  id,
+  editor,
+  agents,
+  agency,
+  carriers,
+  sites: initialSites = [],
+  manageSites = true,
+  onSaved,
+  close,
+}: AddPasswordFormProps) {
   const isSite = editor.kind === "site";
+  const editing = editor.password;
+  // On Edit, the password's own agent and carrier / site.
+  const startAgentId = editing ? (editing.agencyId ? AGENCY_CHOICE : (editing.agentId ?? "")) : editor.agentId;
+  const startPlaceId = editing
+    ? "carrierId" in editing
+      ? editing.carrierId
+      : editing.siteId
+    : isSite
+      ? editor.siteId
+      : editor.carrierId;
   const defaultAgentId =
-    editor.agentId === AGENCY_CHOICE
+    startAgentId === AGENCY_CHOICE
       ? agency
         ? AGENCY_CHOICE
         : ""
-      : agents.some((agent) => agent.id === editor.agentId)
-        ? (editor.agentId ?? "")
+      : agents.some((agent) => agent.id === startAgentId)
+        ? (startAgentId ?? "")
         : // The agent profile passes its one agent: start on it.
           agents.length === 1
           ? agents[0].id
@@ -107,14 +133,23 @@ function AddPasswordForm({ id, editor, agents, agency, carriers, sites: initialS
   const [saving, setSaving] = useState(false);
   const [forAgency, setForAgency] = useState(defaultAgentId === AGENCY_CHOICE);
   // Pending: the login isn't issued yet, so username and password may be blank.
-  const [statusValue, setStatusValue] = useState<PasswordStatus>("active");
+  const [statusValue, setStatusValue] = useState<PasswordStatus>(editing?.status ?? "active");
   const pending = statusValue === "pending";
 
-  const carrierOptions = [...carriers].filter((carrier) => forAgency || carrier.agentAccessible).sort(byName);
+  // An edited password's own carrier stays offered, open to agents or not.
+  const carrierOptions = [...carriers]
+    .filter((carrier) => forAgency || carrier.agentAccessible || carrier.id === startPlaceId)
+    .sort(byName);
   // Sites added or edited on top join the list, so the select is controlled.
   const [sites, setSites] = useState(initialSites);
   const [placeId, setPlaceId] = useState(() =>
-    isSite ? "" : carrierOptions.some((carrier) => carrier.id === editor.carrierId) ? (editor.carrierId ?? "") : "",
+    isSite
+      ? initialSites.some((site) => site.id === startPlaceId)
+        ? (startPlaceId ?? "")
+        : ""
+      : carrierOptions.some((carrier) => carrier.id === startPlaceId)
+        ? (startPlaceId ?? "")
+        : "",
   );
   const [siteEditor, setSiteEditor] = useState<SiteEditor | null>(null);
   const chosenSite = isSite ? sites.find((site) => site.id === placeId) : undefined;
@@ -148,8 +183,8 @@ function AddPasswordForm({ id, editor, agents, agency, carriers, sites: initialS
     try {
       const credentials = { username, portalPassword, status: statusValue };
       const result = isSite
-        ? await saveSitePassword({ ...party, siteId: placeId, ...credentials })
-        : await savePassword({ ...party, carrierId: placeId, ...credentials });
+        ? await saveSitePassword({ ...party, siteId: placeId, ...credentials }, editing?.id)
+        : await savePassword({ ...party, carrierId: placeId, ...credentials }, editing?.id);
       if (!result.ok) {
         setErrors(result.errors.map((error) => ({ field: ERROR_FIELDS[error.field] ?? "form", message: error.message })));
         return;
@@ -168,7 +203,11 @@ function AddPasswordForm({ id, editor, agents, agency, carriers, sites: initialS
       <form onSubmit={handleSubmit} className="p-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 id={`${id}-title`} className="text-base font-semibold text-fg">
-            {isSite ? "Add site password" : "Add carrier password"}
+            {editing
+              ? `Edit ${editing.agentName} at ${"carrierName" in editing ? editing.carrierName : editing.siteName}`
+              : isSite
+                ? "Add site password"
+                : "Add carrier password"}
           </h2>
           {/* Status is a setting, not a detail: top right, like the pages' card headers. */}
           <label htmlFor={`${id}-status`} className="flex items-center gap-2 text-sm text-fg-muted">
@@ -256,7 +295,7 @@ function AddPasswordForm({ id, editor, agents, agency, carriers, sites: initialS
                     </option>
                   ))}
             </select>
-            {isSite ? (
+            {isSite && manageSites ? (
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <button type="button" onClick={() => setSiteEditor({ mode: "add" })} className={PROFILE_BUTTON_CLASS}>
                   <span aria-hidden="true">+ </span>Add site
@@ -289,6 +328,7 @@ function AddPasswordForm({ id, editor, agents, agency, carriers, sites: initialS
               required={!pending}
               pattern=".*\S.*"
               autoComplete="off"
+              defaultValue={editing?.username}
               aria-invalid={usernameError ? true : undefined}
               aria-describedby={usernameError ? `${id}-username-error` : undefined}
               onChange={() => clear("username")}
@@ -311,6 +351,7 @@ function AddPasswordForm({ id, editor, agents, agency, carriers, sites: initialS
               required={!pending}
               autoComplete="new-password"
               spellCheck={false}
+              defaultValue={editing?.portalPassword}
               aria-invalid={passwordError ? true : undefined}
               aria-describedby={passwordError ? `${id}-password-error` : undefined}
               onChange={() => clear("password")}
@@ -329,17 +370,18 @@ function AddPasswordForm({ id, editor, agents, agency, carriers, sites: initialS
             Cancel
           </button>
           <button type="submit" disabled={saving} className={`${PRIMARY_BUTTON_CLASS} disabled:opacity-60`}>
-            {saving ? "Saving…" : "Add password"}
+            {saving ? "Saving…" : editing ? "Save changes" : "Add password"}
           </button>
         </div>
       </form>
 
       {/* Outside the form above: a dialog's form can't nest in it. Opens on top of this popup. */}
-      {isSite ? (
+      {isSite && manageSites ? (
         <SiteDialog
           editor={siteEditor}
           onSaved={(saved) => {
-            setSites((current) => [...current.filter((site) => site.id !== saved.id), saved]);
+            const next = [...sites.filter((site) => site.id !== saved.id), saved];
+            setSites(next);
             setPlaceId(saved.id);
             clear("place");
           }}

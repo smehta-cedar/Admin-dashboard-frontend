@@ -12,6 +12,7 @@ import {
   type StateLicenseStatus,
 } from "@/lib/state-licenses";
 import { US_STATE_NAMES } from "@/lib/us-states";
+import { AgentPicker, type AgentOption } from "./agent-picker";
 
 /*
  * One agency state licence, added or edited on its own from the profile's
@@ -29,6 +30,12 @@ import { US_STATE_NAMES } from "@/lib/us-states";
  * the end date isn't before the start date. An end date before today makes
  * the status Expired.
  *
+ * The Agents boxes (./agent-picker.tsx) give the ticked agents a pending
+ * licence in the state in the same save, with no number or dates, so a new
+ * state doesn't have to be added on every agent's profile. Agents already
+ * licensed in the chosen state show ticked and locked. The boxes are hidden
+ * when the role can't edit agents (`agents` is null).
+ *
  * Layout comes from StateLicenseForm (components/state-license-form.tsx).
  * Mounted per open inside a ModalDialog, so its fields and errors start
  * fresh each time.
@@ -43,7 +50,12 @@ export type AgencyLicenseValues = {
   health: boolean;
   startDate: string;
   endDate: string;
+  /** Agents to give a pending licence in the state; ones already licensed there are skipped. */
+  agentIds: string[];
 };
+
+/** An agent and the states they're licensed in, for the Agents boxes. */
+export type LicenseAgentOption = AgentOption & { licensedStates: string[] };
 
 /** What the dialog is open for: a new licence, or one of the listed rows. */
 export type AgencyLicenseEditor = { mode: "add" } | { mode: "edit"; license: AgencyStateLicenseRecord };
@@ -53,6 +65,8 @@ type AgencyLicenseDialogProps = {
   editor: AgencyLicenseEditor | null;
   /** The states already licensed, so a second row for one can't be added. */
   licensedStates: string[];
+  /** Every agent, for the Agents boxes; null hides them (the role can't edit agents). */
+  agents: LicenseAgentOption[] | null;
   /** Saves the licence; `previousState` is the row being edited, or null for a new one. Resolves with the error to show. */
   onSave: (values: AgencyLicenseValues, previousState: string | null) => Promise<string | null>;
   /** Removes the row for `state`. Resolves with the error to show. */
@@ -61,7 +75,14 @@ type AgencyLicenseDialogProps = {
   onClose: () => void;
 };
 
-export function AgencyLicenseDialog({ editor, licensedStates, onSave, onRemove, onClose }: AgencyLicenseDialogProps) {
+export function AgencyLicenseDialog({
+  editor,
+  licensedStates,
+  agents,
+  onSave,
+  onRemove,
+  onClose,
+}: AgencyLicenseDialogProps) {
   const { dialogRef, close } = useModalDialog(editor !== null);
   const id = useId();
 
@@ -78,6 +99,7 @@ export function AgencyLicenseDialog({ editor, licensedStates, onSave, onRemove, 
           id={id}
           license={editor.mode === "edit" ? editor.license : null}
           licensedStates={licensedStates}
+          agents={agents}
           onSave={onSave}
           onRemove={onRemove}
           close={close}
@@ -92,12 +114,13 @@ type LicenseFormProps = {
   /** The row being edited, or null for a new licence. */
   license: AgencyStateLicenseRecord | null;
   licensedStates: string[];
+  agents: AgencyLicenseDialogProps["agents"];
   onSave: AgencyLicenseDialogProps["onSave"];
   onRemove: AgencyLicenseDialogProps["onRemove"];
   close: () => void;
 };
 
-function LicenseForm({ id, license, licensedStates, onSave, onRemove, close }: LicenseFormProps) {
+function LicenseForm({ id, license, licensedStates, agents, onSave, onRemove, close }: LicenseFormProps) {
   const [state, setState] = useState(license?.state ?? "");
   const [status, setStatus] = useState<StateLicenseStatus>(license?.status ?? "active");
   const detailsRequired = licenceDetailsRequired(status);
@@ -109,6 +132,12 @@ function LicenseForm({ id, license, licensedStates, onSave, onRemove, close }: L
   const [confirmingRemove, setConfirmingRemove] = useState(false);
 
   const stateName = US_STATE_NAMES[state] ?? state;
+
+  const [agentIds, setAgentIds] = useState<string[]>([]);
+  // Agents already licensed in the chosen state: ticked and locked.
+  const licensedAgentIds = new Set(
+    (agents ?? []).filter((agent) => agent.licensedStates.includes(state)).map((agent) => agent.id),
+  );
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -122,6 +151,7 @@ function LicenseForm({ id, license, licensedStates, onSave, onRemove, close }: L
       health: data.get("health") === "on",
       startDate,
       endDate,
+      agentIds: agentIds.filter((agentId) => !licensedAgentIds.has(agentId)),
     };
 
     if (!values.state) {
@@ -209,6 +239,21 @@ function LicenseForm({ id, license, licensedStates, onSave, onRemove, close }: L
       removeMessage={license ? `Delete the ${US_STATE_NAMES[license.state] ?? license.state} licence?` : ""}
       onConfirmRemove={handleRemove}
       onCloseConfirmRemove={() => setConfirmingRemove(false)}
-    />
+    >
+      {agents ? (
+        <AgentPicker
+          id={id}
+          agents={agents}
+          lockedIds={licensedAgentIds}
+          lockedLabel="licensed"
+          selectedIds={agentIds}
+          onChange={(ids) => {
+            setAgentIds(ids);
+            setError(null);
+          }}
+          className="sm:col-span-2"
+        />
+      ) : null}
+    </StateLicenseForm>
   );
 }

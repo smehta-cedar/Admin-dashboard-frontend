@@ -3,7 +3,7 @@
  * applied, pending and expired; passwords add pending; state licences add
  * applied, expired and cancelled.
  */
-type Status =
+export type Status =
   | "active"
   | "onboarding"
   | "sdr"

@@ -38,7 +38,7 @@ export type SaveAppointmentResult =
 const ERROR_FIELDS: Record<string, AppointmentError["field"]> = {
   agent_id: "agentId",
   carrier_id: "carrierId",
-  // "Add a contract number before an agent can use this carrier."
+  // "The agency's contract with this carrier must be active with a contract number first."
   carrier: "carrierId",
   writing_number: "writingNumber",
   status: "status",

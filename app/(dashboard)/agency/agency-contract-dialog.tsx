@@ -4,10 +4,17 @@ import { useId, useState, type FormEvent, type KeyboardEvent } from "react";
 import { GHOST_BUTTON_CLASS, INPUT_CLASS, PRIMARY_BUTTON_CLASS } from "@/components/classes";
 import { Field } from "@/components/field";
 import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
-import type { AgencyContractError, AgencyContractRecord, AgencyContractValues } from "@/lib/agency-contracts";
+import { statusLabel } from "@/components/status-badge";
+import type {
+  AgencyContractError,
+  AgencyContractRecord,
+  AgencyContractStatus,
+  AgencyContractValues,
+} from "@/lib/agency-contracts";
 import type { CarrierRecord } from "@/lib/carriers";
 import type { PolicyTypeRecord } from "@/lib/policy-types";
 import { byName } from "@/lib/text";
+import { AgentPicker, type AgentOption } from "./agent-picker";
 
 /*
  * The one Add / Edit dialog for the agency's contract with a carrier:
@@ -24,14 +31,26 @@ import { byName } from "@/lib/text";
  * just ticked). This is the only place policy types are added; there is no
  * Policy types page. The API keeps one
  * contract per carrier and records the change note; its messages show under
- * the field. The contract number is required: a blank one isn't sent. While
- * the save is in flight the buttons are disabled.
+ * the field. The status is one of the agency licence statuses (active,
+ * pending, applied, expired, cancelled); only an active contract needs its
+ * number, and only an active one with a number opens the carrier to agents.
+ * While the save is in flight the buttons are disabled.
+ *
+ * The Agents boxes appoint the ticked agents with the carrier in the same
+ * save, each as a pending appointment with no writing number or states, so
+ * a new carrier doesn't have to be added on every agent's profile (see
+ * ./agent-picker.tsx). Agents already appointed with the chosen carrier
+ * show ticked and locked. The boxes are hidden when the role can't add agent
+ * contracts (`appointments` is null).
  */
 
 /** Which dialog is open. Edit holds the contract as it was when the dialog opened. */
 export type AgencyContractEditor = { mode: "add" } | { mode: "edit"; contract: AgencyContractRecord };
 
 export type { AgencyContractError, AgencyContractValues } from "@/lib/agency-contracts";
+
+/** The statuses the dropdown offers, in order: the agency licence statuses. */
+const AGENCY_CONTRACT_STATUSES: readonly AgencyContractStatus[] = ["active", "pending", "applied", "expired", "cancelled"];
 
 type CarrierOption = Pick<CarrierRecord, "id" | "name" | "status">;
 type PolicyTypeOption = Pick<PolicyTypeRecord, "id" | "name" | "status">;
@@ -45,6 +64,10 @@ type AgencyContractDialogProps = {
   contractedCarrierIds: string[];
   /** Every policy type in the catalog. */
   policyTypes: PolicyTypeOption[];
+  /** Every agent, for the Agents boxes. */
+  agents: AgentOption[];
+  /** Which agent has which carrier; null hides the Agents boxes. */
+  appointments: { agentId: string; carrierId: string }[] | null;
   /** Saves the values; resolves with the errors to show instead of closing. */
   onSave: (values: AgencyContractValues) => Promise<AgencyContractError[]>;
   /** Adds an active policy type; resolves with it, or with the message to show. */
@@ -78,16 +101,29 @@ function AgencyContractForm({
   carriers,
   contractedCarrierIds,
   policyTypes,
+  agents,
+  appointments,
   onSave,
   onAddPolicyType,
   close,
 }: AgencyContractFormProps) {
   const editing = editor.mode === "edit" ? editor.contract : undefined;
   const [errors, setErrors] = useState<AgencyContractError[]>([]);
+  const [status, setStatus] = useState<AgencyContractStatus>(editing?.status ?? "active");
+  const numberRequired = status === "active";
   const [saving, setSaving] = useState(false);
   const [carrierId, setCarrierId] = useState(editing?.carrierId ?? "");
   const [policyTypeIds, setPolicyTypeIds] = useState<string[]>(
     editing?.policyTypes.map((policyType) => policyType.id) ?? [],
+  );
+
+  const [agentIds, setAgentIds] = useState<string[]>([]);
+
+  // Agents already appointed with the chosen carrier: ticked and locked.
+  const appointed = new Set(
+    (appointments ?? [])
+      .filter((appointment) => appointment.carrierId === carrierId)
+      .map((appointment) => appointment.agentId),
   );
 
   const taken = new Set(contractedCarrierIds);
@@ -117,6 +153,7 @@ function AgencyContractForm({
 
   const carrierError = messageFor("carrierId");
   const numberError = messageFor("contractNumber");
+  const agentsError = messageFor("agentIds");
   const formError = messageFor("form") ?? messageFor("status");
 
   const tick = (policyTypeId: string) => {
@@ -171,10 +208,15 @@ function AgencyContractForm({
       carrierId,
       contractNumber: text("contractNumber"),
       policyTypeIds,
-      status: text("status") === "inactive" ? "inactive" : "active",
+      status,
+      agentIds: agentIds.filter((agentId) => !appointed.has(agentId)),
     };
-    if (!values.contractNumber) {
+    if (!values.contractNumber && numberRequired) {
       setErrors([{ field: "contractNumber", message: "Enter the writing number." }]);
+      return;
+    }
+    if (values.agentIds.length > 0 && (status !== "active" || !values.contractNumber)) {
+      setErrors([{ field: "agentIds", message: "The contract must be active with a writing number to add agents." }]);
       return;
     }
     setSaving(true);
@@ -233,18 +275,25 @@ function AgencyContractForm({
           <select
             id={`${id}-status`}
             name="status"
-            defaultValue={editing?.status ?? "active"}
+            value={status}
+            onChange={(event) => {
+              setStatus(event.target.value as AgencyContractStatus);
+              clear("contractNumber", "agentIds", "status");
+            }}
             className={INPUT_CLASS}
           >
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
+            {AGENCY_CONTRACT_STATUSES.map((option) => (
+              <option key={option} value={option}>
+                {statusLabel(option)}
+              </option>
+            ))}
           </select>
         </Field>
 
         <Field
           label="Writing number"
           htmlFor={`${id}-number`}
-          required
+          required={numberRequired}
           hint={numberError ?? undefined}
           hintId={`${id}-number-error`}
           error
@@ -254,7 +303,7 @@ function AgencyContractForm({
             id={`${id}-number`}
             name="contractNumber"
             type="text"
-            required
+            required={numberRequired}
             pattern=".*\S.*"
             maxLength={50}
             autoComplete="off"
@@ -348,6 +397,22 @@ function AgencyContractForm({
             </p>
           ) : null}
         </fieldset>
+
+        {appointments ? (
+          <AgentPicker
+            id={id}
+            agents={agents}
+            lockedIds={appointed}
+            lockedLabel="appointed"
+            selectedIds={agentIds}
+            onChange={(ids) => {
+              setAgentIds(ids);
+              clear("agentIds");
+            }}
+            error={agentsError}
+            className="sm:col-span-2"
+          />
+        ) : null}
       </div>
 
       {/* Errors about the attempt itself (no permission, API down), not one field. */}

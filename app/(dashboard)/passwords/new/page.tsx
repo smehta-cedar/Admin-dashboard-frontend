@@ -25,7 +25,8 @@ type NewPasswordPageProps = {
  */
 export default async function NewPasswordPage(props: NewPasswordPageProps) {
   if (!(await canModule("passwords", "create"))) return <NoAccess title="Add carrier password" />;
-  const { agent, carrier, from } = await props.searchParams;
+  const { from, ...filters } = await props.searchParams;
+  const { agent, carrier } = filters;
   const [agents, carriers, agencyRecord] = await Promise.all([
     getAgents(),
     getCarriers(),
@@ -39,7 +40,7 @@ export default async function NewPasswordPage(props: NewPasswordPageProps) {
       agency={agencyRecord ? { id: agencyRecord.id, name: agencyRecord.name } : null}
       presetAgentId={typeof agent === "string" ? agent : undefined}
       presetCarrierId={typeof carrier === "string" ? carrier : undefined}
-      returnTo={passwordReturnTo(from, agent, carrier)}
+      returnTo={passwordReturnTo(from, filters)}
     />
   );
 }

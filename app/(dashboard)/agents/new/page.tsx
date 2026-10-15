@@ -17,7 +17,7 @@ export const metadata: Metadata = {
  * certification rows.
  */
 export default async function NewAgentPage() {
-  if (!(await canModule("agents", "create"))) return <NoAccess title="Add agent" />;
+  if (!(await canModule("agents.list", "create"))) return <NoAccess title="Add agent" />;
   const carriers = await getCarriers();
   return <NewAgentView carriers={carriers.map(certifiableCarrier)} />;
 }

@@ -48,6 +48,7 @@ type HrViewProps = {
 
 const STATUS_TEXT_CLASSES: Record<RequestStatus, string> = {
   pending: "text-warn-ink",
+  applied: "text-stat-indigo-ink",
   approved: "text-brand-ink",
   denied: "text-fg-muted",
 };
@@ -266,6 +267,13 @@ export function HrView({ licenses: initialLicenses, today: serverToday }: HrView
         today={today}
         dayOffs={dayOffs}
         expiries={expiries}
+        requests={requests.map((request) => ({
+          key: request.id,
+          person: personOf(request),
+          typeLabel: REQUEST_TYPE_LABELS[request.type],
+          detail: detailOf(request),
+          status: request.status,
+        }))}
         onStatusChange={setStatus}
         onLicenseStatusChange={setLicenseStatus}
       />

@@ -13,6 +13,6 @@ export const metadata: Metadata = {
  * the list.
  */
 export default async function NewCarrierPage() {
-  if (!(await canModule("carriers", "create"))) return <NoAccess title="Add carrier" />;
+  if (!(await canModule("carriers.list", "create"))) return <NoAccess title="Add carrier" />;
   return <CarrierFormPage returnTo="/carriers" />;
 }

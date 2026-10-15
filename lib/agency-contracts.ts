@@ -13,15 +13,20 @@ import "server-only";
  * agency's login at the carrier is an agency password (lib/passwords.ts),
  * kept on the Passwords page. One live contract per carrier. It lives on
  * the agency profile: there is no page of its own. A carrier is open to
- * agents (appointments, portal passwords) only once its contract has a
- * number; the API reports that on the carrier as agentAccessible
+ * agents (appointments, portal passwords) only while its contract is
+ * active with a number; the API reports that on the carrier as agentAccessible
  * (lib/carriers.ts). Commissions and assigning policies to agents are not
  * modelled here.
  */
 
 import { apiGetAll } from "@/lib/api-server";
 
-export type AgencyContractStatus = "active" | "inactive";
+/**
+ * The same statuses as an agency state licence. Only an active contract
+ * needs its number, and only an active one with a number opens the carrier
+ * to agents.
+ */
+export type AgencyContractStatus = "active" | "pending" | "applied" | "expired" | "cancelled";
 
 export type AgencyContractRecord = {
   /** The API's UUID. */
@@ -33,7 +38,7 @@ export type AgencyContractRecord = {
   contractNumber: string;
   /** Covered policy types, in name order. Empty means none. */
   policyTypes: { id: string; name: string }[];
-  /** The API's is_active. Defaults to "active" when adding. */
+  /** Defaults to "active" when adding. */
   status: AgencyContractStatus;
 };
 
@@ -43,6 +48,8 @@ export type AgencyContractValues = {
   contractNumber: string;
   policyTypeIds: string[];
   status: AgencyContractStatus;
+  /** Agents to appoint with the carrier (pending, no writing number); ones already appointed are skipped. */
+  agentIds: string[];
 };
 
 /** Fields the form has, for an error to sit under; `form` is for errors about the attempt itself. */
@@ -50,6 +57,7 @@ export type AgencyContractErrorField =
   | "carrierId"
   | "contractNumber"
   | "status"
+  | "agentIds"
   | "form";
 
 /** A save error, shown under the field it names, or under the form for `form`. */
@@ -62,7 +70,7 @@ export type ApiAgencyContract = {
   carrier: { id: string; name: string; is_active: boolean };
   contract_number: string;
   policy_types: { id: string; name: string; is_active: boolean }[];
-  is_active: boolean;
+  status: AgencyContractStatus;
   created_at: string;
   updated_at: string;
 };
@@ -76,7 +84,7 @@ export function toAgencyContractRecord(contract: ApiAgencyContract): AgencyContr
     carrierName: contract.carrier.name,
     contractNumber: contract.contract_number,
     policyTypes: contract.policy_types.map(({ id, name }) => ({ id, name })),
-    status: contract.is_active ? "active" : "inactive",
+    status: contract.status,
   };
 }
 

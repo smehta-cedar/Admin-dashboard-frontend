@@ -34,11 +34,13 @@ export type NavItem = {
    */
   searchable?: boolean;
   /**
-   * The API module whose view flag shows this link (app/(dashboard)/nav.ts
-   * filters on the server). null: every signed-in user. Left out on a
-   * sub-link: shown with its section.
+   * The permission code whose view flag shows this link (app/(dashboard)/nav.ts
+   * filters on the server); a list shows it when any one allows. Left out:
+   * every signed-in user.
    */
-  module?: string | null;
+  module?: string | string[] | null;
+  /** With `listLabel`, the permission code whose view flag shows the list sub-link. */
+  listModule?: string;
 };
 
 type SidebarProps = {

@@ -14,9 +14,8 @@ import { byName } from "@/lib/text";
 import { savePassword } from "./actions";
 
 /*
- * Edit carrier password (/passwords/[id]/edit), and Add at /passwords/new
- * (the screens add through the AddPasswordDialog popup, ./password-dialog.tsx,
- * instead), as a page in the same layout as the carrier pages:
+ * Add carrier password at /passwords/new (the screens add and edit through
+ * the AddPasswordDialog popup, ./password-dialog.tsx, instead), as a page in the same layout as the carrier pages:
  * an Identity card (agent or the agency, and the carrier, with the status
  * select in its header), a Credentials card (portal username and password)
  * and a sticky button bar. Cancel and a successful save both return to

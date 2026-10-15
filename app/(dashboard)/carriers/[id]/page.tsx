@@ -13,13 +13,13 @@ import { CarrierProfile } from "./carrier-profile";
 
 export async function generateMetadata(props: PageProps<"/carriers/[id]">): Promise<Metadata> {
   const { id } = await props.params;
-  if (!(await canViewModule("carriers"))) return { title: "No access" };
+  if (!(await canViewModule("carriers.profile"))) return { title: "No access" };
   const carrier = await getCarrier(id);
   return { title: carrier ? carrier.name : "Carrier not found" };
 }
 
 export default async function CarrierProfilePage(props: PageProps<"/carriers/[id]">) {
-  if (!(await canViewModule("carriers"))) return <NoAccess title="Carrier profile" />;
+  if (!(await canViewModule("carriers.profile"))) return <NoAccess title="Carrier profile" />;
   const { id } = await props.params;
   const carrier = await getCarrier(id);
   if (!carrier) notFound();

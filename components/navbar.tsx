@@ -145,12 +145,12 @@ function HamburgerIcon() {
 }
 
 /**
- * Agent-only "+": opens Create a request for themselves when My requests
- * create is granted. Hidden otherwise.
+ * Agent-only "+": opens Create a request for themselves when Calendar's Add
+ * is granted. Hidden otherwise.
  */
 function AgentCreateRequestButton({ user }: { user: SessionUser }) {
   const [open, setOpen] = useState(false);
-  if (!user.agentId || !canCreate(user, "agent_view.requests")) return null;
+  if (!user.agentId || !canCreate(user, "requests")) return null;
 
   return (
     <>
@@ -210,8 +210,8 @@ function CreateMenu({ user }: { user: SessionUser }) {
     };
   }, [open]);
 
-  const carrier = canCreate(user, "carriers");
-  const agent = canCreate(user, "agents");
+  const carrier = canCreate(user, "carriers.list");
+  const agent = canCreate(user, "agents.list");
   const request = canCreate(user, "requests");
   if (!carrier && !agent && !request) return null;
 
@@ -345,7 +345,7 @@ function UserMenu({ user }: { user: SessionUser }) {
           </div>
           <div className="border-b border-line py-1">
             <Link
-              href={user.agentId ? "/agent" : "/profile"}
+              href={user.agentId ? `/agents/${user.agentId}` : "/profile"}
               role="menuitem"
               onClick={() => setOpen(false)}
               className={MENU_ITEM_CLASS}

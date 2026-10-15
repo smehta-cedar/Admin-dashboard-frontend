@@ -33,22 +33,20 @@ const ERROR_FIELDS: Record<string, RequestError["field"]> = {
 
 const API_TYPES = { licensing: "licensing", contract: "contract", dayOff: "day_off" } as const;
 
-/** Files a pending request. Agents post to /requests/mine/ (self only); staff to /create/. */
+/** Files a pending request. An agent files for themselves; the API refuses anyone else. */
 export async function fileRequest(values: RequestValues): Promise<FileRequestResult> {
   const user = await getSessionUser();
   if (!user) redirect("/login");
 
   const placement = values.type === "licensing" || values.type === "contract";
-  const asAgent = Boolean(user.agentId);
   const body = {
     type: API_TYPES[values.type],
     note: values.note,
-    ...(asAgent ? {} : { agent_id: values.agentId }),
+    agent_id: user.agentId ?? values.agentId,
     ...(placement ? { state: values.state, carrier_id: values.carrierId } : {}),
     ...(values.type === "dayOff" ? { start_date: values.startDate, end_date: values.endDate } : {}),
   };
-  const path = asAgent ? "/requests/mine/" : "/requests/create/";
-  const result = await apiFetch<ApiRequest>(path, { method: "POST", body });
+  const result = await apiFetch<ApiRequest>("/requests/create/", { method: "POST", body });
 
   if (!result.ok) {
     if (result.status === 401) redirect("/login");
@@ -62,7 +60,6 @@ export async function fileRequest(values: RequestValues): Promise<FileRequestRes
   const request = toRequestRecord(result.data);
   if (!request) return { ok: false, error: { field: "form", message: "The API answered with an unusable request." } };
   revalidatePath("/", "layout");
-  revalidatePath("/agent", "layout");
   return { ok: true, request };
 }
 

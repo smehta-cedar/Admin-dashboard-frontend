@@ -36,7 +36,8 @@ type RolesViewProps = {
 type RoleRow = { role: RoleRecord };
 
 /** How many modules the role can at least view. */
-const moduleCount = (role: RoleRecord) => Object.values(role.permissions).filter((flags) => flags.view).length;
+const moduleCount = (role: RoleRecord, modules: ModuleOption[]) =>
+  modules.filter((module) => role.permissions[module.code]?.view).length;
 
 /** The built-in role every agent sign-in uses. */
 const isAgentRole = (role: RoleRecord) => role.builtIn && role.name.toLowerCase() === "agent";
@@ -131,7 +132,7 @@ export function RolesView({ initialRoles, modules, users }: RolesViewProps) {
         id: "access",
         header: "Access",
         cell: ({ role }) => {
-          const count = moduleCount(role);
+          const count = moduleCount(role, modules);
           return count === 0 ? (
             <span className="text-fg-faint">None</span>
           ) : (
@@ -139,11 +140,11 @@ export function RolesView({ initialRoles, modules, users }: RolesViewProps) {
           );
         },
         className: "whitespace-nowrap text-fg-muted",
-        sortValue: ({ role }) => moduleCount(role),
+        sortValue: ({ role }) => moduleCount(role, modules),
       },
       ...COLUMNS.slice(3),
     ],
-    [modules.length],
+    [modules],
   );
 
   /** Adds or edits a role through the API. Resolves with the dialog's error, if any. */

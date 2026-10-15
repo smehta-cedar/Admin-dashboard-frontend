@@ -4,8 +4,8 @@
  * Add or edit one of the agency's carrier contracts, run on the Next server
  * so the access token stays in its HttpOnly cookie. POST
  * /agency-contracts/create/ or PATCH /agency-contracts/{id}/; the API keeps
- * one live contract per carrier, checks the policy types exist, and records
- * the change note.
+ * one live contract per carrier, checks the policy types exist, records
+ * the change note, and appoints the chosen agents with the carrier.
  *
  * What the API answers, and what the dialog shows for it:
  *
@@ -15,8 +15,8 @@
  *   network_error           the API is down                      -> under the form
  *
  * On success the agency page and every page with a carrier dropdown for
- * agents are revalidated: a new or cleared contract number changes which
- * carriers those dropdowns offer.
+ * agents are revalidated: a new or cleared contract number, or a status
+ * change, changes which carriers those dropdowns offer.
  */
 
 import { revalidatePath } from "next/cache";
@@ -38,7 +38,8 @@ export type SaveAgencyContractResult =
 const ERROR_FIELDS: Record<string, AgencyContractError["field"]> = {
   carrier: "carrierId",
   contract_number: "contractNumber",
-  is_active: "status",
+  status: "status",
+  agents: "agentIds",
 };
 
 /** Adds a contract for the agency with `agencyId`, or edits the one with `editingId`. */
@@ -51,7 +52,8 @@ export async function saveAgencyContract(
     carrier: values.carrierId,
     contract_number: values.contractNumber,
     policy_types: values.policyTypeIds,
-    is_active: values.status === "active",
+    status: values.status,
+    agents: values.agentIds,
   };
   const result = editingId
     ? await apiFetch<ApiAgencyContract>(`/agency-contracts/${encodeURIComponent(editingId)}/`, {

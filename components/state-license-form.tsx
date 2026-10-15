@@ -56,6 +56,8 @@ type StateLicenseFormProps = {
   removeMessage: string;
   onConfirmRemove: () => void | Promise<void>;
   onCloseConfirmRemove: () => void;
+  /** Extra fields under the dates, full width. */
+  children?: ReactNode;
 };
 
 export function StateLicenseForm({
@@ -92,6 +94,7 @@ export function StateLicenseForm({
   removeMessage,
   onConfirmRemove,
   onCloseConfirmRemove,
+  children,
 }: StateLicenseFormProps) {
   const statusOptions = statuses.includes(status) ? statuses : [...statuses, status];
 
@@ -196,6 +199,7 @@ export function StateLicenseForm({
             className={INPUT_CLASS}
           />
         </Field>
+        {children}
       </div>
 
       <div id={`${id}-error`} role="alert" className="mt-4">

@@ -17,8 +17,10 @@ import type {
 
 /*
  * The one Add / Edit role dialog: name, status, description and a grid of
- * modules by action. Checking create, update or delete also checks view;
- * unchecking view clears the row. A header checkbox sets a whole column.
+ * sidebar links by action. Each row's switch turns every action on or off;
+ * it shows on when all four are. Checking create, update or delete also
+ * checks view; unchecking view clears the row. A header checkbox sets a
+ * whole column. Every role, Agent included, lists the sidebar links.
  *
  * The view passes `onSave` and `onDelete`, which call the server actions
  * (./actions.ts) and update its own state. Delete asks once more inside the
@@ -35,6 +37,16 @@ export type { RoleError, RoleValues } from "@/lib/roles";
 
 /** Column order in the grid; also the order the API stores them in. */
 export const PERMISSION_ACTIONS: PermissionAction[] = ["view", "create", "update", "delete"];
+
+/** What each action is called in the grid. */
+const ACTION_LABELS: Record<PermissionAction, string> = {
+  view: "Read",
+  create: "Add",
+  update: "Edit",
+  delete: "Delete",
+};
+
+const FULL_ACCESS: PermissionFlags = { view: true, create: true, update: true, delete: true };
 
 /** A built-in role's name and status, shown but not editable. */
 const LOCKED_CLASS = "cursor-not-allowed bg-surface-muted text-fg-muted";
@@ -112,11 +124,19 @@ function RoleForm({ id, editor, modules, onSave, onDelete, close }: RoleFormProp
     });
   };
 
-  /** Sets one action for every module, with the same view rule. */
+  /** The row's switch: every action on, or none. */
+  const setRow = (module: string, on: boolean) => {
+    clear();
+    setPermissions((current) => ({ ...current, [module]: { ...(on ? FULL_ACCESS : NO_ACCESS) } }));
+  };
+
+  const rowOn = (module: string) => PERMISSION_ACTIONS.every((action) => permissions[module]?.[action]);
+
+  /** Sets one action for every row, with the same view rule. */
   const setColumn = (action: PermissionAction, checked: boolean) => {
     clear();
     setPermissions((current) => {
-      const next: RolePermissions = {};
+      const next: RolePermissions = { ...current };
       for (const module of modules) {
         const flags = { ...current[module.code] };
         if (action === "view" && !checked) {
@@ -235,11 +255,14 @@ function RoleForm({ id, editor, modules, onSave, onDelete, close }: RoleFormProp
           <table className="w-full text-sm">
             <thead className="bg-surface-muted text-xs text-fg-subtle">
               <tr>
+                <th scope="col" className="w-14 px-3 py-2 text-left font-medium">
+                  <span className="sr-only">All</span>
+                </th>
                 <th scope="col" className="px-3 py-2 text-left font-medium">
                   Module
                 </th>
                 {PERMISSION_ACTIONS.map((action) => (
-                  <th key={action} scope="col" className="w-24 px-2 py-2 text-center font-medium capitalize">
+                  <th key={action} scope="col" className="w-24 px-2 py-2 text-center font-medium">
                     <label className="inline-flex cursor-pointer items-center gap-1.5">
                       <input
                         type="checkbox"
@@ -247,7 +270,7 @@ function RoleForm({ id, editor, modules, onSave, onDelete, close }: RoleFormProp
                         onChange={(event) => setColumn(action, event.currentTarget.checked)}
                         className="size-4 rounded border-line-strong accent-brand-strong"
                       />
-                      {action}
+                      {ACTION_LABELS[action]}
                       <span className="sr-only"> for every module</span>
                     </label>
                   </th>
@@ -257,6 +280,13 @@ function RoleForm({ id, editor, modules, onSave, onDelete, close }: RoleFormProp
             <tbody>
               {modules.map((module) => (
                 <tr key={module.code} className="border-t border-line">
+                  <td className="px-3 py-2">
+                    <Switch
+                      checked={rowOn(module.code)}
+                      label={`All permissions for ${module.label}`}
+                      onChange={(on) => setRow(module.code, on)}
+                    />
+                  </td>
                   <th scope="row" className="px-3 py-2 text-left font-normal text-fg">
                     {module.label}
                   </th>
@@ -264,7 +294,7 @@ function RoleForm({ id, editor, modules, onSave, onDelete, close }: RoleFormProp
                     <td key={action} className="px-2 py-2 text-center">
                       <input
                         type="checkbox"
-                        aria-label={`${action} ${module.label}`}
+                        aria-label={`${ACTION_LABELS[action]} ${module.label}`}
                         checked={permissions[module.code]?.[action] ?? false}
                         onChange={(event) => setFlag(module.code, action, event.currentTarget.checked)}
                         className="size-4 rounded border-line-strong accent-brand-strong"
@@ -314,5 +344,28 @@ function RoleForm({ id, editor, modules, onSave, onDelete, close }: RoleFormProp
         onClose={() => setConfirmingDelete(false)}
       />
     </form>
+  );
+}
+
+/** An on/off slider; on is the brand colour. */
+function Switch({ checked, label, onChange }: { checked: boolean; label: string; onChange: (on: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
+        checked ? "bg-brand-strong" : "bg-line-strong"
+      }`}
+    >
+      <span
+        aria-hidden="true"
+        className={`inline-block size-4 rounded-full bg-surface shadow transition-transform ${
+          checked ? "translate-x-4.5" : "translate-x-0.5"
+        }`}
+      />
+    </button>
   );
 }

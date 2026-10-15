@@ -224,3 +224,32 @@ export async function getAgencyNotes(agencyId: string): Promise<AgencyNote[]> {
   const notes = await apiGet<ApiAgencyNote[]>(`/agencies/${encodeURIComponent(agencyId)}/notes/`);
   return notes.map(toAgencyNote);
 }
+
+
+/** A note someone wrote on the agency (the Notes panel); not a change note. */
+export type AgencyComment = {
+  id: string;
+  body: string;
+  /** Who wrote it; null when that user is gone. */
+  createdBy: string | null;
+  createdAt: string;
+};
+
+/** A written note as the API serialises it (AgencyCommentSerializer). */
+export type ApiAgencyComment = {
+  id: string;
+  agency_id: string;
+  body: string;
+  created_by: string | null;
+  created_at: string;
+};
+
+export function toAgencyComment(comment: ApiAgencyComment): AgencyComment {
+  return { id: comment.id, body: comment.body, createdBy: comment.created_by, createdAt: comment.created_at };
+}
+
+/** The agency's written notes, newest first. */
+export async function getAgencyComments(agencyId: string): Promise<AgencyComment[]> {
+  const comments = await apiGet<ApiAgencyComment[]>(`/agencies/${encodeURIComponent(agencyId)}/comments/`);
+  return comments.map(toAgencyComment);
+}

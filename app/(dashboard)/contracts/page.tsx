@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 };
 
 export default async function ContractsPage() {
-  if (!(await canViewModule("contracts"))) return <NoAccess title="Contracts" />;
+  if (!(await canViewModule("contracts.by_state"))) return <NoAccess title="Contracts" />;
   const [contracts, notes, agents, carriers, agency] = await Promise.all([
     getCarrierContracts(),
     getCarrierContractNotes(),
