@@ -70,6 +70,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   // Requests and the calendar they land on.
   { href: "/hr", label: "Calendar", icon: "hr", module: "requests" },
+  { href: "/tasks", label: "Tasks", icon: "tasks", module: "tasks" },
   // What the shop sells, and the shop itself; orders land on HR.
   {
     href: "/storefront",

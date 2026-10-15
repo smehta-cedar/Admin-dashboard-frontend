@@ -65,7 +65,8 @@ function readValues(form: HTMLFormElement): RequestValues {
   };
 }
 
-function PartyOptions({ parties, placeholder }: { parties: RequestParty[]; placeholder: string }) {
+/** An agent or carrier select's options; the task popup (./task-dialog.tsx) uses them too. */
+export function PartyOptions({ parties, placeholder }: { parties: RequestParty[]; placeholder: string }) {
   return (
     <>
       <option value="">{placeholder}</option>

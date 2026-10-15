@@ -68,7 +68,7 @@ export function StateLicenseForm({
   id,
   title,
   description,
-  state,
+  state: _state,
   onStateChange,
   defaultState,
   allowedStates,

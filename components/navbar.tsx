@@ -11,6 +11,7 @@ import { ChangePasswordDialog } from "./change-password-dialog";
 import { NavbarSearch } from "./navbar-search";
 import { NotificationsMenu } from "./notifications-menu";
 import { RequestDialog } from "./request-dialog";
+import { TaskDialog } from "./task-dialog";
 import type { NavItem } from "./sidebar";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -180,8 +181,8 @@ function AgentCreateRequestButton({ user }: { user: SessionUser }) {
 }
 
 /**
- * "+" that opens a small menu: Carrier (/carriers/new), Agent (/agents/new)
- * and Request (the popup in ./request-dialog.tsx). Each item shows only when
+ * "+" that opens a small menu: Carrier (/carriers/new), Agent (/agents/new),
+ * Request (./request-dialog.tsx) and Task (./task-dialog.tsx). Each item shows only when
  * the role may create that record; with none, the button is hidden. The
  * request goes into the requests store on the dashboard layout, so it is
  * there when HR is opened next.
@@ -189,6 +190,7 @@ function AgentCreateRequestButton({ user }: { user: SessionUser }) {
 function CreateMenu({ user }: { user: SessionUser }) {
   const [open, setOpen] = useState(false);
   const [requesting, setRequesting] = useState(false);
+  const [addingTask, setAddingTask] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
 
@@ -213,7 +215,8 @@ function CreateMenu({ user }: { user: SessionUser }) {
   const carrier = canCreate(user, "carriers.list");
   const agent = canCreate(user, "agents.list");
   const request = canCreate(user, "requests");
-  if (!carrier && !agent && !request) return null;
+  const task = canCreate(user, "tasks");
+  if (!carrier && !agent && !request && !task) return null;
 
   return (
     <div ref={rootRef} className="relative">
@@ -272,9 +275,23 @@ function CreateMenu({ user }: { user: SessionUser }) {
               Request
             </button>
           ) : null}
+          {task ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                setAddingTask(true);
+              }}
+              className={MENU_ITEM_CLASS}
+            >
+              Task
+            </button>
+          ) : null}
         </div>
       ) : null}
       <RequestDialog open={requesting} onClose={() => setRequesting(false)} />
+      <TaskDialog open={addingTask} onClose={() => setAddingTask(false)} />
     </div>
   );
 }
