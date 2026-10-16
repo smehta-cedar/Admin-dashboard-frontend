@@ -51,7 +51,7 @@ export default async function CarrierProfilePage(props: PageProps<"/carriers/[id
                 {
                   id: agent.id,
                   name: agent.name,
-                  status: agent.status,
+                  status: contract.status,
                   writingNumber: contract.writingNumber,
                   appointedStates: contract.appointedStates,
                   licensedStates: agent.licensedStates,

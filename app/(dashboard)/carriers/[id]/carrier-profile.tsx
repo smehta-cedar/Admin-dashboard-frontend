@@ -18,7 +18,7 @@ import {
 } from "@/components/profile-shell";
 import { ROW_BUTTON_CLASS } from "@/components/classes";
 import { StatusBadge } from "@/components/status-badge";
-import type { AgentStatus } from "@/lib/agents";
+import type { ContractStatus } from "@/lib/carrier-contracts";
 import type { CarrierPolicyRecord } from "@/lib/carrier-policies";
 import type { CarrierRecord } from "@/lib/carriers";
 import type { PasswordRecord } from "@/lib/passwords";
@@ -66,7 +66,8 @@ import { CarrierStatesPanel } from "./carrier-states-panel";
 type AgentRow = {
   id: string;
   name: string;
-  status: AgentStatus;
+  /** The contract's stored status, the same one Contracts and Pending show. */
+  status: ContractStatus;
   writingNumber: string;
   /** Raw appointment states; writable is derived against the live footprint. */
   appointedStates: string[];
