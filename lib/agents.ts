@@ -46,6 +46,7 @@ import "server-only";
 
 import type { Address } from "@/lib/address";
 import type { AgentStateLicenseRecord } from "@/lib/agent-state-licenses";
+import { toAgentStatus, type AgentStatus } from "@/lib/agent-statuses";
 import { apiFetch, apiGet, apiGetAll, ApiError } from "@/lib/api-server";
 import type { FieldChange } from "@/lib/change-notes";
 import { formatPhone } from "@/lib/phone";
@@ -54,19 +55,23 @@ import {
   licenseDatesOf,
   licenseLinesOf,
   licenseNumbersOf,
+  licenseStatusesOf,
   licensedStatesOf,
   type LicenceDates,
   type LicenceLines,
   type StateLicenseStatus,
 } from "@/lib/state-licenses";
 
-export type AgentStatus = "active" | "inactive";
+export type { AgentStatus } from "@/lib/agent-statuses";
 
 export type AgentRecord = {
   /** The API's UUID. Not the NPN or a writing number. */
   id: string;
-  /** Legal / full name. */
+  /** Legal / full name, "First Last"; the API builds it from the parts. */
   name: string;
+  /** The name's parts, the first including any middle name. Left out when blank. */
+  firstName?: string;
+  lastName?: string;
   /** Other names seen on statements (DBA, nickname, maiden). Empty when none. */
   aliases: string[];
   /** The API's is_active. Defaults to "active" when adding. */
@@ -87,6 +92,8 @@ export type AgentRecord = {
    * state in licensedStates. Derived from the rows too.
    */
   licenseLines: Record<string, LicenceLines>;
+  /** Each licence's status, by state code, for every state in licensedStates. Derived from the rows too. */
+  licenseStatuses: Record<string, StateLicenseStatus>;
   /**
    * When each licence starts and ends, by state code, for every state in
    * licensedStates. Derived from the rows too; the form enters them.
@@ -111,6 +118,8 @@ export type AgentRecord = {
   startDate?: string;
   /** The last four digits of the SSN, never the full number. */
   ssnLast4?: string;
+  /** Free-text notes about the agent (the API's `remarks`). Not the change log. */
+  remarks?: string;
 };
 
 /** Agent fields a note can record. The ID never changes. */
@@ -145,6 +154,7 @@ export type ApiAgentLicense = {
   status: string;
   start_date: string | null;
   end_date: string | null;
+  renewing?: boolean;
   life: boolean;
   health: boolean;
 };
@@ -153,6 +163,8 @@ export type ApiAgentLicense = {
 export type ApiAgent = {
   id: string;
   name: string;
+  first_name: string;
+  last_name: string;
   aliases: string[];
   npn: string;
   email: string;
@@ -164,7 +176,9 @@ export type ApiAgent = {
   join_date: string | null;
   start_date: string | null;
   ssn_last4: string;
+  remarks: string;
   licenses: ApiAgentLicense[];
+  status: string;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -195,8 +209,10 @@ const NOTE_FIELDS: Record<string, AgentField> = {
   join_date: "joinDate",
   start_date: "startDate",
   ssn_last4: "ssnLast4",
+  remarks: "remarks",
   licensed_states: "licensedStates",
   license_numbers: "licenseNumbers",
+  license_statuses: "licenseStatuses",
   license_lines: "licenseLines",
   license_dates: "licenseDates",
 };
@@ -211,11 +227,13 @@ export function toLicenseRecords(agent: ApiAgent): AgentStateLicenseRecord[] {
     return {
       id: row.id,
       agentId: agent.id,
+      agentName: agent.name,
       state: row.state,
       licenseNumber: row.license_number,
       status: knownStatus ? (row.status as StateLicenseStatus) : "active",
       startDate: row.start_date ?? "",
       endDate: row.end_date ?? "",
+      renewing: row.renewing ?? false,
       life: Boolean(row.life),
       health: Boolean(row.health),
     };
@@ -228,11 +246,14 @@ export function toAgentRecord(agent: ApiAgent): AgentRecord {
   return {
     id: agent.id,
     name: agent.name,
+    ...(agent.first_name ? { firstName: agent.first_name } : {}),
+    ...(agent.last_name ? { lastName: agent.last_name } : {}),
     aliases: agent.aliases,
-    status: agent.is_active ? "active" : "inactive",
+    status: toAgentStatus(agent.status, agent.is_active, agent.name),
     licensedStates: licensedStatesOf(licenses),
     licenseNumbers: licenseNumbersOf(licenses),
     licenseLines: licenseLinesOf(licenses),
+    licenseStatuses: licenseStatusesOf(licenses),
     licenseDates: licenseDatesOf(licenses),
     npn: agent.npn,
     email: agent.email,
@@ -244,6 +265,7 @@ export function toAgentRecord(agent: ApiAgent): AgentRecord {
     ...(agent.join_date ? { joinDate: agent.join_date } : {}),
     ...(agent.start_date ? { startDate: agent.start_date } : {}),
     ...(agent.ssn_last4 ? { ssnLast4: agent.ssn_last4 } : {}),
+    ...(agent.remarks ? { remarks: agent.remarks } : {}),
   };
 }
 

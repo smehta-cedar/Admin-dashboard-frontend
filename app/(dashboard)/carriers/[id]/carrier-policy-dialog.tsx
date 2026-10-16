@@ -14,8 +14,8 @@ import type {
 import type { PolicyTypeRecord } from "@/lib/policy-types";
 
 /*
- * The one Add / Edit dialog for a carrier's policy: name, policy type (from
- * the active catalog), status and the states it can be sold in, offered only
+ * The one Add / Edit dialog for a carrier's policy: name, an optional policy
+ * type (from the active catalog; None is fine), status and the states it can be sold in, offered only
  * from the carrier's own available states. The carrier profile opens it from
  * the Policies panel's Add policy and a row's Edit; the carrier itself is
  * fixed by the profile and never shown as a field.
@@ -108,7 +108,7 @@ function CarrierPolicyForm({
   const typeOptions = policyTypes
     .filter((type) => type.status === "active" || type.id === editing?.policyTypeId)
     .map((type) => ({ id: type.id, name: type.name }));
-  if (editing && !typeOptions.some((type) => type.id === editing.policyTypeId)) {
+  if (editing?.policyTypeId && !typeOptions.some((type) => type.id === editing.policyTypeId)) {
     typeOptions.unshift({ id: editing.policyTypeId, name: editing.policyTypeName });
   }
 
@@ -118,7 +118,6 @@ function CarrierPolicyForm({
     setErrors((current) => current.filter((error) => error.field !== field));
 
   const nameError = messageFor("name");
-  const typeError = messageFor("policyType");
   const statesError = messageFor("availableStates");
   const formError = messageFor("form") ?? messageFor("status");
 
@@ -171,27 +170,14 @@ function CarrierPolicyForm({
             className={INPUT_CLASS}
           />
         </Field>
-        <Field
-          label="Policy type"
-          htmlFor={`${id}-type`}
-          required
-          hint={typeError ?? undefined}
-          hintId={`${id}-type-error`}
-          error
-        >
+        <Field label="Policy type" htmlFor={`${id}-type`}>
           <select
             id={`${id}-type`}
             name="policyType"
-            required
             defaultValue={editing?.policyTypeId ?? ""}
-            aria-invalid={typeError ? true : undefined}
-            aria-describedby={typeError ? `${id}-type-error` : undefined}
-            onChange={() => clear("policyType")}
             className={INPUT_CLASS}
           >
-            <option value="" disabled>
-              Choose a policy type
-            </option>
+            <option value="">None</option>
             {typeOptions.map((type) => (
               <option key={type.id} value={type.id}>
                 {type.name}

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { logout } from "@/app/login/actions";
-import type { SessionUser } from "@/lib/auth-user";
+import { canCreate, type SessionUser } from "@/lib/auth-user";
 import type { SearchIndex } from "@/lib/search";
 import { initials } from "@/lib/text";
 import { BrandLogo } from "./brand-logo";
@@ -11,6 +11,7 @@ import { ChangePasswordDialog } from "./change-password-dialog";
 import { NavbarSearch } from "./navbar-search";
 import { NotificationsMenu } from "./notifications-menu";
 import { RequestDialog } from "./request-dialog";
+import { TaskDialog } from "./task-dialog";
 import type { NavItem } from "./sidebar";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -111,7 +112,7 @@ export function Navbar({
           <NavbarSearch scopes={searchScopes} index={searchIndex} className="hidden w-64 shrink-0 md:flex lg:w-80" />
         ) : null}
         <div className="ml-auto flex items-center justify-end gap-1 md:ml-0 md:flex-1">
-          {user.agentId ? null : <CreateRequestButton />}
+          {user.agentId ? <AgentCreateRequestButton user={user} /> : <CreateMenu user={user} />}
           <ThemeToggle />
           <NotificationsMenu buttonClassName={ICON_BUTTON_CLASS} />
           <UserMenu user={user} />
@@ -145,12 +146,12 @@ function HamburgerIcon() {
 }
 
 /**
- * "+" that opens the Create-a-request popup (./request-dialog.tsx) from any
- * page. The request goes into the requests store on the dashboard layout, so
- * it is there when HR is opened next.
+ * Agent-only "+": opens Create a request for themselves when Calendar's Add
+ * is granted. Hidden otherwise.
  */
-function CreateRequestButton() {
+function AgentCreateRequestButton({ user }: { user: SessionUser }) {
   const [open, setOpen] = useState(false);
+  if (!user.agentId || !canCreate(user, "requests")) return null;
 
   return (
     <>
@@ -174,8 +175,124 @@ function CreateRequestButton() {
           <path d="M10 4v12M4 10h12" />
         </svg>
       </button>
-      <RequestDialog open={open} onClose={() => setOpen(false)} />
+      <RequestDialog open={open} onClose={() => setOpen(false)} fixedAgentId={user.agentId} />
     </>
+  );
+}
+
+/**
+ * "+" that opens a small menu: Carrier (/carriers/new), Agent (/agents/new),
+ * Request (./request-dialog.tsx) and Task (./task-dialog.tsx). Each item shows only when
+ * the role may create that record; with none, the button is hidden. The
+ * request goes into the requests store on the dashboard layout, so it is
+ * there when HR is opened next.
+ */
+function CreateMenu({ user }: { user: SessionUser }) {
+  const [open, setOpen] = useState(false);
+  const [requesting, setRequesting] = useState(false);
+  const [addingTask, setAddingTask] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const menuId = useId();
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const carrier = canCreate(user, "carriers.list");
+  const agent = canCreate(user, "agents.list");
+  const request = canCreate(user, "requests");
+  const task = canCreate(user, "tasks");
+  if (!carrier && !agent && !request && !task) return null;
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-controls={open ? menuId : undefined}
+        aria-label="Add new"
+        title="Add new"
+        onClick={() => setOpen((current) => !current)}
+        className={`${ICON_BUTTON_CLASS} flex items-center gap-0.5`}
+      >
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 20 20"
+          className="size-5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.5}
+          strokeLinecap="round"
+        >
+          <path d="M10 4v12M4 10h12" />
+        </svg>
+        <svg aria-hidden="true" viewBox="0 0 10 10" className="size-2.5" fill="currentColor">
+          <path d="M1.5 3.5h7L5 7.5z" />
+        </svg>
+      </button>
+      {open ? (
+        <div
+          id={menuId}
+          role="menu"
+          aria-label="Add new"
+          className="absolute right-0 top-full z-50 mt-2 w-40 overflow-hidden rounded-lg border border-line bg-surface py-1 shadow-lg"
+        >
+          {carrier ? (
+            <Link href="/carriers/new" role="menuitem" onClick={() => setOpen(false)} className={MENU_ITEM_CLASS}>
+              Carrier
+            </Link>
+          ) : null}
+          {agent ? (
+            <Link href="/agents/new" role="menuitem" onClick={() => setOpen(false)} className={MENU_ITEM_CLASS}>
+              Agent
+            </Link>
+          ) : null}
+          {request ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                setRequesting(true);
+              }}
+              className={MENU_ITEM_CLASS}
+            >
+              Request
+            </button>
+          ) : null}
+          {task ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                setAddingTask(true);
+              }}
+              className={MENU_ITEM_CLASS}
+            >
+              Task
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+      <RequestDialog open={requesting} onClose={() => setRequesting(false)} />
+      <TaskDialog open={addingTask} onClose={() => setAddingTask(false)} />
+    </div>
   );
 }
 
@@ -245,7 +362,7 @@ function UserMenu({ user }: { user: SessionUser }) {
           </div>
           <div className="border-b border-line py-1">
             <Link
-              href={user.agentId ? "/agent" : "/profile"}
+              href={user.agentId ? `/agents/${user.agentId}` : "/profile"}
               role="menuitem"
               onClick={() => setOpen(false)}
               className={MENU_ITEM_CLASS}

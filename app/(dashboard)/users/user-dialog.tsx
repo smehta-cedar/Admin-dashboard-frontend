@@ -8,10 +8,12 @@ import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
 import type { RoleOption, UserError, UserField, UserRecord, UserValues } from "@/lib/users";
 
 /*
- * The one Add / Edit user dialog: name, email, phone, role, status and
+ * The one Add / Edit user dialog: name, email, phone, roles, status and
  * password. The Users page opens it from Add user and a row's Edit; there is
- * no user profile page. Agent and agency sign-in is a later phase, so there
- * is no link from a user to an agent.
+ * no user profile page. Users are staff accounts, not agents or the agency.
+ *
+ * A user can hold any number of roles, ticked as checkboxes. Only a
+ * superuser can change them; anyone else sees them read-only.
  *
  * The view passes `onSave`, which calls the saveUser server action
  * (./actions.ts) and updates its own state from the saved record. The
@@ -29,6 +31,7 @@ export const USER_FIELD_LABELS: Record<UserField, string> = {
   name: "Name",
   email: "Email",
   phone: "Phone",
+  roles: "Roles",
   role: "Role",
   status: "Status",
   password: "Password",
@@ -39,33 +42,38 @@ type UserDialogProps = {
   editor: UserEditor | null;
   /** The roles a user can be given, by name. */
   roles: RoleOption[];
+  /** Only a superuser can change anyone's roles. */
+  canAssignRoles: boolean;
   /** Saves the values; resolves with the error to show instead of closing. */
   onSave: (values: UserValues) => Promise<UserError | null>;
   /** Runs for every close: Cancel, Escape, backdrop click, or a save. */
   onClose: () => void;
 };
 
-export function UserDialog({ editor, roles, onSave, onClose }: UserDialogProps) {
+export function UserDialog({ editor, roles, canAssignRoles, onSave, onClose }: UserDialogProps) {
   const { dialogRef, close } = useModalDialog(editor !== null);
   const id = useId();
 
   // Clearing the editor unmounts the form, which resets it.
   return (
     <ModalDialog dialogRef={dialogRef} labelledBy={`${id}-title`} onClose={onClose}>
-      {editor ? <UserForm id={id} editor={editor} roles={roles} onSave={onSave} close={close} /> : null}
+      {editor ? <UserForm id={id} editor={editor} roles={roles} canAssignRoles={canAssignRoles} onSave={onSave} close={close} /> : null}
     </ModalDialog>
   );
 }
 
-type UserFormProps = Pick<UserDialogProps, "onSave" | "roles"> & {
+type UserFormProps = Pick<UserDialogProps, "onSave" | "roles" | "canAssignRoles"> & {
   id: string;
   editor: UserEditor;
   close: () => void;
 };
 
 /** The dialog's form. Mounted per open, so its errors start clear each time. */
-function UserForm({ id, editor, roles, onSave, close }: UserFormProps) {
+function UserForm({ id, editor, roles, canAssignRoles, onSave, close }: UserFormProps) {
   const editing = editor.mode === "edit" ? editor.user : undefined;
+  const currentRoleIds = editing?.roles.map((role) => role.id) ?? [];
+  // Only active roles are offered; unticking the form drops an inactive one, which grants nothing anyway.
+  const [roleIds, setRoleIds] = useState(() => currentRoleIds.filter((roleId) => roles.some((role) => role.id === roleId)));
   const [error, setError] = useState<UserError | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -75,7 +83,7 @@ function UserForm({ id, editor, roles, onSave, close }: UserFormProps) {
   const nameError = messageFor("name");
   const emailError = messageFor("email");
   const phoneError = messageFor("phone");
-  const roleError = messageFor("roleId");
+  const roleError = messageFor("roleIds");
   const passwordError = messageFor("password");
   const formError = messageFor("form") ?? messageFor("status");
 
@@ -88,7 +96,8 @@ function UserForm({ id, editor, roles, onSave, close }: UserFormProps) {
       name: text("name"),
       email: text("email"),
       phone: text("phone"),
-      roleId: text("roleId"),
+      // Left as they are for anyone who can't change them.
+      roleIds: canAssignRoles ? roleIds : currentRoleIds,
       status: text("status") === "inactive" ? "inactive" : "active",
       // Not trimmed or lowercased: spaces and case can matter in a password.
       password: String(data.get("password") ?? ""),
@@ -184,30 +193,6 @@ function UserForm({ id, editor, roles, onSave, close }: UserFormProps) {
             className={INPUT_CLASS}
           />
         </Field>
-        <Field
-          label="Role"
-          htmlFor={`${id}-role`}
-          hint={roleError ?? "What the API lets them do; pages are not gated by it yet."}
-          hintId={roleError ? `${id}-role-error` : `${id}-role-hint`}
-          error={roleError !== null}
-        >
-          <select
-            id={`${id}-role`}
-            name="roleId"
-            defaultValue={editing?.role?.id ?? ""}
-            aria-invalid={roleError ? true : undefined}
-            aria-describedby={roleError ? `${id}-role-error` : `${id}-role-hint`}
-            onChange={clear}
-            className={INPUT_CLASS}
-          >
-            <option value="">No role</option>
-            {roles.map((role) => (
-              <option key={role.id} value={role.id}>
-                {role.name}
-              </option>
-            ))}
-          </select>
-        </Field>
         <Field label="Status" htmlFor={`${id}-status`} hint="Inactive users are signed out and can't sign in." hintId={`${id}-status-hint`}>
           <select
             id={`${id}-status`}
@@ -244,6 +229,45 @@ function UserForm({ id, editor, roles, onSave, close }: UserFormProps) {
           />
         </Field>
       </div>
+
+      <fieldset className="mt-4" aria-describedby={roleError ? `${id}-roles-error` : undefined}>
+        <legend className="text-sm font-medium text-fg">Roles</legend>
+        {canAssignRoles ? (
+          roles.length === 0 ? (
+            <p className="mt-2 text-sm text-fg-subtle">No active roles.</p>
+          ) : (
+            <div className="mt-2 grid gap-x-4 gap-y-1.5 sm:grid-cols-3">
+              {roles.map((role) => (
+                <label key={role.id} className="flex items-center gap-2 text-sm text-fg">
+                  <input
+                    type="checkbox"
+                    checked={roleIds.includes(role.id)}
+                    onChange={(event) => {
+                      const { checked } = event.target;
+                      setRoleIds((current) =>
+                        checked ? [...current, role.id] : current.filter((roleId) => roleId !== role.id),
+                      );
+                      clear();
+                    }}
+                    aria-invalid={roleError ? true : undefined}
+                    className="size-4 accent-brand-strong"
+                  />
+                  {role.name}
+                </label>
+              ))}
+            </div>
+          )
+        ) : (
+          <p className="mt-2 text-sm text-fg-muted">
+            {editing?.roles.map((role) => role.name).join(", ") || "No roles"}
+          </p>
+        )}
+        {roleError ? (
+          <p id={`${id}-roles-error`} className="mt-1 text-xs text-danger">
+            {roleError}
+          </p>
+        ) : null}
+      </fieldset>
 
       {/* Errors about the attempt itself (the API's rules, no permission, API down), not one field. */}
       <div role="alert" className="mt-4">

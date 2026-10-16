@@ -83,12 +83,12 @@ export async function login(_previous: LoginState, formData: FormData): Promise<
   }
 
   setAuthCookies(await cookies(), { access: result.data.access, refresh: result.data.refresh });
-  redirect(result.data.user.agent_id ? "/agent" : "/overview");
+  redirect("/overview");
 }
 
 /**
  * Agent sign-in: work email and the code from the email. No password.
- * Same cookies as staff sign-in, then the agent's own view at /agent.
+ * Same cookies as staff sign-in, then the CRM with the Agent role's links.
  */
 export async function agentLogin(_previous: LoginState, formData: FormData): Promise<LoginState> {
   const email = String(formData.get("email") ?? "").trim();
@@ -121,7 +121,7 @@ export async function agentLogin(_previous: LoginState, formData: FormData): Pro
   }
 
   setAuthCookies(await cookies(), { access: result.data.access, refresh: result.data.refresh });
-  redirect("/agent");
+  redirect("/overview");
 }
 
 /**

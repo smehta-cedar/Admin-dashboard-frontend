@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 };
 
 export default async function ContractsPage() {
-  if (!(await canViewModule("contracts"))) return <NoAccess title="Contracts" />;
+  if (!(await canViewModule("contracts.by_state"))) return <NoAccess title="Contracts" />;
   const [contracts, notes, agents, carriers, agency] = await Promise.all([
     getCarrierContracts(),
     getCarrierContractNotes(),
@@ -35,14 +35,18 @@ export default async function ContractsPage() {
         licensedStates,
         licenseNumbers,
       }))}
-      carriers={carriers.map(({ id, name, status, availableStates, agentAccessible }) => ({
+      carriers={carriers.map(({ id, name, status, availableStates, agentAccessible, licenses }) => ({
         id,
         name,
         status,
         availableStates,
         agentAccessible,
+        // Each state's Life / Health lines, for the map's Lines colouring.
+        licenses,
       }))}
       agencyLicenseNumbers={agency?.licenseNumbers ?? {}}
+      // No agency record yet: nothing is striped.
+      agencyLicensedStates={agency ? agency.licensedStates : null}
     />
   );
 }

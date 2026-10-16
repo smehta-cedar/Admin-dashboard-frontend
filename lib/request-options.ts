@@ -18,7 +18,7 @@ export const REQUEST_TYPE_LABELS: Record<RequestType, string> = {
   merch: "Merch",
 };
 
-export const REQUEST_STATUSES: readonly RequestStatus[] = ["pending", "approved", "denied"];
+export const REQUEST_STATUSES: readonly RequestStatus[] = ["pending", "applied", "approved", "denied"];
 
 /** What the dialog hands over: licensing and contract read state and carrier; a day off reads its dates. */
 export type RequestValues = {

@@ -31,7 +31,7 @@ export type RequestType = "licensing" | "contract" | "dayOff" | "merch";
 /** The types the Create-a-request dialog files: every one names an agent. */
 export type AgentRequestType = Exclude<RequestType, "merch">;
 
-export type RequestStatus = "pending" | "approved" | "denied";
+export type RequestStatus = "pending" | "applied" | "approved" | "denied";
 
 type RequestBase = {
   /** The API's UUID. */
@@ -106,7 +106,7 @@ export type ApiRequest = {
   updated_at: string;
 };
 
-const STATUSES: readonly string[] = ["pending", "approved", "denied"] satisfies RequestStatus[];
+const STATUSES: readonly string[] = ["pending", "applied", "approved", "denied"] satisfies RequestStatus[];
 
 /**
  * An API request as the app holds it, or null when the row is missing what

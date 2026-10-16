@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { CarrierContractRecord } from "@/lib/carrier-contracts";
 import { stateSummary, writableStates } from "@/lib/us-states";
+import type { AgentStatus } from "@/lib/agents";
 import { initials } from "@/lib/text";
 
 /*
@@ -16,7 +17,7 @@ import { initials } from "@/lib/text";
  * carrier opens Add contract for that agent.
  */
 
-type ListAgent = { id: string; name: string; status: "active" | "inactive"; licensedStates: string[] };
+type ListAgent = { id: string; name: string; status: AgentStatus; licensedStates: string[] };
 type ListCarrier = { id: string; name: string; availableStates: string[] };
 /** A contract as the list needs it: the full record, so Edit can open it in the dialog. */
 type ListContract = CarrierContractRecord;
@@ -49,7 +50,7 @@ export function AgentCarrierList({ agents, carriers, contracts, onAdd, onEdit, h
           No agents yet. Add them on the Agents page.
         </p>
       ) : (
-        <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface shadow-xs">
+        <ul className="divide-y divide-line overflow-hidden rounded-2xl border glass shadow-xs">
           {agents.map((agent) => {
             // In the order of the carriers shown above, each with its contract.
             const agentCarriers = carriers.flatMap((carrier) => {

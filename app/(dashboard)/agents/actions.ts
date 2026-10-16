@@ -39,27 +39,42 @@ export type SaveAgentResult =
 /** API field name -> form field, for a 400's errors. Anything else goes under the form. */
 const ERROR_FIELDS: Record<string, ProducerError["field"]> = {
   name: "name",
+  first_name: "name",
+  last_name: "name",
   npn: "npn",
   address: "address",
   licenses: "licenseNumbers",
 };
 
+type LicenceBodyValues = Pick<
+  AgentValues,
+  "licensedStates" | "licenseNumbers" | "licenseStatuses" | "licenseLines" | "licenseDates"
+> & {
+  /** Renewing by state code; a state left out keeps the row's own (the agent form doesn't edit it). */
+  licenseRenewing?: Record<string, boolean>;
+};
+
 /** The licence list as the API replaces it. A blank date is left to the API. */
-function licenseBody(values: Pick<AgentValues, "licensedStates" | "licenseNumbers" | "licenseLines" | "licenseDates">) {
+function licenseBody(values: LicenceBodyValues) {
   return values.licensedStates.map((state) => ({
     state,
     license_number: values.licenseNumbers[state] ?? "",
+    // Missing (a state with no status yet) is left to the API: active for a new row.
+    status: values.licenseStatuses[state] ?? null,
     life: values.licenseLines[state]?.life ?? false,
     health: values.licenseLines[state]?.health ?? false,
     start_date: values.licenseDates[state]?.startDate || null,
     end_date: values.licenseDates[state]?.endDate || null,
+    renewing: values.licenseRenewing?.[state] ?? null,
   }));
 }
 
 /** Adds an agent, or edits the one with `editingId`. Resolves with the saved agent and their licence rows. */
 export async function saveAgent(values: AgentValues, editingId?: string): Promise<SaveAgentResult> {
   const body = {
-    name: values.name,
+    // The API builds the full name from the parts.
+    first_name: values.firstName ?? "",
+    last_name: values.lastName ?? "",
     aliases: values.aliases,
     npn: values.npn,
     email: values.email,
@@ -71,7 +86,8 @@ export async function saveAgent(values: AgentValues, editingId?: string): Promis
     join_date: values.joinDate || null,
     start_date: values.startDate || null,
     ssn_last4: values.ssnLast4 ?? "",
-    is_active: values.status === "active",
+    remarks: values.remarks ?? "",
+    status: values.status,
     licenses: licenseBody(values),
   };
   const result = editingId
@@ -100,10 +116,7 @@ export async function saveAgent(values: AgentValues, editingId?: string): Promis
  * Replaces this agent's licences and leaves every other field alone. Used when
  * a licence is deleted on the edit page, so the row is gone before Save.
  */
-export async function saveAgentLicenses(
-  agentId: string,
-  values: Pick<AgentValues, "licensedStates" | "licenseNumbers" | "licenseLines" | "licenseDates">,
-): Promise<SaveAgentResult> {
+export async function saveAgentLicenses(agentId: string, values: LicenceBodyValues): Promise<SaveAgentResult> {
   const result = await apiFetch<ApiAgent>(`/agents/${encodeURIComponent(agentId)}/`, {
     method: "PATCH",
     body: { licenses: licenseBody(values) },

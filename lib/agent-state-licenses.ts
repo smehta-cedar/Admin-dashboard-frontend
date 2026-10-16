@@ -20,6 +20,8 @@ export type AgentStateLicenseStatus = StateLicenseStatus;
 
 export type AgentStateLicenseRecord = StateLicense & {
   agentId: AgentRecord["id"];
+  /** The agent's display name, so calendar chips need no agents-store lookup. */
+  agentName: string;
 };
 
 /** Every agent's licence rows, agents by name and each agent's rows in state-code order. */

@@ -6,13 +6,13 @@
  * a few endpoints, so one save may make up to three calls:
  *
  *   add   POST /users/create/                 (password required)
- *   edit  PATCH /users/{id}/                  name, email, phone, role
+ *   edit  PATCH /users/{id}/                  name, email, phone, roles
  *         POST /users/{id}/block/ or unblock/ when the status changed
  *         POST /users/{id}/set-password/      when a new password was typed
  *
  * The API records a change note for each. It also refuses some things by
  * rule (only a superuser may change a superuser; nobody may block themselves
- * or change their own role) and answers 403 with a message, shown under the
+ * or change anyone's roles unless a superuser) and answers 403 with a message, shown under the
  * form. A 400's field errors go under their fields; a 401 sends the user to
  * sign in.
  *
@@ -32,7 +32,7 @@ const ERROR_FIELDS: Record<string, UserError["field"]> = {
   full_name: "name",
   email: "email",
   phone: "phone",
-  role_id: "roleId",
+  role_ids: "roleIds",
   password: "password",
   new_password: "password",
   confirm_password: "password",
@@ -51,14 +51,20 @@ function toError(failure: Failure): UserError {
   return { field: "form", message: failure.message };
 }
 
+function sameIds(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((id) => b.includes(id));
+}
+
 /** Adds a user, or edits the one with `editing`. */
 export async function saveUser(values: UserValues, editing?: UserRecord): Promise<SaveUserResult> {
-  const fields = {
+  const fields: { email: string; full_name: string; phone: string; role_ids?: string[] } = {
     email: values.email,
     full_name: values.name,
     phone: values.phone,
-    role_id: values.roleId || null,
   };
+  // Sent only when they changed: the API refuses any role change from a non-superuser.
+  const currentRoleIds = editing?.roles.map((role) => role.id) ?? [];
+  if (!sameIds(values.roleIds, currentRoleIds)) fields.role_ids = values.roleIds;
 
   if (!editing) {
     const result = await apiFetch<ApiUser>("/users/create/", {
@@ -84,7 +90,7 @@ export async function saveUser(values: UserValues, editing?: UserRecord): Promis
     fields.email !== editing.email ||
     fields.full_name !== editing.name ||
     fields.phone !== editing.phone ||
-    (fields.role_id ?? null) !== (editing.role?.id ?? null);
+    fields.role_ids !== undefined;
   if (changed) {
     const result = await apiFetch<ApiUser>(`/users/${id}/`, { method: "PATCH", body: fields });
     if (!result.ok) return { ok: false, error: toError(result) };

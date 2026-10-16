@@ -128,13 +128,16 @@ export async function createAgency(values: AgencyValues): Promise<SaveAgencyResu
 }
 
 /** One licence as the API takes it. A blank date is sent as null, which keeps a row's date and defaults a new row's. */
-function toApiLicense(row: AgencyLicenseValues) {
+function toApiLicense(row: AgencyLicenseValues | AgencyStateLicenseRecord) {
   return {
     state: row.state,
     license_number: row.licenseNumber,
     status: row.status,
     start_date: row.startDate || null,
     end_date: row.endDate || null,
+    renewing: row.renewing,
+    life: row.life,
+    health: row.health,
   };
 }
 
@@ -155,7 +158,10 @@ export async function saveAgencyLicense({
   values,
 }: LicenseInput & { previousState: string | null; values: AgencyLicenseValues }): Promise<SaveAgencyLicenseResult> {
   const kept = licenses.filter((row) => row.state !== previousState && row.state !== values.state);
-  const result = await patchAgency(agencyId, { licenses: [...kept.map(toApiLicense), toApiLicense(values)] });
+  const result = await patchAgency(agencyId, {
+    licenses: [...kept.map(toApiLicense), toApiLicense(values)],
+    agent_licenses: [{ state: values.state, agents: values.agentIds }],
+  });
   return result.ok ? result : { ok: false, message: result.message };
 }
 

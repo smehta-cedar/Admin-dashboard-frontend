@@ -34,7 +34,7 @@ export default async function ProfilePage() {
         actions={<ChangePasswordButton className={PROFILE_BUTTON_CLASS} />}
       />
 
-      <section className="rounded-xl border border-line bg-surface shadow-sm">
+      <section className="rounded-xl border glass shadow-sm">
         <div className="flex items-center gap-3.5 border-b border-line px-5 py-4">
           <ProfileAvatar name={name} />
           <div className="min-w-0">
@@ -56,7 +56,7 @@ export default async function ProfilePage() {
               </a>
             ) : null}
           </Detail>
-          <Detail label="Role">{user.role?.name}</Detail>
+          <Detail label="Roles">{user.roles.map((role) => role.name).join(", ")}</Detail>
           <Detail label="Designation">{user.designation?.name}</Detail>
           <Detail label="Access">{user.is_superuser ? "Superuser" : "Standard"}</Detail>
           <Detail label="Last signed in">

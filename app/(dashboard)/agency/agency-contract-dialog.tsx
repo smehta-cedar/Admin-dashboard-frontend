@@ -1,13 +1,20 @@
 "use client";
 
-import { useId, useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent, type KeyboardEvent } from "react";
 import { GHOST_BUTTON_CLASS, INPUT_CLASS, PRIMARY_BUTTON_CLASS } from "@/components/classes";
 import { Field } from "@/components/field";
 import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
-import type { AgencyContractError, AgencyContractRecord, AgencyContractValues } from "@/lib/agency-contracts";
+import { statusLabel } from "@/components/status-badge";
+import type {
+  AgencyContractError,
+  AgencyContractRecord,
+  AgencyContractStatus,
+  AgencyContractValues,
+} from "@/lib/agency-contracts";
 import type { CarrierRecord } from "@/lib/carriers";
 import type { PolicyTypeRecord } from "@/lib/policy-types";
 import { byName } from "@/lib/text";
+import { AgentPicker, type AgentOption } from "./agent-picker";
 
 /*
  * The one Add / Edit dialog for the agency's contract with a carrier:
@@ -18,15 +25,32 @@ import { byName } from "@/lib/text";
  *
  * The carrier select offers carriers with no live contract, plus the edited
  * row's own carrier. The policy type boxes list the catalog's active types,
- * plus inactive ones the contract already covers. The API keeps one
+ * plus inactive ones the contract already covers. "+ Add policy type" under
+ * the boxes opens a name field: Add creates the type through
+ * `onAddPolicyType` and ticks it (a name already listed, ignoring case, is
+ * just ticked). This is the only place policy types are added; there is no
+ * Policy types page. The API keeps one
  * contract per carrier and records the change note; its messages show under
- * the field. While the save is in flight the buttons are disabled.
+ * the field. The status is one of the agency licence statuses (active,
+ * pending, applied, expired, cancelled); only an active contract needs its
+ * number, and only an active one with a number opens the carrier to agents.
+ * While the save is in flight the buttons are disabled.
+ *
+ * The Agents boxes appoint the ticked agents with the carrier in the same
+ * save, each as a pending appointment with no writing number or states, so
+ * a new carrier doesn't have to be added on every agent's profile (see
+ * ./agent-picker.tsx). Agents already appointed with the chosen carrier
+ * show ticked and locked. The boxes are hidden when the role can't add agent
+ * contracts (`appointments` is null).
  */
 
 /** Which dialog is open. Edit holds the contract as it was when the dialog opened. */
 export type AgencyContractEditor = { mode: "add" } | { mode: "edit"; contract: AgencyContractRecord };
 
 export type { AgencyContractError, AgencyContractValues } from "@/lib/agency-contracts";
+
+/** The statuses the dropdown offers, in order: the agency licence statuses. */
+const AGENCY_CONTRACT_STATUSES: readonly AgencyContractStatus[] = ["active", "pending", "applied", "expired", "cancelled"];
 
 type CarrierOption = Pick<CarrierRecord, "id" | "name" | "status">;
 type PolicyTypeOption = Pick<PolicyTypeRecord, "id" | "name" | "status">;
@@ -40,8 +64,14 @@ type AgencyContractDialogProps = {
   contractedCarrierIds: string[];
   /** Every policy type in the catalog. */
   policyTypes: PolicyTypeOption[];
+  /** Every agent, for the Agents boxes. */
+  agents: AgentOption[];
+  /** Which agent has which carrier; null hides the Agents boxes. */
+  appointments: { agentId: string; carrierId: string }[] | null;
   /** Saves the values; resolves with the errors to show instead of closing. */
   onSave: (values: AgencyContractValues) => Promise<AgencyContractError[]>;
+  /** Adds an active policy type; resolves with it, or with the message to show. */
+  onAddPolicyType: (name: string) => Promise<{ ok: true; policyType: PolicyTypeOption } | { ok: false; message: string }>;
   /** Runs for every close: Cancel, Escape, backdrop click, or a save. */
   onClose: () => void;
 };
@@ -71,15 +101,29 @@ function AgencyContractForm({
   carriers,
   contractedCarrierIds,
   policyTypes,
+  agents,
+  appointments,
   onSave,
+  onAddPolicyType,
   close,
 }: AgencyContractFormProps) {
   const editing = editor.mode === "edit" ? editor.contract : undefined;
   const [errors, setErrors] = useState<AgencyContractError[]>([]);
+  const [status, setStatus] = useState<AgencyContractStatus>(editing?.status ?? "active");
+  const numberRequired = status === "active";
   const [saving, setSaving] = useState(false);
   const [carrierId, setCarrierId] = useState(editing?.carrierId ?? "");
   const [policyTypeIds, setPolicyTypeIds] = useState<string[]>(
     editing?.policyTypes.map((policyType) => policyType.id) ?? [],
+  );
+
+  const [agentIds, setAgentIds] = useState<string[]>([]);
+
+  // Agents already appointed with the chosen carrier: ticked and locked.
+  const appointed = new Set(
+    (appointments ?? [])
+      .filter((appointment) => appointment.carrierId === carrierId)
+      .map((appointment) => appointment.agentId),
   );
 
   const taken = new Set(contractedCarrierIds);
@@ -87,8 +131,18 @@ function AgencyContractForm({
     .filter((carrier) => !taken.has(carrier.id) || carrier.id === editing?.carrierId)
     .sort(byName);
 
+  // Types added in this dialog, listed until the page's next render brings them in.
+  const [addedTypes, setAddedTypes] = useState<PolicyTypeOption[]>([]);
+  // The new type's name while its field is open; null keeps it closed.
+  const [newTypeName, setNewTypeName] = useState<string | null>(null);
+  const [addingType, setAddingType] = useState(false);
+  const [typeError, setTypeError] = useState<string | null>(null);
+
   // Active policy types, plus any the contract already covers.
-  const policyTypeOptions = policyTypes
+  const policyTypeOptions = [
+    ...policyTypes,
+    ...addedTypes.filter((added) => !policyTypes.some((policyType) => policyType.id === added.id)),
+  ]
     .filter((policyType) => policyType.status === "active" || policyTypeIds.includes(policyType.id))
     .sort(byName);
 
@@ -99,8 +153,51 @@ function AgencyContractForm({
 
   const carrierError = messageFor("carrierId");
   const numberError = messageFor("contractNumber");
-  const policyTypesError = messageFor("policyTypeIds");
+  const agentsError = messageFor("agentIds");
   const formError = messageFor("form") ?? messageFor("status");
+
+  const tick = (policyTypeId: string) => {
+    setPolicyTypeIds((current) => (current.includes(policyTypeId) ? current : [...current, policyTypeId]));
+  };
+
+  const addType = async () => {
+    const name = (newTypeName ?? "").trim();
+    if (addingType || !name) return;
+    const listed = policyTypeOptions.find((policyType) => policyType.name.toLowerCase() === name.toLowerCase());
+    if (listed) {
+      tick(listed.id);
+      setNewTypeName(null);
+      return;
+    }
+    setAddingType(true);
+    setTypeError(null);
+    try {
+      const result = await onAddPolicyType(name);
+      if (!result.ok) {
+        setTypeError(result.message);
+        return;
+      }
+      setAddedTypes((current) => [...current, result.policyType]);
+      tick(result.policyType.id);
+      setNewTypeName(null);
+    } finally {
+      setAddingType(false);
+    }
+  };
+
+  // Enter adds the type rather than submitting the contract.
+  const handleTypeKey = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void addType();
+    } else if (event.key === "Escape") {
+      // Closes the field only, not the dialog.
+      event.preventDefault();
+      event.stopPropagation();
+      setNewTypeName(null);
+      setTypeError(null);
+    }
+  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -111,8 +208,17 @@ function AgencyContractForm({
       carrierId,
       contractNumber: text("contractNumber"),
       policyTypeIds,
-      status: text("status") === "inactive" ? "inactive" : "active",
+      status,
+      agentIds: agentIds.filter((agentId) => !appointed.has(agentId)),
     };
+    if (!values.contractNumber && numberRequired) {
+      setErrors([{ field: "contractNumber", message: "Enter the writing number." }]);
+      return;
+    }
+    if (values.agentIds.length > 0 && (status !== "active" || !values.contractNumber)) {
+      setErrors([{ field: "agentIds", message: "The contract must be active with a writing number to add agents." }]);
+      return;
+    }
     setSaving(true);
     try {
       const saveErrors = await onSave(values);
@@ -169,17 +275,25 @@ function AgencyContractForm({
           <select
             id={`${id}-status`}
             name="status"
-            defaultValue={editing?.status ?? "active"}
+            value={status}
+            onChange={(event) => {
+              setStatus(event.target.value as AgencyContractStatus);
+              clear("contractNumber", "agentIds", "status");
+            }}
             className={INPUT_CLASS}
           >
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
+            {AGENCY_CONTRACT_STATUSES.map((option) => (
+              <option key={option} value={option}>
+                {statusLabel(option)}
+              </option>
+            ))}
           </select>
         </Field>
 
         <Field
-          label="Contract number"
+          label="Writing number"
           htmlFor={`${id}-number`}
+          required={numberRequired}
           hint={numberError ?? undefined}
           hintId={`${id}-number-error`}
           error
@@ -189,6 +303,8 @@ function AgencyContractForm({
             id={`${id}-number`}
             name="contractNumber"
             type="text"
+            required={numberRequired}
+            pattern=".*\S.*"
             maxLength={50}
             autoComplete="off"
             defaultValue={editing?.contractNumber}
@@ -199,10 +315,7 @@ function AgencyContractForm({
           />
         </Field>
 
-        <fieldset
-          className="sm:col-span-2"
-          aria-describedby={policyTypesError ? `${id}-policy-types-error` : undefined}
-        >
+        <fieldset className="sm:col-span-2">
           <legend className="text-sm font-medium text-fg">Policy types</legend>
           {policyTypeOptions.length === 0 ? (
             <p className="mt-2 text-sm text-fg-subtle">No policy types yet.</p>
@@ -220,7 +333,6 @@ function AgencyContractForm({
                           ? [...current, policyType.id]
                           : current.filter((policyTypeId) => policyTypeId !== policyType.id),
                       );
-                      clear("policyTypeIds");
                     }}
                     className="size-4 accent-brand-strong"
                   />
@@ -232,12 +344,75 @@ function AgencyContractForm({
               ))}
             </div>
           )}
-          {policyTypesError ? (
-            <p id={`${id}-policy-types-error`} className="mt-1 text-xs text-danger">
-              {policyTypesError}
+          {newTypeName === null ? (
+            <button
+              type="button"
+              onClick={() => setNewTypeName("")}
+              className="mt-2 text-sm font-medium text-brand-ink hover:underline"
+            >
+              <span aria-hidden="true">+ </span>Add policy type
+            </button>
+          ) : (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <input
+                type="text"
+                aria-label="New policy type"
+                autoFocus
+                autoComplete="off"
+                maxLength={255}
+                value={newTypeName}
+                aria-invalid={typeError ? true : undefined}
+                aria-describedby={typeError ? `${id}-new-type-error` : undefined}
+                onChange={(event) => {
+                  setNewTypeName(event.target.value);
+                  setTypeError(null);
+                }}
+                onKeyDown={handleTypeKey}
+                className={`${INPUT_CLASS} min-w-0 flex-1`}
+              />
+              <button
+                type="button"
+                onClick={addType}
+                disabled={addingType || !newTypeName.trim()}
+                className={`${GHOST_BUTTON_CLASS} disabled:opacity-60`}
+              >
+                {addingType ? "Adding…" : "Add"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setNewTypeName(null);
+                  setTypeError(null);
+                }}
+                disabled={addingType}
+                className={GHOST_BUTTON_CLASS}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+          {typeError ? (
+            <p id={`${id}-new-type-error`} className="mt-1 text-xs text-danger">
+              {typeError}
             </p>
           ) : null}
         </fieldset>
+
+        {appointments ? (
+          <AgentPicker
+            id={id}
+            agents={agents}
+            lockedIds={appointed}
+            lockedLabel="appointed"
+            selectedIds={agentIds}
+            onChange={(ids) => {
+              setAgentIds(ids);
+              clear("agentIds");
+            }}
+            error={agentsError}
+            className="sm:col-span-2"
+          />
+        ) : null}
       </div>
 
       {/* Errors about the attempt itself (no permission, API down), not one field. */}

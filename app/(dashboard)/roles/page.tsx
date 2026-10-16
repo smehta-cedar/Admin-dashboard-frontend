@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getRoleModules, getRoles } from "@/lib/roles";
 import { getSessionUser } from "@/lib/session";
+import { getUsers } from "@/lib/users";
 import { RolesView } from "./roles-view";
 
 export const metadata: Metadata = {
@@ -14,7 +15,7 @@ export default async function RolesPage() {
   const user = await getSessionUser();
   if (!user?.isSuperuser) redirect("/overview");
 
-  const [roles, modules] = await Promise.all([getRoles(), getRoleModules()]);
+  const [roles, modules, users] = await Promise.all([getRoles(), getRoleModules(), getUsers()]);
 
-  return <RolesView initialRoles={roles} modules={modules} />;
+  return <RolesView initialRoles={roles} modules={modules} users={users} />;
 }

@@ -8,15 +8,17 @@ import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge, statusRank } from "@/components/status-badge";
 import type { ModuleOption, RoleRecord } from "@/lib/roles";
+import type { UserRecord } from "@/lib/users";
 import { deleteRole, saveRole } from "./actions";
-import { PERMISSION_ACTIONS, RoleDialog, type RoleEditor, type RoleValues } from "./role-dialog";
+import { RoleDialog, type RoleEditor, type RoleValues } from "./role-dialog";
 
 /*
  * Roles table, for superusers only (the page redirects everyone else): what
  * each role may do per module. Add role and a row's Edit open the shared
  * RoleDialog; saves and deletes go to the roles API through the server
- * actions. Clicking a name expands the row to show the role's permission
- * grid. Users are given a role on the Users page.
+ * actions. Clicking a name expands the row to show the users holding the
+ * role; its permissions are under Edit. Users are given roles on the Users
+ * page.
  *
  * The list is server-loaded and kept in state so a save shows at once; the
  * action also revalidates the page, so the next render agrees.
@@ -26,13 +28,19 @@ type RolesViewProps = {
   initialRoles: RoleRecord[];
   /** Every module a role can be granted, in menu order. */
   modules: ModuleOption[];
+  /** Every user, for the users holding each role. */
+  users: UserRecord[];
 };
 
 /** A table row. Wrapped so a column can be added later without renaming fields. */
 type RoleRow = { role: RoleRecord };
 
 /** How many modules the role can at least view. */
-const moduleCount = (role: RoleRecord) => Object.values(role.permissions).filter((flags) => flags.view).length;
+const moduleCount = (role: RoleRecord, modules: ModuleOption[]) =>
+  modules.filter((module) => role.permissions[module.code]?.view).length;
+
+/** The built-in role every agent sign-in uses. */
+const isAgentRole = (role: RoleRecord) => role.builtIn && role.name.toLowerCase() === "agent";
 
 /*
  * Sort and search run in DataTable. The access and actions columns are added
@@ -51,6 +59,9 @@ const COLUMNS: DataTableColumn<RoleRow>[] = [
         className="-ml-1 flex items-center gap-1 whitespace-nowrap rounded-md px-1 py-0.5 text-fg hover:bg-surface-hover"
       >
         {role.name}
+        {role.builtIn ? (
+          <span className="rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium text-fg-muted">Built-in</span>
+        ) : null}
         <svg
           aria-hidden="true"
           viewBox="0 0 20 20"
@@ -78,7 +89,8 @@ const COLUMNS: DataTableColumn<RoleRow>[] = [
   {
     id: "users",
     header: "Users",
-    cell: ({ role }) => role.userCount,
+    // Agent sign-ins use the Agent role without being assigned it, so a count would read 0.
+    cell: ({ role }) => (isAgentRole(role) ? <span className="text-fg-faint">—</span> : role.userCount),
     className: "text-fg-muted tabular-nums",
     sortValue: ({ role }) => role.userCount,
   },
@@ -91,7 +103,7 @@ const COLUMNS: DataTableColumn<RoleRow>[] = [
   },
 ];
 
-export function RolesView({ initialRoles, modules }: RolesViewProps) {
+export function RolesView({ initialRoles, modules, users }: RolesViewProps) {
   const [roles, setRoles] = useState(initialRoles);
   const [editor, setEditor] = useState<RoleEditor | null>(null);
 
@@ -120,7 +132,7 @@ export function RolesView({ initialRoles, modules }: RolesViewProps) {
         id: "access",
         header: "Access",
         cell: ({ role }) => {
-          const count = moduleCount(role);
+          const count = moduleCount(role, modules);
           return count === 0 ? (
             <span className="text-fg-faint">None</span>
           ) : (
@@ -128,11 +140,11 @@ export function RolesView({ initialRoles, modules }: RolesViewProps) {
           );
         },
         className: "whitespace-nowrap text-fg-muted",
-        sortValue: ({ role }) => moduleCount(role),
+        sortValue: ({ role }) => moduleCount(role, modules),
       },
       ...COLUMNS.slice(3),
     ],
-    [modules.length],
+    [modules],
   );
 
   /** Adds or edits a role through the API. Resolves with the dialog's error, if any. */
@@ -178,7 +190,9 @@ export function RolesView({ initialRoles, modules }: RolesViewProps) {
           columns={columns}
           getRowId={({ role }) => role.id}
           unit={["role", "roles"]}
-          renderDetails={({ role }) => <PermissionGrid role={role} modules={modules} />}
+          renderDetails={({ role }) => (
+            <RoleUsers users={users.filter((user) => user.roles.some((held) => held.id === role.id))} />
+          )}
         />
       )}
 
@@ -193,62 +207,24 @@ export function RolesView({ initialRoles, modules }: RolesViewProps) {
   );
 }
 
-/** Read-only: which actions the role may take on each module. */
-function PermissionGrid({ role, modules }: { role: RoleRecord; modules: ModuleOption[] }) {
+/** Read-only: the users holding the role. What it grants is under Edit. */
+function RoleUsers({ users }: { users: UserRecord[] }) {
   return (
     <section className="max-w-2xl">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">Permissions</h3>
-      <table className="mt-2 w-full text-sm">
-        <thead>
-          <tr className="text-left text-xs text-fg-subtle">
-            <th scope="col" className="py-1 pr-4 font-medium">
-              Module
-            </th>
-            {PERMISSION_ACTIONS.map((action) => (
-              <th key={action} scope="col" className="w-20 py-1 text-center font-medium capitalize">
-                {action}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {modules.map((module) => {
-            const flags = role.permissions[module.code];
-            return (
-              <tr key={module.code} className="border-t border-line">
-                <th scope="row" className="py-1.5 pr-4 text-left font-normal text-fg">
-                  {module.label}
-                </th>
-                {PERMISSION_ACTIONS.map((action) => (
-                  <td key={action} className="py-1.5 text-center">
-                    {flags?.[action] ? (
-                      <>
-                        <svg
-                          aria-hidden="true"
-                          viewBox="0 0 20 20"
-                          className="mx-auto size-4 text-brand-ink"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth={2}
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="M4 10.5l4 4 8-9" />
-                        </svg>
-                        <span className="sr-only">Yes</span>
-                      </>
-                    ) : (
-                      <span className="text-fg-faint" aria-label="No">
-                        —
-                      </span>
-                    )}
-                  </td>
-                ))}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">Users</h3>
+      {users.length === 0 ? (
+        <p className="mt-2 text-sm text-fg-subtle">No users have this role.</p>
+      ) : (
+        <ul className="mt-2 divide-y divide-line text-sm">
+          {users.map((user) => (
+            <li key={user.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5">
+              <span className="text-fg">{user.name}</span>
+              <span className="text-fg-muted">{user.email}</span>
+              <StatusBadge status={user.status} />
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

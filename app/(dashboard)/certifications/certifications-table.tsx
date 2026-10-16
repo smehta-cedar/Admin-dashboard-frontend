@@ -1,6 +1,7 @@
 "use client";
 
 import { ROW_BUTTON_CLASS } from "@/components/classes";
+import { DeleteIcon } from "@/components/delete-icon";
 import { EditIcon } from "@/components/edit-icon";
 import { PROFILE_LINK_CLASS, ProfileTable } from "@/components/profile-shell";
 import { StatusBadge } from "@/components/status-badge";
@@ -10,9 +11,10 @@ import { formatLicenceDate } from "@/lib/state-licenses";
 /*
  * One agent's certifications: Carrier, Line of business (the sub type), Due,
  * Completion, Expiry, Document (the PDF's name, linking to its download
- * through ./[id]/file), Verified and Status; "—" for anything unset. With onEdit every row
- * starts with an Edit button; without it (an agent's own read-only profile)
- * there is no Action column. fileLinks false shows the PDF's name unlinked.
+ * through ./[id]/file), Verified and Status; "—" for anything unset. With
+ * onEdit or onDelete every row starts with an Action cell; without either
+ * (an agent's own read-only profile) there is no Action column. fileLinks
+ * false shows the PDF's name unlinked.
  * Dates are formatted from the stored string, never through Date, so the
  * server and the browser agree. The caller wraps it in a Panel or a table's
  * details row and shows its own empty state.
@@ -21,6 +23,8 @@ import { formatLicenceDate } from "@/lib/state-licenses";
 type CertificationsTableProps = {
   certifications: CertificationRecord[];
   onEdit?: (certification: CertificationRecord) => void;
+  /** Given, every row's Action cell also has a Delete button. */
+  onDelete?: (certification: CertificationRecord) => void;
   /** Whether the PDF's name links to its download. */
   fileLinks?: boolean;
 };
@@ -97,9 +101,14 @@ export function certificationLabel(certification: CertificationRecord): string {
   return [certification.carrierName, certification.lineOfBusiness].filter(Boolean).join(" ") || "untitled";
 }
 
-export function CertificationsTable({ certifications, onEdit, fileLinks = true }: CertificationsTableProps) {
+export function CertificationsTable({
+  certifications,
+  onEdit,
+  onDelete,
+  fileLinks = true,
+}: CertificationsTableProps) {
   const columns = [
-    ...(onEdit ? ["Action"] : []),
+    ...(onEdit || onDelete ? ["Action"] : []),
     "Carrier",
     "Line of business",
     "Due Date",
@@ -114,17 +123,30 @@ export function CertificationsTable({ certifications, onEdit, fileLinks = true }
     <ProfileTable columns={columns} rows={certifications} rowKey={(certification) => certification.id}>
       {(certification) => (
         <>
-          {onEdit ? (
-            <td className="w-16 whitespace-nowrap px-3 py-1.5 align-middle">
-              <button
-                type="button"
-                onClick={() => onEdit(certification)}
-                aria-label={`Edit the ${certificationLabel(certification)} certification`}
-                title="Edit"
-                className={`inline-flex items-center gap-1.5 ${ROW_BUTTON_CLASS}`}
-              >
-                <EditIcon className="size-3.5 shrink-0" />
-              </button>
+          {onEdit || onDelete ? (
+            <td className="whitespace-nowrap px-3 py-1.5 align-middle">
+              {onEdit ? (
+                <button
+                  type="button"
+                  onClick={() => onEdit(certification)}
+                  aria-label={`Edit the ${certificationLabel(certification)} certification`}
+                  title="Edit"
+                  className={`inline-flex items-center gap-1.5 ${ROW_BUTTON_CLASS}`}
+                >
+                  <EditIcon className="size-3.5 shrink-0" />
+                </button>
+              ) : null}
+              {onDelete ? (
+                <button
+                  type="button"
+                  onClick={() => onDelete(certification)}
+                  aria-label={`Delete the ${certificationLabel(certification)} certification`}
+                  title="Delete"
+                  className={`inline-flex items-center ${ROW_BUTTON_CLASS} hover:text-danger`}
+                >
+                  <DeleteIcon className="size-3.5 shrink-0" />
+                </button>
+              ) : null}
             </td>
           ) : null}
           <TextCell text={certification.carrierName} strong />

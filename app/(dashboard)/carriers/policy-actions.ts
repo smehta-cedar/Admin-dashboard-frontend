@@ -36,7 +36,6 @@ export type SaveCarrierPolicyResult =
 /** API field name -> form field, for a 400's errors. Anything else goes under the form. */
 const ERROR_FIELDS: Record<string, CarrierPolicyError["field"]> = {
   name: "name",
-  policy_type: "policyType",
   available_states: "availableStates",
   is_active: "status",
 };
@@ -48,7 +47,7 @@ export async function saveCarrierPolicy(
   editingId?: string,
 ): Promise<SaveCarrierPolicyResult> {
   const body = {
-    policy_type: values.policyTypeId,
+    policy_type: values.policyTypeId || null,
     name: values.name,
     available_states: values.availableStates,
     is_active: values.status === "active",

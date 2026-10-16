@@ -9,8 +9,8 @@ import "server-only";
  * something.
  *
  * A carrier policy is one named policy a carrier offers (e.g. Humana's
- * "Gold Plus HMO"), pointing at one policy type from the catalog
- * (lib/policy-types.ts). It lives on the carrier: there is no Policies page,
+ * "Gold Plus HMO"), optionally tagged with one policy type from the catalog
+ * (lib/policy-types.ts) — an add-on, never checked against. It lives on the carrier: there is no Policies page,
  * the carrier profile shows and edits them. availableStates is where the
  * policy can be sold, always within the carrier's own availableStates
  * (lib/carriers.ts); empty means nowhere, never "every state". Agency
@@ -29,7 +29,7 @@ export type CarrierPolicyRecord = {
   /** The carrier that offers it. Set on add and never changes. */
   carrierId: string;
   carrierName: string;
-  /** The policy type from the catalog. */
+  /** The policy type from the catalog; "" when none is set. */
   policyTypeId: string;
   policyTypeName: string;
   /** Unique among the carrier's policies, ignoring case. */
@@ -49,7 +49,7 @@ export type CarrierPolicyValues = {
 };
 
 /** Fields the form has, for an error to sit under; `form` is for errors about the attempt itself. */
-export type CarrierPolicyErrorField = "name" | "policyType" | "availableStates" | "status" | "form";
+export type CarrierPolicyErrorField = "name" | "availableStates" | "status" | "form";
 
 /** A save error, shown under the field it names, or under the form for `form`. */
 export type CarrierPolicyError = { field: CarrierPolicyErrorField; message: string };
@@ -79,7 +79,7 @@ export type CarrierPolicyNote = {
 export type ApiCarrierPolicy = {
   id: string;
   carrier: { id: string; name: string; is_active: boolean };
-  policy_type: { id: string; name: string; is_active: boolean };
+  policy_type: { id: string; name: string; is_active: boolean } | null;
   name: string;
   available_states: string[];
   is_active: boolean;
@@ -112,8 +112,8 @@ export function toCarrierPolicyRecord(policy: ApiCarrierPolicy): CarrierPolicyRe
     id: policy.id,
     carrierId: policy.carrier.id,
     carrierName: policy.carrier.name,
-    policyTypeId: policy.policy_type.id,
-    policyTypeName: policy.policy_type.name,
+    policyTypeId: policy.policy_type?.id ?? "",
+    policyTypeName: policy.policy_type?.name ?? "",
     name: policy.name,
     availableStates: [...new Set(policy.available_states)].sort(),
     status: policy.is_active ? "active" : "inactive",

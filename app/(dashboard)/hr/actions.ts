@@ -17,6 +17,7 @@ import { redirect } from "next/navigation";
 import { apiFetch } from "@/lib/api-server";
 import type { RequestError, RequestValues } from "@/lib/request-options";
 import { toRequestRecord, type ApiRequest, type RequestRecord, type RequestStatus } from "@/lib/requests";
+import { getSessionUser } from "@/lib/session";
 
 export type FileRequestResult = { ok: true; request: RequestRecord } | { ok: false; error: RequestError };
 export type SetStatusResult = { ok: true; request: RequestRecord } | { ok: false; message: string };
@@ -32,13 +33,16 @@ const ERROR_FIELDS: Record<string, RequestError["field"]> = {
 
 const API_TYPES = { licensing: "licensing", contract: "contract", dayOff: "day_off" } as const;
 
-/** Files a pending request for the agent in `values`. */
+/** Files a pending request. An agent files for themselves; the API refuses anyone else. */
 export async function fileRequest(values: RequestValues): Promise<FileRequestResult> {
+  const user = await getSessionUser();
+  if (!user) redirect("/login");
+
   const placement = values.type === "licensing" || values.type === "contract";
   const body = {
     type: API_TYPES[values.type],
-    agent_id: values.agentId,
     note: values.note,
+    agent_id: user.agentId ?? values.agentId,
     ...(placement ? { state: values.state, carrier_id: values.carrierId } : {}),
     ...(values.type === "dayOff" ? { start_date: values.startDate, end_date: values.endDate } : {}),
   };

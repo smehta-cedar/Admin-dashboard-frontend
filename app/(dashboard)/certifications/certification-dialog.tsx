@@ -17,8 +17,9 @@ import { certificationLabel } from "./certifications-table";
 /*
  * The one Add / Edit certification dialog, opened from the agent profile
  * with the agent fixed. Every field is optional: carrier, line of business
- * (the carrier's own lines, or every line when no carrier is chosen), due
- * date (left blank on a new row, the API sets the next deadline), start and
+ * (the lines that carrier marks as needing one, or every line when no
+ * carrier is chosen), due date (left blank on a new row, the API sets the
+ * next deadline), start and
  * end dates, status, a PDF and the Verified box. Nothing is checked but the
  * PDF: a certification is an add-on.
  *

@@ -24,13 +24,14 @@ import { formatPhone } from "@/lib/phone";
  *
  * After the address, four optional fields on one row: date of birth, join
  * date, start date (employment, not a licence's) and the SSN's last four
- * digits, typed into a masked input like a password.
+ * digits, typed into a masked input like a password. Then free-text notes
+ * (`remarks`) across the full width.
  */
 
 /** The section's fields, as AgentRecord holds them. */
 export type AgentContact = Pick<
   AgentRecord,
-  "personalEmail" | "personalPhone" | "address" | "dateOfBirth" | "joinDate" | "startDate" | "ssnLast4"
+  "personalEmail" | "personalPhone" | "address" | "dateOfBirth" | "joinDate" | "startDate" | "ssnLast4" | "remarks"
 >;
 
 const addressField = (part: keyof Address) => `address-${part}`;
@@ -46,6 +47,7 @@ function readAgentContact(data: FormData): AgentContact {
   const joinDate = text("joinDate");
   const startDate = text("startDate");
   const ssnLast4 = text("ssnLast4");
+  const remarks = text("remarks");
   return {
     ...(personalEmail ? { personalEmail } : {}),
     ...(personalPhone ? { personalPhone } : {}),
@@ -55,6 +57,7 @@ function readAgentContact(data: FormData): AgentContact {
     ...(joinDate ? { joinDate } : {}),
     ...(startDate ? { startDate } : {}),
     ...(ssnLast4 ? { ssnLast4 } : {}),
+    ...(remarks ? { remarks } : {}),
   };
 }
 
@@ -213,6 +216,16 @@ export function agentContactExtra(initial?: AgentContact): ProducerExtra<AgentCo
               title="The last 4 digits"
               autoComplete="off"
               defaultValue={initial?.ssnLast4}
+              className={INPUT_CLASS}
+            />
+          </Field>
+          <Field label="Notes" htmlFor={`${id}-remarks`} className={span.full}>
+            <textarea
+              id={`${id}-remarks`}
+              name="remarks"
+              rows={4}
+              autoComplete="off"
+              defaultValue={initial?.remarks}
               className={INPUT_CLASS}
             />
           </Field>

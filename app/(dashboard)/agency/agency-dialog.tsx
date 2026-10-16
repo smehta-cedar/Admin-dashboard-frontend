@@ -33,6 +33,7 @@ export const AGENCY_FIELD_LABELS: Record<AgencyField, string> = {
   phone: "Phone",
   licensedStates: "Licensed states",
   licenseNumbers: "Licence numbers",
+  licenseLines: "Lines of business",
   licenseStatuses: "Licence statuses",
   licenseDates: "Licence dates",
 };

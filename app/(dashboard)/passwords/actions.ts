@@ -37,11 +37,10 @@ const ERROR_FIELDS: Record<string, PasswordError["field"]> = {
   agent_id: "agentId",
   agency_id: "agentId",
   carrier_id: "carrierId",
-  // "Add a contract number before an agent can use this carrier."
+  // "The agency's contract with this carrier must be active with a contract number first."
   carrier: "carrierId",
   username: "username",
   portal_password: "portalPassword",
-  link: "link",
   status: "status",
 };
 
@@ -54,7 +53,6 @@ export async function savePassword(values: PasswordValues, editingId?: string): 
     carrier_id: values.carrierId,
     username: values.username,
     portal_password: values.portalPassword,
-    link: values.link,
     status: values.status,
   };
   const result = editingId
@@ -78,4 +76,15 @@ export async function savePassword(values: PasswordValues, editingId?: string): 
 
   revalidatePath("/", "layout");
   return { ok: true, password: toPasswordRecord(result.data) };
+}
+
+/** Removes a password. The API soft-deletes it, so the same carrier can have one again. */
+export async function deletePassword(id: string): Promise<{ ok: true } | { ok: false; message: string }> {
+  const result = await apiFetch<null>(`/passwords/${encodeURIComponent(id)}/`, { method: "DELETE" });
+  if (!result.ok) {
+    if (result.status === 401) redirect("/login");
+    return { ok: false, message: result.message };
+  }
+  revalidatePath("/", "layout");
+  return { ok: true };
 }

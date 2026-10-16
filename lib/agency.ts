@@ -12,8 +12,8 @@ import "server-only";
  * The agency has the same producer shape as an agent (NPN, licensed states
  * with licence numbers, contact details) because it is licensed like one:
  * the API returns its licence rows (`licenses`) and licensedStates /
- * licenseNumbers / licenseStatuses / licenseDates are derived from them
- * here, the same way an agent's are (lib/agents.ts). It is the org
+ * licenseNumbers / licenseLines / licenseStatuses / licenseDates are derived
+ * from them here, the same way an agent's are (lib/agents.ts). It is the org
  * identity, licence footprint and roster only. Its carrier contracts live in
  * lib/agency-contracts.ts and its own portal logins are agency passwords
  * (lib/passwords.ts).
@@ -34,10 +34,12 @@ import { formatPhone } from "@/lib/phone";
 import {
   STATE_LICENSE_STATUSES,
   licenseDatesOf,
+  licenseLinesOf,
   licenseNumbersOf,
   licenseStatusesOf,
   licensedStatesOf,
   type LicenceDates,
+  type LicenceLines,
   type StateLicenseStatus,
 } from "@/lib/state-licenses";
 
@@ -61,6 +63,8 @@ export type AgencyRecord = {
   licensedStates: string[];
   /** Licence number by state code, for states in licensedStates only. Derived from the rows too. */
   licenseNumbers: Record<string, string>;
+  /** Lines of business by state code, every state in licensedStates. Derived from the rows too. */
+  licenseLines: Record<string, LicenceLines>;
   /** Licence status by state code, every state in licensedStates. Derived from the rows too. */
   licenseStatuses: Record<string, StateLicenseStatus>;
   /** Licence term by state code, every state in licensedStates. Derived from the rows too. */
@@ -102,6 +106,9 @@ type ApiAgencyLicense = {
   status: string;
   start_date: string | null;
   end_date: string | null;
+  renewing?: boolean;
+  life: boolean;
+  health: boolean;
 };
 
 /** An agency as the API serialises it (AgencySerializer). */
@@ -138,6 +145,7 @@ const NOTE_FIELDS: Record<string, AgencyField> = {
   phone: "phone",
   licensed_states: "licensedStates",
   license_numbers: "licenseNumbers",
+  license_lines: "licenseLines",
   license_statuses: "licenseStatuses",
   license_dates: "licenseDates",
 };
@@ -156,9 +164,9 @@ export function toAgencyLicenseRecords(agency: ApiAgency): AgencyStateLicenseRec
       status: knownStatus ? (row.status as StateLicenseStatus) : "active",
       startDate: row.start_date ?? "",
       endDate: row.end_date ?? "",
-      // The agency API records no lines of business; only agent licences have them.
-      life: false,
-      health: false,
+      renewing: row.renewing ?? false,
+      life: Boolean(row.life),
+      health: Boolean(row.health),
     };
   });
 }
@@ -174,6 +182,7 @@ export function toAgencyRecord(agency: ApiAgency): AgencyRecord {
     npn: agency.npn,
     licensedStates: licensedStatesOf(licenses),
     licenseNumbers: licenseNumbersOf(licenses),
+    licenseLines: licenseLinesOf(licenses),
     licenseStatuses: licenseStatusesOf(licenses),
     licenseDates: licenseDatesOf(licenses),
     email: agency.email,
@@ -216,4 +225,33 @@ export async function getAgency(): Promise<AgencyRecord | null> {
 export async function getAgencyNotes(agencyId: string): Promise<AgencyNote[]> {
   const notes = await apiGet<ApiAgencyNote[]>(`/agencies/${encodeURIComponent(agencyId)}/notes/`);
   return notes.map(toAgencyNote);
+}
+
+
+/** A note someone wrote on the agency (the Notes panel); not a change note. */
+export type AgencyComment = {
+  id: string;
+  body: string;
+  /** Who wrote it; null when that user is gone. */
+  createdBy: string | null;
+  createdAt: string;
+};
+
+/** A written note as the API serialises it (AgencyCommentSerializer). */
+export type ApiAgencyComment = {
+  id: string;
+  agency_id: string;
+  body: string;
+  created_by: string | null;
+  created_at: string;
+};
+
+export function toAgencyComment(comment: ApiAgencyComment): AgencyComment {
+  return { id: comment.id, body: comment.body, createdBy: comment.created_by, createdAt: comment.created_at };
+}
+
+/** The agency's written notes, newest first. */
+export async function getAgencyComments(agencyId: string): Promise<AgencyComment[]> {
+  const comments = await apiGet<ApiAgencyComment[]>(`/agencies/${encodeURIComponent(agencyId)}/comments/`);
+  return comments.map(toAgencyComment);
 }

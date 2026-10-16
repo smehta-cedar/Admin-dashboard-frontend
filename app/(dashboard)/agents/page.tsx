@@ -9,6 +9,6 @@ export const metadata: Metadata = {
 
 /** The data comes from the section's layout (./layout.tsx), through the agents store. */
 export default async function AgentsPage() {
-  if (!(await canViewModule("agents"))) return <NoAccess title="Agents" />;
+  if (!(await canViewModule("agents.list"))) return <NoAccess title="Agents" />;
   return <AgentsView />;
 }

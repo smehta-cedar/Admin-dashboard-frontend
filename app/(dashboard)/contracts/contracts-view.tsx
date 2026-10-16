@@ -9,12 +9,14 @@ import { EmptyState } from "@/components/empty-state";
 import { CopyableNumber, LicenseNumber } from "@/components/license-number";
 import { NoteList } from "@/components/note-list";
 import { PageHeader } from "@/components/page-header";
-import { MAP_BUCKETS, UsMap } from "@/components/us-map";
+import { LineBadges, LineIcon } from "@/components/line-icons";
+import { DISABLED_SWATCH, MAP_BUCKETS, UsMap } from "@/components/us-map";
 import { US_MAP_VIEWBOX } from "@/components/us-map-shapes";
 import type { AgentRecord } from "@/lib/agents";
 import type { CarrierContractNote, CarrierContractRecord } from "@/lib/carrier-contracts";
 import type { CarrierRecord } from "@/lib/carriers";
 import { US_STATE_NAMES, US_STATES, stateSummary, writableStates } from "@/lib/us-states";
+import { licenceLinesText } from "@/lib/state-licenses";
 import { byName } from "@/lib/text";
 import { APPOINTMENT_FIELD_LABELS, AppointmentDialog } from "./appointment-dialog";
 import { useAppointments } from "./use-appointments";
@@ -29,7 +31,10 @@ import { useAppointments } from "./use-appointments";
  * under the state name and copies on click.
  *
  * A full-width map colors each state by how many distinct active agents have at
- * least one appointment there. Picking a state on the map slides a
+ * least one appointment there, and badges it with the lines written there: a
+ * heart for Life, a cross for Health, both side by side (components/
+ * line-icons.tsx), from the carriers' state rows across active agents'
+ * appointments. Picking a state on the map slides a
  * panel in from the right, which lists the same appointments two ways: By
  * agent (each agent with the carriers that appoint them there) or By carrier
  * (each carrier with the agents it appoints there). Each line shows that
@@ -52,7 +57,10 @@ import { useAppointments } from "./use-appointments";
  */
 
 type AgentOption = Pick<AgentRecord, "id" | "name" | "status" | "licensedStates" | "licenseNumbers">;
-type CarrierOption = Pick<CarrierRecord, "id" | "name" | "status" | "availableStates" | "agentAccessible">;
+type CarrierOption = Pick<
+  CarrierRecord,
+  "id" | "name" | "status" | "availableStates" | "agentAccessible" | "licenses"
+>;
 
 type ContractsViewProps = {
   initialContracts: CarrierContractRecord[];
@@ -62,6 +70,8 @@ type ContractsViewProps = {
   carriers: CarrierOption[];
   /** The agency's licence number per state code; shown under the selected state. */
   agencyLicenseNumbers: Record<string, string>;
+  /** The agency's licensed states; every other state is striped grey and can't be picked. Null strips nothing. */
+  agencyLicensedStates: string[] | null;
 };
 
 /** How the selected state's appointments are grouped. */
@@ -156,7 +166,7 @@ const MAP_ZOOM = { min: 0.3, max: 2, buttonStep: 0.15 };
 const MAP_BOX_HEIGHT = 0.78;
 
 /** Counts (map, stats, panel) are active agents only; lists show everyone. */
-const isActive = (row: AppointmentRow) => row.agent.status === "active";
+const isActive = (row: AppointmentRow) => row.agent.status !== "inactive";
 
 export function ContractsView({
   initialContracts,
@@ -164,7 +174,12 @@ export function ContractsView({
   agents,
   carriers,
   agencyLicenseNumbers,
+  agencyLicensedStates,
 }: ContractsViewProps) {
+  // States the agency isn't licensed in: striped on the map, as on the agent profile.
+  const agencyUnlicensed = agencyLicensedStates
+    ? US_STATES.map((state) => state.code).filter((code) => !agencyLicensedStates.includes(code))
+    : [];
   const { contracts, editor, setEditor, saveContract } = useAppointments({
     initialContracts,
     agents,
@@ -199,6 +214,7 @@ export function ContractsView({
           status: "active" as const,
           availableStates: [],
           agentAccessible: false,
+          licenses: [],
         };
         return [
           {
@@ -236,6 +252,32 @@ export function ContractsView({
       ),
     [rowsByState],
   );
+
+  // The lines written in each state: every Life / Health line the carriers
+  // cover there, across active agents' appointments.
+  const linesByState = useMemo(() => {
+    const byState = new Map<string, { life: boolean; health: boolean }>();
+    for (const [code, list] of rowsByState) {
+      const active = list.filter(isActive);
+      if (active.length === 0) continue;
+      const lines = { life: false, health: false };
+      for (const row of active) {
+        const stateRow = row.carrier.licenses.find((license) => license.state === code);
+        lines.life ||= Boolean(stateRow?.life);
+        lines.health ||= Boolean(stateRow?.health);
+      }
+      byState.set(code, lines);
+    }
+    return byState;
+  }, [rowsByState]);
+
+  // The tooltip adds the lines to the agent count, e.g. "Texas · 3 agents · Life & Health".
+  const describeState = (code: string) => {
+    const count = counts[code] ?? 0;
+    const lines = linesByState.get(code);
+    const linesText = lines ? licenceLinesText(lines) : "";
+    return `${US_STATE_NAMES[code] ?? code} · ${count} ${count === 1 ? "agent" : "agents"}${linesText ? ` · ${linesText}` : ""}`;
+  };
 
   const writingAgentCount = new Set(
     rows.filter((row) => isActive(row) && row.states.length > 0).map((row) => row.agent.id),
@@ -458,7 +500,7 @@ export function ContractsView({
          * (bottom-left) sit outside the scroller, so they stay pinned while the
          * map pans under them.
          */}
-        <div className="relative rounded-lg border border-line p-4">
+        <div className="relative rounded-lg border glass p-4 shadow-sm">
           <div
             className="flex overflow-auto"
             style={{
@@ -471,6 +513,12 @@ export function ContractsView({
                 selectedCode={selectedCode}
                 onSelect={selectState}
                 unit={["agent", "agents"]}
+                disabled={agencyUnlicensed}
+                describeState={describeState}
+                renderMarker={(code, small) => {
+                  const lines = linesByState.get(code);
+                  return lines ? <LineBadges {...lines} scale={small ? 0.7 : 1} /> : null;
+                }}
               />
             </div>
           </div>
@@ -498,7 +546,7 @@ export function ContractsView({
 
           <div className="absolute bottom-3 left-3 z-10 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md bg-surface/90 px-2 py-1.5 text-xs text-fg-muted shadow-sm ring-1 ring-line/80">
             <span>Active agents appointed</span>
-            <ul className="flex items-center gap-2">
+            <ul className="flex flex-wrap items-center gap-2">
               {MAP_BUCKETS.map((bucket) => (
                 <li key={bucket.label} className="flex items-center gap-1">
                   <span
@@ -508,6 +556,20 @@ export function ContractsView({
                   <span className="tabular-nums">{bucket.label}</span>
                 </li>
               ))}
+              <li className="ml-1 flex items-center gap-1 border-l border-line pl-2">
+                <LineIcon kind="life" />
+                <span>Life</span>
+              </li>
+              <li className="flex items-center gap-1">
+                <LineIcon kind="health" />
+                <span>Health</span>
+              </li>
+              {agencyUnlicensed.length > 0 ? (
+                <li className="flex items-center gap-1">
+                  <span aria-hidden="true" className={`size-3 rounded-sm ring-1 ring-inset ring-line ${DISABLED_SWATCH}`} />
+                  <span>Agency not licensed</span>
+                </li>
+              ) : null}
             </ul>
           </div>
 

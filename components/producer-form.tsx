@@ -14,8 +14,17 @@ import { EditIcon } from "@/components/edit-icon";
 import { Field } from "@/components/field";
 import { PROFILE_BUTTON_CLASS } from "@/components/profile-shell";
 import { StateSelect } from "@/components/state-select";
+import { StatusBadge, statusLabel } from "@/components/status-badge";
 import { formatPhone } from "@/lib/phone";
-import { formatLicenceDate, type LicenceDates, type LicenceLines } from "@/lib/state-licenses";
+import {
+  formatLicenceDate,
+  licenceDetailsRequired,
+  statusForEndDate,
+  todayIso,
+  type LicenceDates,
+  type LicenceLines,
+  type StateLicenseStatus,
+} from "@/lib/state-licenses";
 import { US_STATE_NAMES } from "@/lib/us-states";
 
 /*
@@ -33,12 +42,15 @@ import { US_STATE_NAMES } from "@/lib/us-states";
  * for people who know it, so there is no help text, apart from "Separate by
  * comma." under the aliases:
  *
- *   Identity  — name, NPN and aliases on one line; the status select sits
- *               in the section's header, on the right, Active by default
+ *   Identity  — name, NPN and aliases on one line (with `nameParts`, the
+ *               agent's first and last name, then NPN
+ *               and aliases); the status select sits in the section's
+ *               header, on the right, Active by default
  *   Contact   — email and phone, then the producer's `extra` fields if it
  *               has any (the agent's personal email, phone and address)
  *   Licences  — entered one at a time: a row with a state dropdown, the
- *               licence number, (with `dates`) a start and an end date,
+ *               licence number, (with `licenceStatuses`) a status,
+ *               (with `dates`) a start and an end date,
  *               (with `lines`) a Health and a Life checkbox, and an Add
  *               button. Adding puts the licence in the list above the row and
  *               clears the row for the next one. A listed licence can be
@@ -63,16 +75,25 @@ import { US_STATE_NAMES } from "@/lib/us-states";
  * Mounted per open inside a ModalDialog, so its errors start clear each time.
  */
 
+/** Every status the form's dropdown can offer; each producer passes the ones it has (`statuses`). */
+export type ProducerStatus = "active" | "onboarding" | "sdr" | "inactive";
+
 /** The fields both producers share; AgentValues and AgencyValues are exactly this. */
 export type ProducerValues = {
+  /** The full name; with `nameParts`, "First Last" built from the two below. */
   name: string;
+  /** Only with `nameParts` (agents). The first name includes any middle name. */
+  firstName?: string;
+  lastName?: string;
   aliases: string[];
-  status: "active" | "inactive";
+  status: ProducerStatus;
   npn: string;
   email: string;
   phone: string;
   licensedStates: string[];
   licenseNumbers: Record<string, string>;
+  /** The status per licensed state; empty without `licenceStatuses` (the agency). */
+  licenseStatuses: Record<string, StateLicenseStatus>;
   /** The Life / Health lines per licensed state; empty without `lines` (the agency). */
   licenseLines: Record<string, LicenceLines>;
   /** The start and end date per licensed state; empty without `dates` (the agency). */
@@ -141,7 +162,7 @@ export type ProducerFormLayout = "dialog" | "page";
 export type LicenceEntryMode = "open" | "button";
 
 /** The licence part of the values, which the initial values may leave out. */
-type LicenceMaps = "licensedStates" | "licenseNumbers" | "licenseLines" | "licenseDates";
+type LicenceMaps = "licensedStates" | "licenseNumbers" | "licenseStatuses" | "licenseLines" | "licenseDates";
 
 type ProducerFormProps<E extends object> = {
   /** Prefix for element IDs; the `<h2>` is `${id}-title`, which the dialog is labelled by. */
@@ -163,6 +184,15 @@ type ProducerFormProps<E extends object> = {
   dates?: boolean;
   /** See LicenceEntryMode. Defaults to the row always being open. */
   licenceEntry?: LicenceEntryMode;
+  /** Ask for first and last name instead of one name field (agents). */
+  nameParts?: boolean;
+  /**
+   * Ask for a status on each licence, offering these (agents). Off, the
+   * statuses come back empty. Applied and pending licences need no number.
+   */
+  licenceStatuses?: readonly StateLicenseStatus[];
+  /** The Status dropdown's options, in order. Defaults to active and inactive (the agency). */
+  statuses?: readonly ProducerStatus[];
   /**
    * Extra content after the sections, inside the page layout's grid (the
    * Add agent page's certifications card). Ignored in the dialog layout.
@@ -174,7 +204,7 @@ type ProducerFormProps<E extends object> = {
    * nothing on the server yet (Add agent): the row only leaves the list.
    */
   onLicencesChange?: (
-    licences: Pick<ProducerValues, "licensedStates" | "licenseNumbers" | "licenseLines" | "licenseDates">,
+    licences: Pick<ProducerValues, LicenceMaps>,
   ) => Promise<string | null>;
   layout?: ProducerFormLayout;
   /**
@@ -189,20 +219,23 @@ type ProducerFormProps<E extends object> = {
 type LicenceEntry = {
   state: string;
   licenseNumber: string;
+  status: StateLicenseStatus;
   startDate: string;
   endDate: string;
   life: boolean;
   health: boolean;
 };
 
-const EMPTY_ENTRY: LicenceEntry = {
+/** A blank entry row; the start date opens on today. */
+const emptyEntry = (): LicenceEntry => ({
   state: "",
   licenseNumber: "",
-  startDate: "",
+  status: "active",
+  startDate: todayIso(),
   endDate: "",
   life: false,
   health: false,
-};
+});
 
 /** The line checkboxes, in the order the row shows them. */
 const LINES: { key: keyof LicenceLines; label: string }[] = [
@@ -216,6 +249,7 @@ function entriesFrom(initial: ProducerFormProps<object>["initial"]): LicenceEntr
   return initial.licensedStates.map((state) => ({
     state,
     licenseNumber: initial.licenseNumbers?.[state] ?? "",
+    status: initial.licenseStatuses?.[state] ?? "active",
     startDate: initial.licenseDates?.[state]?.startDate ?? "",
     endDate: initial.licenseDates?.[state]?.endDate ?? "",
     life: initial.licenseLines?.[state]?.life ?? false,
@@ -230,13 +264,14 @@ const linesText = (entry: LicenceEntry) =>
     .join(" & ") || "—";
 
 /** The licence maps a list of entries submits, in state-code order. */
-function licenceMaps(licences: LicenceEntry[], lines: boolean, dates: boolean) {
+function licenceMaps(licences: LicenceEntry[], lines: boolean, dates: boolean, statuses: boolean) {
   const sorted = licences.slice().sort((a, b) => a.state.localeCompare(b.state));
   return {
     licensedStates: sorted.map((entry) => entry.state),
     licenseNumbers: Object.fromEntries(
       sorted.flatMap((entry) => (entry.licenseNumber ? [[entry.state, entry.licenseNumber]] : [])),
     ),
+    licenseStatuses: statuses ? Object.fromEntries(sorted.map((entry) => [entry.state, entry.status])) : {},
     licenseLines: lines
       ? Object.fromEntries(sorted.map((entry) => [entry.state, { life: entry.life, health: entry.health }]))
       : {},
@@ -248,22 +283,35 @@ function licenceMaps(licences: LicenceEntry[], lines: boolean, dates: boolean) {
 
 /**
  * Trimmed values out of the submitted form, plus the licence maps from the
- * list (lines and dates only when the form asks for them).
+ * list (statuses, lines and dates only when the form asks for them).
  */
-function readValues(form: HTMLFormElement, licences: LicenceEntry[], lines: boolean, dates: boolean): ProducerValues {
+function readValues(
+  form: HTMLFormElement,
+  licences: LicenceEntry[],
+  lines: boolean,
+  dates: boolean,
+  licenceStatuses: boolean,
+  statuses: readonly ProducerStatus[],
+  nameParts: boolean,
+): ProducerValues {
   const data = new FormData(form);
   const text = (field: keyof ProducerValues) => String(data.get(field) ?? "").trim();
+  const status = statuses.find((option) => option === text("status")) ?? "active";
+  const part = (field: "firstName" | "lastName") => text(field).replace(/\s+/g, " ");
+  const parts = { firstName: part("firstName"), lastName: part("lastName") };
   return {
-    name: text("name"),
+    ...(nameParts
+      ? { ...parts, name: [parts.firstName, parts.lastName].filter(Boolean).join(" ") }
+      : { name: text("name") }),
     aliases: text("aliases")
       .split(",")
       .map((alias) => alias.trim())
       .filter(Boolean),
-    status: text("status") === "inactive" ? "inactive" : "active",
+    status,
     npn: text("npn"),
     email: text("email"),
     phone: formatPhone(text("phone")),
-    ...licenceMaps(licences, lines, dates),
+    ...licenceMaps(licences, lines, dates, licenceStatuses),
   };
 }
 
@@ -286,7 +334,7 @@ type FormSectionProps = {
 export function FormSection({ title, action, layout, columns, children }: FormSectionProps) {
   const shell =
     layout === "page"
-      ? "rounded-lg border border-line bg-surface p-5 shadow-sm"
+      ? "rounded-lg border glass p-5 shadow-sm"
       : "border-t border-line pt-5";
   return (
     <section className={`min-w-0 ${shell}`}>
@@ -298,6 +346,8 @@ export function FormSection({ title, action, layout, columns, children }: FormSe
     </section>
   );
 }
+
+const DEFAULT_STATUSES: readonly ProducerStatus[] = ["active", "inactive"];
 
 export function ProducerForm<E extends object = Record<never, never>>({
   id,
@@ -311,6 +361,9 @@ export function ProducerForm<E extends object = Record<never, never>>({
   lines = false,
   dates = false,
   licenceEntry = "open",
+  nameParts = false,
+  licenceStatuses,
+  statuses = DEFAULT_STATUSES,
   pageExtra,
   onLicencesChange,
   layout = "dialog",
@@ -326,7 +379,7 @@ export function ProducerForm<E extends object = Record<never, never>>({
   // The licences the form will submit, in the order they were added; none when the section is off.
   const [licenceList, setLicenceList] = useState<LicenceEntry[]>(() => (licences ? entriesFrom(initial) : []));
   // The entry row. The key remounts the state dropdown, which is uncontrolled, whenever the row is reset.
-  const [draft, setDraft] = useState<LicenceEntry>(EMPTY_ENTRY);
+  const [draft, setDraft] = useState<LicenceEntry>(emptyEntry);
   const [draftKey, setDraftKey] = useState(0);
   const [draftError, setDraftError] = useState<string | null>(null);
   // The Add agent page hides the entry row until Add licence (or Edit). A licence pulled out to edit is held so Cancel can put it back.
@@ -343,7 +396,7 @@ export function ProducerForm<E extends object = Record<never, never>>({
     if (saving) return;
     const form = event.currentTarget;
     const extraValues = extra ? extra.read(new FormData(form)) : ({} as E);
-    const values = { ...readValues(form, licenceList, lines, dates), ...extraValues };
+    const values = { ...readValues(form, licenceList, lines, dates, Boolean(licenceStatuses), statuses, nameParts), ...extraValues };
     setSaving(true);
     setFormError(null);
     try {
@@ -363,22 +416,27 @@ export function ProducerForm<E extends object = Record<never, never>>({
   };
 
   /** Clears the entry row (and starts it from `next`, for Edit), then puts the cursor back on the state. */
-  const resetDraft = (next: LicenceEntry = EMPTY_ENTRY) => {
+  const resetDraft = (next: LicenceEntry = emptyEntry()) => {
     setDraft(next);
     setDraftError(null);
     setDraftKey((key) => key + 1);
     requestAnimationFrame(() => document.getElementById(`${id}-licence-state`)?.focus());
   };
 
-  /** Moves the entry row into the list, once it has a state and a number and its dates are in order. */
+  /** Moves the entry row into the list, once it has a state, a number and an end date (when active) and its dates are in order. */
   const addLicence = () => {
     const entry = { ...draft, licenseNumber: draft.licenseNumber.trim() };
+    const detailsRequired = !licenceStatuses || licenceDetailsRequired(entry.status);
     if (!entry.state) {
       setDraftError("Pick a state.");
       return;
     }
-    if (!entry.licenseNumber) {
+    if (!entry.licenseNumber && detailsRequired) {
       setDraftError(`Enter the ${US_STATE_NAMES[entry.state] ?? entry.state} licence number.`);
+      return;
+    }
+    if (dates && !entry.endDate && detailsRequired) {
+      setDraftError(`Enter the ${US_STATE_NAMES[entry.state] ?? entry.state} licence end date.`);
       return;
     }
     if (entry.startDate && entry.endDate && entry.endDate < entry.startDate) {
@@ -394,7 +452,7 @@ export function ProducerForm<E extends object = Record<never, never>>({
     setHeld(null);
     if (onRequest) {
       setEntryOpen(false);
-      setDraft(EMPTY_ENTRY);
+      setDraft(emptyEntry());
       setDraftError(null);
       setDraftKey((key) => key + 1);
     } else {
@@ -421,7 +479,7 @@ export function ProducerForm<E extends object = Record<never, never>>({
       setHeld(null);
     }
     setEntryOpen(false);
-    setDraft(EMPTY_ENTRY);
+    setDraft(emptyEntry());
     setDraftError(null);
     setDraftKey((key) => key + 1);
   };
@@ -461,14 +519,53 @@ export function ProducerForm<E extends object = Record<never, never>>({
         defaultValue={initial?.status ?? "active"}
         className={`${TOOLBAR_INPUT_CLASS} py-1 pr-7 text-fg`}
       >
-        <option value="active">Active</option>
-        <option value="inactive">Inactive</option>
+        {statuses.map((option) => (
+          <option key={option} value={option}>
+            {statusLabel(option)}
+          </option>
+        ))}
       </select>
     </label>
   );
 
+  /** One part of the name, for `nameParts`; the API's name error shows under the first. */
+  const namePart = (field: "firstName" | "lastName", label: string) => {
+    const showError = field === "firstName" && nameError;
+    return (
+      <Field
+        key={field}
+        label={label}
+        required
+        htmlFor={`${id}-${field}`}
+        hint={showError ? nameError : undefined}
+        hintId={`${id}-name-error`}
+        error
+      >
+        <input
+          id={`${id}-${field}`}
+          name={field}
+          type="text"
+          required
+          pattern=".*\S.*"
+          autoComplete="off"
+          defaultValue={initial?.[field]}
+          aria-invalid={showError ? true : undefined}
+          aria-describedby={showError ? `${id}-name-error` : undefined}
+          onChange={() => setNameError(null)}
+          className={INPUT_CLASS}
+        />
+      </Field>
+    );
+  };
+
   const identity = (
     <FormSection title="Identity" action={status} layout={layout} columns="sm:grid-cols-3">
+      {nameParts ? (
+        <>
+          {namePart("firstName", "First name")}
+          {namePart("lastName", "Last name")}
+        </>
+      ) : (
       <Field
         label={labels.name}
         required
@@ -491,6 +588,7 @@ export function ProducerForm<E extends object = Record<never, never>>({
           className={INPUT_CLASS}
         />
       </Field>
+      )}
       <Field
         label={labels.npn}
         required
@@ -566,10 +664,17 @@ export function ProducerForm<E extends object = Record<never, never>>({
     </FormSection>
   );
 
+  // Only an active licence must have its number and end date.
+  const detailsOptional = Boolean(licenceStatuses) && !licenceDetailsRequired(draft.status);
+
   // Two rows: the licence details, then the lines and the button.
   const entryRow = (
     <div role="group" aria-label="New licence" className="grid gap-3" onKeyDown={addOnEnter}>
-      <div className={`grid items-end gap-3 ${dates ? "grid-cols-4" : "grid-cols-2"}`}>
+      <div
+        className={`grid items-end gap-3 ${
+          dates ? (licenceStatuses ? "grid-cols-5" : "grid-cols-4") : licenceStatuses ? "grid-cols-3" : "grid-cols-2"
+        }`}
+      >
         <Field label="State" required htmlFor={`${id}-licence-state`}>
           <StateSelect
             key={draftKey}
@@ -581,18 +686,37 @@ export function ProducerForm<E extends object = Record<never, never>>({
             describedBy={draftError ? `${id}-licence-error` : undefined}
           />
         </Field>
-        <Field label="Licence number" required htmlFor={`${id}-licence-number`}>
+        <Field label="Licence number" required={!detailsOptional} htmlFor={`${id}-licence-number`}>
           <input
             id={`${id}-licence-number`}
             type="text"
             autoComplete="off"
             value={draft.licenseNumber}
             onChange={(event) => updateDraft({ licenseNumber: event.target.value })}
-            aria-invalid={draftError && draft.state && !draft.licenseNumber.trim() ? true : undefined}
+            aria-invalid={draftError && draft.state && !detailsOptional && !draft.licenseNumber.trim() ? true : undefined}
             aria-describedby={draftError ? `${id}-licence-error` : undefined}
             className={INPUT_CLASS}
           />
         </Field>
+        {licenceStatuses ? (
+          <Field label="Status" required htmlFor={`${id}-licence-status`}>
+            <select
+              id={`${id}-licence-status`}
+              value={draft.status}
+              onChange={(event) => updateDraft({ status: event.target.value as StateLicenseStatus })}
+              className={INPUT_CLASS}
+            >
+              {/* A licence in a status the list doesn't offer (an old one) keeps it as an option. */}
+              {(licenceStatuses.includes(draft.status) ? licenceStatuses : [...licenceStatuses, draft.status]).map(
+                (option) => (
+                  <option key={option} value={option}>
+                    {statusLabel(option)}
+                  </option>
+                ),
+              )}
+            </select>
+          </Field>
+        ) : null}
         {dates ? (
           <>
             <Field label="Start date" htmlFor={`${id}-licence-start`}>
@@ -604,13 +728,20 @@ export function ProducerForm<E extends object = Record<never, never>>({
                 className={INPUT_CLASS}
               />
             </Field>
-            <Field label="End date" htmlFor={`${id}-licence-end`}>
+            <Field label="End date" required={!detailsOptional} htmlFor={`${id}-licence-end`}>
               <input
                 id={`${id}-licence-end`}
                 type="date"
                 min={draft.startDate || undefined}
                 value={draft.endDate}
-                onChange={(event) => updateDraft({ endDate: event.target.value })}
+                onChange={(event) =>
+                  updateDraft({
+                    endDate: event.target.value,
+                    ...(licenceStatuses ? { status: statusForEndDate(draft.status, event.target.value) } : {}),
+                  })
+                }
+                aria-invalid={draftError && draft.state && !detailsOptional && !draft.endDate ? true : undefined}
+                aria-describedby={draftError ? `${id}-licence-error` : undefined}
                 className={INPUT_CLASS}
               />
             </Field>
@@ -666,6 +797,11 @@ export function ProducerForm<E extends object = Record<never, never>>({
               <th scope="col" className="px-3 py-2 font-medium">
                 Licence number
               </th>
+              {licenceStatuses ? (
+                <th scope="col" className="px-3 py-2 font-medium">
+                  Status
+                </th>
+              ) : null}
               {dates ? (
                 <>
                   <th scope="col" className="px-3 py-2 font-medium">
@@ -709,7 +845,12 @@ export function ProducerForm<E extends object = Record<never, never>>({
                   <span className="font-mono text-xs font-medium text-fg-muted">{entry.state}</span>{" "}
                   {US_STATE_NAMES[entry.state] ?? ""}
                 </td>
-                <td className="px-3 py-2 font-mono text-xs">{entry.licenseNumber}</td>
+                <td className="px-3 py-2 font-mono text-xs">{entry.licenseNumber || "—"}</td>
+                {licenceStatuses ? (
+                  <td className="px-3 py-2">
+                    <StatusBadge status={entry.status} />
+                  </td>
+                ) : null}
                 {dates ? (
                   <>
                     <td className="px-3 py-2 whitespace-nowrap">{entry.startDate ? formatLicenceDate(entry.startDate) : "—"}</td>
@@ -779,7 +920,7 @@ export function ProducerForm<E extends object = Record<never, never>>({
         // A licence opened for edit is off the list but still saved; keep it.
         const remaining = [...licenceList.filter((entry) => entry.state !== pendingDelete), ...(held ? [held] : [])];
         if (onLicencesChange) {
-          const message = await onLicencesChange(licenceMaps(remaining, lines, dates));
+          const message = await onLicencesChange(licenceMaps(remaining, lines, dates, Boolean(licenceStatuses)));
           if (message) {
             setLicencesError(message);
             return;

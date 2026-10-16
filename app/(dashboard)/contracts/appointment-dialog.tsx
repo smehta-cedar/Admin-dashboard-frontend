@@ -5,12 +5,14 @@ import { GHOST_BUTTON_CLASS, INPUT_CLASS, PRIMARY_BUTTON_CLASS } from "@/compone
 import { Field } from "@/components/field";
 import { ModalDialog, useModalDialog } from "@/components/modal-dialog";
 import { StateCheckboxes } from "@/components/state-checkboxes";
+import { statusLabel } from "@/components/status-badge";
 import type { AgentRecord } from "@/lib/agents";
 import type {
   AppointmentError,
   AppointmentValues,
   CarrierContractField,
   CarrierContractRecord,
+  ContractStatus,
 } from "@/lib/carrier-contracts";
 import type { CarrierRecord } from "@/lib/carriers";
 import { intersectStates, stateSummary } from "@/lib/us-states";
@@ -41,6 +43,10 @@ import { byName } from "@/lib/text";
  * carrier, a writing number unique within that carrier, and every state
  * against both ceilings, naming the side that blocks it, then records the
  * change note. While the save is in flight the buttons are disabled.
+ *
+ * `requireWritingNumber` (the agent profile) makes the writing number
+ * mandatory while the status is Active; Applied, Pending and Inactive
+ * contracts may leave it blank.
  */
 
 type AgentOption = Pick<AgentRecord, "id" | "name" | "status" | "licensedStates">;
@@ -58,8 +64,12 @@ export const APPOINTMENT_FIELD_LABELS: Record<CarrierContractField, string> = {
   agentId: "Agent",
   carrierId: "Carrier",
   writingNumber: "Writing number",
+  status: "Status",
   appointedStates: "States",
 };
+
+/** The statuses a contract can have, in the order the dropdown lists them; the API's CONTRACT_STATUSES. */
+export const CONTRACT_STATUSES: readonly ContractStatus[] = ["active", "applied", "pending", "inactive"];
 
 /** Unique codes in code order, so a list's order never shows up as a change. */
 export const normalizeStates = (codes: string[]) => [...new Set(codes)].sort();
@@ -70,13 +80,22 @@ type AppointmentDialogProps = {
   /** Every agent; inactive ones are marked, like inactive carriers. */
   agents: AgentOption[];
   carriers: CarrierOption[];
+  /** Whether a contract can't be saved without a writing number. */
+  requireWritingNumber?: boolean;
   /** Saves the values; resolves with an error to show instead of closing. */
   onSave: (values: AppointmentValues, editing?: CarrierContractRecord) => Promise<AppointmentError | null>;
   /** Runs for every close: Cancel, Escape, backdrop click, or a save. */
   onClose: () => void;
 };
 
-export function AppointmentDialog({ editor, agents, carriers, onSave, onClose }: AppointmentDialogProps) {
+export function AppointmentDialog({
+  editor,
+  agents,
+  carriers,
+  requireWritingNumber = false,
+  onSave,
+  onClose,
+}: AppointmentDialogProps) {
   const { dialogRef, close } = useModalDialog(editor !== null);
   const id = useId();
 
@@ -89,6 +108,7 @@ export function AppointmentDialog({ editor, agents, carriers, onSave, onClose }:
           editor={editor}
           agents={agents}
           carriers={carriers}
+          requireWritingNumber={requireWritingNumber}
           onSave={onSave}
           close={close}
         />
@@ -104,10 +124,13 @@ type AppointmentFormProps = Omit<AppointmentDialogProps, "editor" | "onClose"> &
 };
 
 /** The dialog's form. Mounted per open, so its state starts fresh each time. */
-function AppointmentForm({ id, editor, agents, carriers, onSave, close }: AppointmentFormProps) {
+function AppointmentForm({ id, editor, agents, carriers, requireWritingNumber, onSave, close }: AppointmentFormProps) {
   const editing = editor.mode === "edit" ? editor.contract : undefined;
   const [error, setError] = useState<AppointmentError | null>(null);
   const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<ContractStatus>(editing?.status ?? "active");
+  // Only an active contract must have its writing number.
+  const writingNumberRequired = Boolean(requireWritingNumber) && status === "active";
   const carrierOptions = [...carriers]
     .filter((option) => option.agentAccessible || option.id === editing?.carrierId)
     .sort(byName);
@@ -165,10 +188,15 @@ function AppointmentForm({ id, editor, agents, carriers, onSave, close }: Appoin
       agentId: text("agentId"),
       carrierId: text("carrierId"),
       writingNumber: text("writingNumber"),
+      status,
       appointedStates: normalizeStates(
         data.getAll("appointedStates").map((code) => String(code).trim()).filter(Boolean),
       ),
     };
+    if (writingNumberRequired && !values.writingNumber) {
+      setError({ field: "writingNumber", message: "Enter the writing number." });
+      return;
+    }
     setSaving(true);
     try {
       const saveError = await onSave(values, editing);
@@ -255,7 +283,8 @@ function AppointmentForm({ id, editor, agents, carriers, onSave, close }: Appoin
         <Field
           label="Writing number"
           htmlFor={`${id}-writing-number`}
-          optional
+          optional={!writingNumberRequired}
+          required={writingNumberRequired}
           hint={writingNumberError ?? "Producer ID at this carrier."}
           hintId={`${id}-writing-number-hint`}
           error={Boolean(writingNumberError)}
@@ -264,6 +293,8 @@ function AppointmentForm({ id, editor, agents, carriers, onSave, close }: Appoin
             id={`${id}-writing-number`}
             name="writingNumber"
             type="text"
+            required={writingNumberRequired}
+            pattern={writingNumberRequired ? ".*\\S.*" : undefined}
             autoComplete="off"
             defaultValue={editing?.writingNumber}
             aria-invalid={writingNumberError ? true : undefined}
@@ -271,6 +302,24 @@ function AppointmentForm({ id, editor, agents, carriers, onSave, close }: Appoin
             onChange={() => setError(null)}
             className={INPUT_CLASS}
           />
+        </Field>
+        <Field label="Status" required htmlFor={`${id}-status`}>
+          <select
+            id={`${id}-status`}
+            name="status"
+            value={status}
+            onChange={(event) => {
+              setStatus(event.target.value as ContractStatus);
+              setError(null);
+            }}
+            className={INPUT_CLASS}
+          >
+            {CONTRACT_STATUSES.map((option) => (
+              <option key={option} value={option}>
+                {statusLabel(option)}
+              </option>
+            ))}
+          </select>
         </Field>
         <StateCheckboxes
           legend="States"

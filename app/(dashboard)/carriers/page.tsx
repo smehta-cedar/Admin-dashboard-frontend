@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 };
 
 export default async function CarriersPage() {
-  if (!(await canViewModule("carriers"))) return <NoAccess title="Carriers" />;
+  if (!(await canViewModule("carriers.list"))) return <NoAccess title="Carriers" />;
   const carriers = await getCarriers();
 
   return <CarriersView carriers={carriers} />;

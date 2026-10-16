@@ -30,6 +30,10 @@ const pad = (value: number) => String(value).padStart(2, "0");
 export const isoDate = (year: number, month: number, day: number) =>
   `${year}-${pad(month)}-${pad(day)}`;
 
+/** Today's calendar date in the local timezone as "YYYY-MM-DD". */
+export const localDateString = (date: Date = new Date()) =>
+  isoDate(date.getFullYear(), date.getMonth() + 1, date.getDate());
+
 /** The month a "YYYY-MM-DD" (or "YYYY-MM") string falls in. */
 export function yearMonthOf(date: string): YearMonth {
   return { year: Number(date.slice(0, 4)), month: Number(date.slice(5, 7)) };

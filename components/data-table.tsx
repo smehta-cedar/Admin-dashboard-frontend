@@ -52,6 +52,12 @@ export type DataTableColumn<T extends RowData> = {
   sortValue?: (row: T) => string | number;
   /** Text the navbar search matches for this column. Leave out to keep a column unsearchable (e.g. passwords). */
   searchText?: (row: T) => string | string[];
+  /**
+   * A fixed share of the table's width, e.g. "18%". When any column sets one
+   * the table uses a fixed layout, so tables given the same widths line up
+   * column for column (the Passwords page's two tables).
+   */
+  width?: string;
 };
 
 type DataTableProps<T extends RowData> = {
@@ -102,6 +108,7 @@ export function DataTable<T extends RowData>({
   emptyMessage,
 }: DataTableProps<T>) {
   const id = useId();
+  const fixedLayout = columns.some((column) => column.width);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   // Dashboard routes render per request, so the server sees ?q= too and the
   // first render is already filtered.
@@ -184,8 +191,15 @@ export function DataTable<T extends RowData>({
         </p>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-line">
-        <table className="min-w-full text-left text-sm">
+      <div className="overflow-x-auto rounded-lg border glass">
+        <table className={`text-left text-sm ${fixedLayout ? "w-full min-w-5xl table-fixed" : "min-w-full"}`}>
+          {fixedLayout ? (
+            <colgroup>
+              {columns.map((column) => (
+                <col key={column.id} style={column.width ? { width: column.width } : undefined} />
+              ))}
+            </colgroup>
+          ) : null}
           <thead className="bg-surface-muted">
             <tr>
               {columns.map((column) => {

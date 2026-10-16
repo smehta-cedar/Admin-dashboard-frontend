@@ -38,6 +38,8 @@ export type RoleRecord = {
   permissions: RolePermissions;
   /** Live users assigned this role. A role with any cannot be deleted. */
   userCount: number;
+  /** Admin, Operations or Agent: cannot be deleted, renamed or made inactive. */
+  builtIn: boolean;
 };
 
 /** What the add / edit form submits. */
@@ -66,6 +68,7 @@ export type ApiRole = {
   name: string;
   description: string;
   is_active: boolean;
+  is_system: boolean;
   permissions: ApiRolePermission[];
   user_count: number;
   created_at: string;
@@ -91,6 +94,7 @@ export function toRoleRecord(role: ApiRole): RoleRecord {
     status: role.is_active ? "active" : "inactive",
     permissions,
     userCount: role.user_count,
+    builtIn: role.is_system,
   };
 }
 

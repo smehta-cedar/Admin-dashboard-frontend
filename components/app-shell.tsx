@@ -115,14 +115,14 @@ export function AppShell({
       <div className="lg:flex">
         <aside
           id={railId}
-          className={`hidden lg:sticky lg:top-14 lg:flex lg:h-[calc(100dvh-3.5rem)] lg:shrink-0 lg:flex-col lg:border-r lg:border-line lg:bg-surface-muted lg:transition-[width] ${
+          className={`hidden lg:sticky lg:top-14 lg:z-[9999] lg:flex lg:h-[calc(100dvh-3.5rem)] lg:shrink-0 lg:flex-col lg:border-r lg:border-line lg:bg-surface-muted lg:transition-[width] ${
             // Collapsed, the rail must not clip its own hover flyouts, so it
             // trades scrolling for overflow — six icons fit any viewport.
             collapsed ? "lg:w-16 lg:overflow-visible" : "lg:w-60 lg:overflow-y-auto"
           }`}
         >
           <div className={collapsed ? "overflow-visible" : "min-h-0 flex-1 overflow-y-auto"}>
-            <Sidebar items={navItems} collapseChildren collapsed={collapsed} />
+            <Sidebar items={navItems} collapsed={collapsed} />
           </div>
           {footerItems.length > 0 ? (
             <div
@@ -130,7 +130,7 @@ export function AppShell({
                 collapsed ? "overflow-visible" : ""
               }`}
             >
-              <Sidebar items={footerItems} collapseChildren collapsed={collapsed} />
+              <Sidebar items={footerItems} collapsed={collapsed} />
             </div>
           ) : null}
         </aside>

@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 };
 
 export default async function ContractsByCarrierPage() {
-  if (!(await canViewModule("contracts"))) return <NoAccess title="Contracts by carrier" />;
+  if (!(await canViewModule("contracts.by_carriers"))) return <NoAccess title="Contracts by carrier" />;
   const [contracts, agents, carriers] = await Promise.all([
     getCarrierContracts(),
     getAgents(),

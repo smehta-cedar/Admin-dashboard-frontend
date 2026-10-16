@@ -29,10 +29,15 @@ type UsersViewProps = {
   /** Every user's notes, newest first. */
   notes: UserNote[];
   roles: RoleOption[];
+  /** Only a superuser can change anyone's roles. */
+  canAssignRoles: boolean;
 };
 
 /** A table row. Wrapped so a column can be added later without renaming fields. */
 type UserRow = { user: UserRecord };
+
+/** The user's roles as one line, e.g. "Admin, Staff"; "" for none. */
+const roleNames = (user: UserRecord) => user.roles.map((role) => role.name).join(", ");
 
 /*
  * Sort and search run in DataTable. The actions column is added in the view,
@@ -85,12 +90,12 @@ const COLUMNS: DataTableColumn<UserRow>[] = [
     searchText: ({ user }) => user.phone,
   },
   {
-    id: "role",
-    header: "Role",
-    cell: ({ user }) => user.role?.name ?? <span className="text-fg-faint">No role</span>,
+    id: "roles",
+    header: "Roles",
+    cell: ({ user }) => roleNames(user) || <span className="text-fg-faint">No roles</span>,
     className: "text-fg-muted",
-    sortValue: ({ user }) => user.role?.name ?? "",
-    searchText: ({ user }) => user.role?.name ?? "",
+    sortValue: ({ user }) => roleNames(user),
+    searchText: ({ user }) => roleNames(user),
   },
   {
     id: "status",
@@ -101,7 +106,7 @@ const COLUMNS: DataTableColumn<UserRow>[] = [
   },
 ];
 
-export function UsersView({ initialUsers, notes, roles }: UsersViewProps) {
+export function UsersView({ initialUsers, notes, roles, canAssignRoles }: UsersViewProps) {
   const [users, setUsers] = useState(initialUsers);
   const [editor, setEditor] = useState<UserEditor | null>(null);
 
@@ -179,7 +184,13 @@ export function UsersView({ initialUsers, notes, roles }: UsersViewProps) {
         />
       )}
 
-      <UserDialog editor={editor} roles={roles} onSave={handleSave} onClose={() => setEditor(null)} />
+      <UserDialog
+        editor={editor}
+        roles={roles}
+        canAssignRoles={canAssignRoles}
+        onSave={handleSave}
+        onClose={() => setEditor(null)}
+      />
     </>
   );
 }

@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 };
 
 export default async function RulebookPage() {
-  if (!(await canViewModule("dashboard"))) return <NoAccess title="Rulebook" />;
+  if (!(await canViewModule("rulebook"))) return <NoAccess title="Rulebook" />;
   return (
     <>
       <PageHeader title="Rulebook" description="How payouts are calculated." />

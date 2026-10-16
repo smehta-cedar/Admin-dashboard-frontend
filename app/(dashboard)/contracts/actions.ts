@@ -38,9 +38,10 @@ export type SaveAppointmentResult =
 const ERROR_FIELDS: Record<string, AppointmentError["field"]> = {
   agent_id: "agentId",
   carrier_id: "carrierId",
-  // "Add a contract number before an agent can use this carrier."
+  // "The agency's contract with this carrier must be active with a contract number first."
   carrier: "carrierId",
   writing_number: "writingNumber",
+  status: "status",
   appointed_states: "appointedStates",
 };
 
@@ -53,6 +54,7 @@ export async function saveAppointment(
     agent_id: values.agentId,
     carrier_id: values.carrierId,
     writing_number: values.writingNumber,
+    status: values.status,
     appointed_states: values.appointedStates,
   };
   const result = editingId
@@ -74,4 +76,15 @@ export async function saveAppointment(
 
   revalidatePath("/", "layout");
   return { ok: true, contract: toContractRecord(result.data) };
+}
+
+/** Removes a contract. The API soft-deletes it, so the agent can be appointed to that carrier again. */
+export async function deleteAppointment(id: string): Promise<{ ok: true } | { ok: false; message: string }> {
+  const result = await apiFetch<null>(`/contracts/${encodeURIComponent(id)}/`, { method: "DELETE" });
+  if (!result.ok) {
+    if (result.status === 401) redirect("/login");
+    return { ok: false, message: result.message };
+  }
+  revalidatePath("/", "layout");
+  return { ok: true };
 }

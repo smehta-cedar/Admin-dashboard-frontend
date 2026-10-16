@@ -78,7 +78,7 @@ export default async function OverviewPage() {
 
       <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => (
-          <div key={stat.label} className="rounded-lg border border-line p-4">
+          <div key={stat.label} className="rounded-lg border glass p-4 shadow-sm">
             <dt className="text-sm text-fg-muted">{stat.label}</dt>
             <dd className="mt-1 text-2xl font-semibold tabular-nums text-fg">{stat.value}</dd>
           </div>

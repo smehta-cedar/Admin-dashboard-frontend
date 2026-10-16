@@ -30,7 +30,13 @@ type ModalDialogProps = {
 };
 
 /** Native modal dialog; clicking the backdrop closes it. */
-export function ModalDialog({ dialogRef, labelledBy, onClose, className = "max-w-3xl", children }: ModalDialogProps) {
+export function ModalDialog({
+  dialogRef,
+  labelledBy,
+  onClose,
+  className = "max-w-4xl overflow-y-auto",
+  children,
+}: ModalDialogProps) {
   return (
     <dialog
       ref={dialogRef}
@@ -41,7 +47,9 @@ export function ModalDialog({ dialogRef, labelledBy, onClose, className = "max-w
       onClick={(event) => {
         if (event.target === event.currentTarget) event.currentTarget.close();
       }}
-      className={`m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] overflow-y-auto rounded-lg bg-surface p-0 shadow-xl backdrop:bg-scrim ${className}`}
+      // Overflow lives in `className` so a short form can use overflow-visible
+      // and let a dropdown paint past the dialog edge.
+      className={`m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] rounded-lg bg-surface p-0 shadow-xl backdrop:bg-scrim ${className}`}
     >
       {children}
     </dialog>

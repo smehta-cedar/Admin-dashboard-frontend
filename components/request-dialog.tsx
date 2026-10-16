@@ -30,16 +30,21 @@ type RequestDialogProps = {
   open: boolean;
   /** Runs for every close: Cancel, Escape, backdrop click, or a save. */
   onClose: () => void;
+  /**
+   * When set (an agent filing for themselves), the Agent select is hidden and
+   * this id is submitted. Staff leave it out and pick an agent.
+   */
+  fixedAgentId?: string;
 };
 
-export function RequestDialog({ open, onClose }: RequestDialogProps) {
+export function RequestDialog({ open, onClose, fixedAgentId }: RequestDialogProps) {
   const { dialogRef, close } = useModalDialog(open);
   const id = useId();
 
   // Closing unmounts the form, which resets it.
   return (
     <ModalDialog dialogRef={dialogRef} labelledBy={`${id}-title`} onClose={onClose}>
-      {open ? <RequestForm id={id} close={close} /> : null}
+      {open ? <RequestForm id={id} close={close} fixedAgentId={fixedAgentId} /> : null}
     </ModalDialog>
   );
 }
@@ -60,7 +65,8 @@ function readValues(form: HTMLFormElement): RequestValues {
   };
 }
 
-function PartyOptions({ parties, placeholder }: { parties: RequestParty[]; placeholder: string }) {
+/** An agent or carrier select's options; the task popup (./task-dialog.tsx) uses them too. */
+export function PartyOptions({ parties, placeholder }: { parties: RequestParty[]; placeholder: string }) {
   return (
     <>
       <option value="">{placeholder}</option>
@@ -74,7 +80,15 @@ function PartyOptions({ parties, placeholder }: { parties: RequestParty[]; place
   );
 }
 
-function RequestForm({ id, close }: { id: string; close: () => void }) {
+function RequestForm({
+  id,
+  close,
+  fixedAgentId,
+}: {
+  id: string;
+  close: () => void;
+  fixedAgentId?: string;
+}) {
   const { agents, carriers, addRequest } = useRequestsStore();
   const [type, setType] = useState<AgentRequestType>("licensing");
   const [error, setError] = useState<RequestError | null>(null);
@@ -84,6 +98,7 @@ function RequestForm({ id, close }: { id: string; close: () => void }) {
     event.preventDefault();
     if (saving) return;
     const values = readValues(event.currentTarget);
+    if (fixedAgentId) values.agentId = fixedAgentId;
     setSaving(true);
     try {
       const saveError = await addRequest(values);
@@ -121,10 +136,14 @@ function RequestForm({ id, close }: { id: string; close: () => void }) {
       <h2 id={`${id}-title`} className="text-base font-semibold text-fg">
         Create a request
       </h2>
-      <p className="mt-1 text-sm text-fg-muted">Files a pending request for HR to decide on.</p>
+      <p className="mt-1 text-sm text-fg-muted">
+        {fixedAgentId
+          ? "Files a pending request for the office to decide on."
+          : "Files a pending request for HR to decide on."}
+      </p>
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
-        <Field label="Type" htmlFor={`${id}-type`}>
+        <Field label="Type" htmlFor={`${id}-type`} className={fixedAgentId ? "sm:col-span-2" : undefined}>
           <select
             id={`${id}-type`}
             name="type"
@@ -142,18 +161,22 @@ function RequestForm({ id, close }: { id: string; close: () => void }) {
             ))}
           </select>
         </Field>
-        <Field label="Agent" htmlFor={`${id}-agent`} {...agentError.field}>
-          <select
-            id={`${id}-agent`}
-            name="agentId"
-            required
-            defaultValue=""
-            className={INPUT_CLASS}
-            {...agentError.input}
-          >
-            <PartyOptions parties={agents} placeholder="Choose an agent" />
-          </select>
-        </Field>
+        {fixedAgentId ? (
+          <input type="hidden" name="agentId" value={fixedAgentId} />
+        ) : (
+          <Field label="Agent" htmlFor={`${id}-agent`} {...agentError.field}>
+            <select
+              id={`${id}-agent`}
+              name="agentId"
+              required
+              defaultValue=""
+              className={INPUT_CLASS}
+              {...agentError.input}
+            >
+              <PartyOptions parties={agents} placeholder="Choose an agent" />
+            </select>
+          </Field>
+        )}
 
         {type === "licensing" || type === "contract" ? (
           <>

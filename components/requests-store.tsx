@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { fileRequest, setRequestStatus } from "@/app/(dashboard)/hr/actions";
+import type { AgentStatus } from "@/lib/agents";
 import type { CarrierStatus } from "@/lib/carrier-statuses";
 import { refreshNotificationsSoon } from "@/lib/notifications";
 import { checkRequestValues, type RequestError, type RequestValues } from "@/lib/request-options";
@@ -9,19 +10,20 @@ import type { RequestRecord, RequestStatus } from "@/lib/requests";
 
 /*
  * The request list, held above every dashboard page. The navbar's
- * Create-a-request button files from anywhere, and the HR page reads and
- * changes statuses, so the state has to outlive any one page: the dashboard
- * layout (app/(dashboard)/layout.tsx) loads the list from the API once and
- * mounts this provider around the shell. Filing and status changes go to
- * the API through the server actions in app/(dashboard)/hr/actions.ts and
- * update the list here from the result.
+ * Create-a-request button files from anywhere, the shop appends merch orders
+ * after placeOrder, and the HR page reads and changes statuses, so the state
+ * has to outlive any one page: the dashboard layout
+ * (app/(dashboard)/layout.tsx) loads the list from the API once and mounts
+ * this provider around the shell. Filing and status changes go to the API
+ * through the server actions in app/(dashboard)/hr/actions.ts and update the
+ * list here from the result.
  *
  * The slim agent and carrier options ride along for the dialog's selects and
  * the HR page's names, so neither has to load them again.
  */
 
 /** Agents are active or inactive; a carrier can also be applied, pending or expired. */
-export type RequestParty = { id: string; name: string; status: CarrierStatus };
+export type RequestParty = { id: string; name: string; status: CarrierStatus | AgentStatus };
 
 type RequestsStore = {
   requests: RequestRecord[];
@@ -31,6 +33,8 @@ type RequestsStore = {
   carriers: RequestParty[];
   /** Files a pending request through the API. Resolves with the form error, if any. */
   addRequest: (values: RequestValues) => Promise<RequestError | null>;
+  /** Appends a request already saved by another action (e.g. a shop merch order). */
+  appendRequest: (request: RequestRecord) => void;
   /** HR's decision, through the API. Resolves with a message when it failed. A status already set changes nothing. */
   setStatus: (id: string, status: RequestStatus) => Promise<string | null>;
   /** The last status change that failed, for the HR page to show. */
@@ -61,6 +65,11 @@ export function RequestsProvider({ initialRequests, agents, carriers, children }
     return null;
   };
 
+  const appendRequest: RequestsStore["appendRequest"] = (request) => {
+    setRequests((current) => (current.some((row) => row.id === request.id) ? current : [...current, request]));
+    refreshNotificationsSoon();
+  };
+
   const setStatus: RequestsStore["setStatus"] = async (id, status) => {
     const request = requests.find((candidate) => candidate.id === id);
     if (!request || request.status === status) return null;
@@ -80,7 +89,9 @@ export function RequestsProvider({ initialRequests, agents, carriers, children }
   };
 
   return (
-    <RequestsContext.Provider value={{ requests, agents, carriers, addRequest, setStatus, statusError }}>
+    <RequestsContext.Provider
+      value={{ requests, agents, carriers, addRequest, appendRequest, setStatus, statusError }}
+    >
       {children}
     </RequestsContext.Provider>
   );
