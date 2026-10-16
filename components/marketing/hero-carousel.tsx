@@ -1,33 +1,30 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 
+/*
+ * The homepage hero slides: one photo each under an even black wash, with the
+ * text and button centred at the bottom. A link to another site opens in a new tab.
+ */
 const SLIDES = [
   {
-    mobile: "/assets/hero/home1-mobile.webp",
-    desktop: "/assets/hero/home1.webp",
-    alt: "A licensed Medicare specialist meeting with a client at Cedar Grove Senior Health Solutions",
+    image: "/assets/hero/hero.jpg",
     heading: (
       <>
-        Solutions
+        Your Partner in Medicare.
         <br />
-        You Can
-        <br />
-        Count On.
+        For Life.
       </>
     ),
     sub: (
       <>
-        We work for <strong>you</strong> &mdash; not the insurance companies.
+      From enrollment to annual reviews, we’re with you every step of the way.
       </>
     ),
-    cta: { href: "/team", label: "Meet Our Team" },
+    cta: { href: "https://www.cedargrovemedicare.com/webinar", label: "Watch our webinar" },
   },
   {
-    mobile: "/assets/hero/home2-mobile.webp",
-    desktop: "/assets/hero/home2.webp",
-    alt: "Happy retirees who found the right Medicare coverage through Cedar Grove Senior Health Solutions",
+    image: "/assets/hero/hero2.JPG",
     heading: (
       <>
         The Right Plan.
@@ -39,20 +36,22 @@ const SLIDES = [
     cta: { href: "/#services", label: "Explore Your Coverage Options" },
   },
   {
-    mobile: "/assets/hero/home3-mobile.webp",
-    desktop: "/assets/hero/home3.webp",
-    alt: "Cedar Grove Senior Health Solutions team — independent Medicare agents serving Louisiana",
+    image: "/assets/hero/hero3.JPG",
     heading: (
       <>
-        Your Partner
+        Solutions
+       
+        You Can
         <br />
-        in Medicare.
-        <br />
-        For Life.
+        Count On.
       </>
     ),
-    sub: <>From enrollment to annual reviews, we&rsquo;re with you every step of the way.</>,
-    cta: { href: "/#reviews", label: "See What Our Clients Say" },
+    sub: (
+      <>
+        We work for <strong>you</strong>; not the insurance companies.
+      </>
+    ),
+    cta: { href: "/team", label: "Meet Our Team" },
   },
 ] as const;
 
@@ -207,29 +206,30 @@ export function HeroCarousel() {
                 style={slideW ? { width: slideW, flex: `0 0 ${slideW}px` } : undefined}
               >
                 <picture>
-                  <source media="(max-width: 768px)" srcSet={slide.mobile} />
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={slide.desktop}
-                    alt={isClone ? "" : slide.alt}
-                    className="carousel__img"
-                    width={1600}
-                    height={900}
-                  />
+                  <img src={slide.image} alt="" className="carousel__img" />
                 </picture>
-                <div className="carousel__overlay" aria-hidden="true" />
-                <div className="carousel__text">
+                <div
+                  className="carousel__overlay"
+                  aria-hidden="true"
+                  style={{ background: "rgb(0 0 0 / 0.45)" }}
+                />
+                <div
+                  className="carousel__text"
+                  style={{ justifyContent: "flex-end", alignItems: "center", textAlign: "center", paddingBottom: "4rem" }}
+                >
                   <h1 className="carousel__heading">{slide.heading}</h1>
                   <p className="carousel__sub">{slide.sub}</p>
-                  {slide.cta.href.startsWith("/") && !slide.cta.href.includes("#") ? (
-                    <Link href={slide.cta.href} className="btn btn--primary carousel__cta">
-                      {slide.cta.label}
-                    </Link>
-                  ) : (
-                    <a href={slide.cta.href} className="btn btn--primary carousel__cta">
-                      {slide.cta.label}
-                    </a>
-                  )}
+                  <a
+                    href={slide.cta.href}
+                    className="btn btn--primary carousel__cta"
+                    style={{ alignSelf: "center" }}
+                    {...(slide.cta.href.startsWith("http")
+                      ? { target: "_blank", rel: "noopener noreferrer" }
+                      : {})}
+                  >
+                    {slide.cta.label}
+                  </a>
                 </div>
               </div>
             );

@@ -29,7 +29,7 @@ export default async function LoginPage() {
       <main className="flex flex-1 items-center justify-center px-4 pb-16">
         <div className="w-full max-w-sm rounded-lg border glass p-6 shadow-sm sm:p-8">
           <div className="flex justify-center">
-            <BrandLogo height={40} />
+           <a href="/"> <BrandLogo height={40} /></a>
           </div>
           <h1 className="mt-6 text-center text-lg font-semibold text-fg">Sign in</h1>
 
