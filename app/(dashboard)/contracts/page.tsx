@@ -3,6 +3,7 @@ import { NoAccess } from "@/components/no-access";
 import { canViewModule } from "@/lib/access";
 import { getAgency } from "@/lib/agency";
 import { getAgents } from "@/lib/agents";
+import { allowForbidden } from "@/lib/api-server";
 import { getCarrierContractNotes, getCarrierContracts } from "@/lib/carrier-contracts";
 import { getCarriers } from "@/lib/carriers";
 import { ContractsView } from "./contracts-view";
@@ -16,9 +17,10 @@ export default async function ContractsPage() {
   const [contracts, notes, agents, carriers, agency] = await Promise.all([
     getCarrierContracts(),
     getCarrierContractNotes(),
-    getAgents(),
-    getCarriers(),
-    getAgency(),
+    // Other modules' lists: empty (and no agency) when the role can't read them.
+    allowForbidden(getAgents()).then((list) => list ?? []),
+    allowForbidden(getCarriers()).then((list) => list ?? []),
+    allowForbidden(getAgency()),
   ]);
 
   // Where an agent can write needs both ceilings: their own licences and the

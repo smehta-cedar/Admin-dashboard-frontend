@@ -106,6 +106,8 @@ type AgentFormProps = {
   licenceEntry?: LicenceEntryMode;
   /** A card after Licences, page layout only (certifications on Add agent). */
   pageExtra?: ReactNode;
+  /** See ProducerForm: an agent editing their own profile. */
+  selfEdit?: boolean;
   /** See ProducerForm. Set on Edit so a deleted licence is removed on the server. */
   onLicencesChange?: (
     licences: Pick<
@@ -125,6 +127,7 @@ export function AgentForm({
   licenceEntry,
   pageExtra,
   onLicencesChange,
+  selfEdit,
 }: AgentFormProps) {
   return (
     <ProducerForm<AgentContact>
@@ -136,6 +139,7 @@ export function AgentForm({
       licenceStatuses={AGENT_LICENCE_STATUSES}
       pageExtra={pageExtra}
       onLicencesChange={onLicencesChange}
+      selfEdit={selfEdit}
       title={editing ? `Edit ${editing.name}` : "Add agent"}
       description={
         editing

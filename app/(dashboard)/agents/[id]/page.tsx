@@ -10,6 +10,7 @@ import { getCarriers } from "@/lib/carriers";
 import { certifiableCarrier } from "@/lib/certification-options";
 import { getCertifications } from "@/lib/certifications";
 import { getPasswords } from "@/lib/passwords";
+import { getSessionUser } from "@/lib/session";
 import { getSitePasswords, getSites } from "@/lib/site-passwords";
 import { byName } from "@/lib/text";
 import { AgentProfile } from "./agent-profile";
@@ -30,7 +31,7 @@ export default async function AgentProfilePage(props: PageProps<"/agents/[id]">)
 
   // Each side load is null for a role that can't see it (a 403): the profile
   // hides that section, or shows the rest without it.
-  const [notes, carrierContracts, passwords, sitePasswords, sites, carriers, certifications, agency] = await Promise.all([
+  const [notes, carrierContracts, passwords, sitePasswords, sites, carriers, certifications, agency, user] = await Promise.all([
     allowForbidden(getAgentNotes(id)),
     allowForbidden(getCarrierContracts()),
     allowForbidden(getPasswords()),
@@ -41,6 +42,7 @@ export default async function AgentProfilePage(props: PageProps<"/agents/[id]">)
     allowForbidden(getCertifications({ agentId: id })),
     // Null for a role without agency view: the maps then disable nothing.
     allowForbidden(getAgency()),
+    getSessionUser(),
   ]);
 
   return (
@@ -80,6 +82,7 @@ export default async function AgentProfilePage(props: PageProps<"/agents/[id]">)
       sites={sites ?? []}
       notes={notes}
       agencyLicensedStates={agency ? agency.licensedStates : null}
+      selfEdit={Boolean(user?.agentId)}
     />
   );
 }

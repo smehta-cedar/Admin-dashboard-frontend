@@ -11,6 +11,7 @@
  *   400 invalid              a field is missing, blank or not an email -> under that field
  *   401 invalid_credentials  unknown email or wrong password            -> the API's message
  *   403 account_blocked      right password, blocked account            -> the API's message
+ *   403 account_locked       5 wrong passwords or codes in a row        -> the API's message
  *   429 throttled            10 attempts a minute per IP                -> the API's message
  *   network_error            the API is down                            -> "Can't reach the server."
  */

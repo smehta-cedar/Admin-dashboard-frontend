@@ -191,6 +191,8 @@ type AgentProfileProps = {
    * Null (no agency yet, or the role can't read it) disables nothing.
    */
   agencyLicensedStates?: string[] | null;
+  /** An agent viewing their own profile: licences are listed with no Add, Edit or Delete (staff only). */
+  selfEdit?: boolean;
 };
 
 const CARRIER_COLUMNS = ["Carrier", "Writing number", "Writable states", "Status"];
@@ -472,6 +474,7 @@ export function AgentProfile({
   sites = [],
   notes,
   agencyLicensedStates = null,
+  selfEdit = false,
 }: AgentProfileProps) {
   const [agent, setAgent] = useServerState(initialAgent);
   const [licenses, setLicenses] = useServerState(initialLicenses);
@@ -1133,6 +1136,7 @@ export function AgentProfile({
                           />
                           <h3 className={`mt-5 mb-2 ${PROFILE_LABEL_CLASS}`}>Carriers</h3>
                           {stateCarriers(code)}
+                          {selfEdit ? null : (
                           <button
                             type="button"
                             onClick={() => setLicenseEditor({ mode: "edit", license })}
@@ -1141,6 +1145,7 @@ export function AgentProfile({
                             <EditIcon className="size-3.5 shrink-0" />
                             Edit licence
                           </button>
+                          )}
                         </>
                       );
                     }}
@@ -1148,14 +1153,17 @@ export function AgentProfile({
                 ) : null
               }
               showLines
-              action={licencesAction}
-              onEdit={(license) => setLicenseEditor({ mode: "edit", license })}
-              onDelete={(license) =>
-                void runDelete(
-                  "Delete licence",
-                  `Delete the ${US_STATE_NAMES[license.state] ?? license.state} licence?`,
-                  () => removeLicence(license.state),
-                )
+              action={selfEdit ? undefined : licencesAction}
+              onEdit={selfEdit ? undefined : (license) => setLicenseEditor({ mode: "edit", license })}
+              onDelete={
+                selfEdit
+                  ? undefined
+                  : (license) =>
+                      void runDelete(
+                        "Delete licence",
+                        `Delete the ${US_STATE_NAMES[license.state] ?? license.state} licence?`,
+                        () => removeLicence(license.state),
+                      )
               }
             />
           ) : shown === "certifications" && certifications ? (

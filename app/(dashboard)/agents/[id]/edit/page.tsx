@@ -6,6 +6,7 @@ import { getAgentWithLicenses } from "@/lib/agents";
 import { allowForbidden } from "@/lib/api-server";
 import { getCarriers } from "@/lib/carriers";
 import { certifiableCarrier } from "@/lib/certification-options";
+import { getSessionUser } from "@/lib/session";
 import { getCertifications } from "@/lib/certifications";
 import { AgentFormPage } from "../../agent-form-page";
 import { draftFromCertification } from "../../new/certificate-draft";
@@ -33,10 +34,12 @@ export default async function EditAgentPage(props: EditAgentPageProps) {
   const loaded = await getAgentWithLicenses(id);
   if (!loaded) notFound();
 
-  const [carriers, certifications] = await Promise.all([
-    getCarriers(),
+  const [carriers, certifications, user] = await Promise.all([
+    // Empty when the role can't read carriers.
+    allowForbidden(getCarriers()).then((list) => list ?? []),
     // Null for a role without certifications view: the page then leaves the card out.
     allowForbidden(getCertifications({ agentId: id })),
+    getSessionUser(),
   ]);
 
   return (
@@ -45,6 +48,8 @@ export default async function EditAgentPage(props: EditAgentPageProps) {
       carriers={certifications ? carriers.map(certifiableCarrier) : null}
       initialCertificates={certifications ? certifications.map(draftFromCertification) : []}
       returnTo={from === "list" ? "/agents" : `/agents/${id}`}
+      // An agent's sign-in only reaches its own agent, and can't change its email, status or licences.
+      selfEdit={Boolean(user?.agentId)}
     />
   );
 }

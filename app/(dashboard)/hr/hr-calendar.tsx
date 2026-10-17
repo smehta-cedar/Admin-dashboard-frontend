@@ -347,7 +347,7 @@ export function HrCalendar({
           <LegendItem className={DAY_OFF_CLASSES.applied}>Day off, applied</LegendItem>
           <LegendItem className={DAY_OFF_CLASSES.approved}>Day off, approved</LegendItem>
           <LegendItem className={DAY_OFF_CLASSES.denied}>Day off, denied</LegendItem>
-          <LegendItem className={EXPIRY_CLASS}>Licence expires</LegendItem>
+          {expiries.length > 0 ? <LegendItem className={EXPIRY_CLASS}>Licence expires</LegendItem> : null}
         </ul>
 
         {detail ? (

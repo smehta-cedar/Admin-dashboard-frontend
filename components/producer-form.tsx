@@ -208,6 +208,12 @@ type ProducerFormProps<E extends object> = {
   ) => Promise<string | null>;
   layout?: ProducerFormLayout;
   /**
+   * An agent editing their own profile: the email (their sign-in) and the
+   * status can't be changed, and the licences are listed with no Add, Edit
+   * or Delete. Only staff change those; the API refuses them otherwise.
+   */
+  selfEdit?: boolean;
+  /**
    * Saves the values; returns (or resolves with) the error to show instead
    * of closing. While a promise is pending the buttons are disabled.
    */
@@ -367,6 +373,7 @@ export function ProducerForm<E extends object = Record<never, never>>({
   pageExtra,
   onLicencesChange,
   layout = "dialog",
+  selfEdit = false,
   onSave,
   close,
 }: ProducerFormProps<E>) {
@@ -510,7 +517,13 @@ export function ProducerForm<E extends object = Record<never, never>>({
   };
 
   // Status lives in the Identity header, not the grid: it is a setting, not a detail.
-  const status = (
+  const status = selfEdit ? (
+    <span className="flex items-center gap-2 text-sm text-fg-muted">
+      Status
+      <input type="hidden" name="status" value={initial?.status ?? "active"} />
+      <StatusBadge status={initial?.status ?? "active"} />
+    </span>
+  ) : (
     <label htmlFor={`${id}-status`} className="flex items-center gap-2 text-sm text-fg-muted">
       Status
       <select
@@ -645,7 +658,8 @@ export function ProducerForm<E extends object = Record<never, never>>({
           required
           autoComplete="off"
           defaultValue={initial?.email}
-          className={INPUT_CLASS}
+          readOnly={selfEdit}
+          className={selfEdit ? `${INPUT_CLASS} cursor-not-allowed bg-surface-muted text-fg-muted` : INPUT_CLASS}
         />
       </Field>
       <Field label="Phone" required htmlFor={`${id}-phone`} className={span.field}>
@@ -788,9 +802,11 @@ export function ProducerForm<E extends object = Record<never, never>>({
         <table className="w-full text-left text-sm">
           <thead className="bg-surface-hover text-xs text-fg-muted">
             <tr>
-              <th scope="col" className="px-3 py-2 font-medium">
-                Action
-              </th>
+              {selfEdit ? null : (
+                <th scope="col" className="px-3 py-2 font-medium">
+                  Action
+                </th>
+              )}
               <th scope="col" className="px-3 py-2 font-medium">
                 State
               </th>
@@ -822,6 +838,7 @@ export function ProducerForm<E extends object = Record<never, never>>({
           <tbody className="divide-y divide-line">
             {licenceList.map((entry) => (
               <tr key={entry.state} className="text-fg">
+                {selfEdit ? null : (
                 <td className="px-3 py-1 whitespace-nowrap">
                   <button
                     type="button"
@@ -841,6 +858,7 @@ export function ProducerForm<E extends object = Record<never, never>>({
                     <DeleteIcon className="size-3.5 shrink-0" />
                   </button>
                 </td>
+                )}
                 <td className="px-3 py-2">
                   <span className="font-mono text-xs font-medium text-fg-muted">{entry.state}</span>{" "}
                   {US_STATE_NAMES[entry.state] ?? ""}
@@ -872,7 +890,7 @@ export function ProducerForm<E extends object = Record<never, never>>({
       layout={layout}
       columns=""
       action={
-        onRequest && !entryOpen ? (
+        onRequest && !entryOpen && !selfEdit ? (
           <button type="button" onClick={openEntry} className={PROFILE_BUTTON_CLASS}>
             <span aria-hidden="true">+ </span>Add licence
           </button>
@@ -896,7 +914,7 @@ export function ProducerForm<E extends object = Record<never, never>>({
       </div>
       )}
 
-      {entryOpen ? (
+      {entryOpen && !selfEdit ? (
         <div className="min-w-0 mt-7">
           {entryRow}
           {draftError ? (

@@ -28,8 +28,9 @@ export default async function PasswordsPage() {
     // For the Add site password popup's Site select.
     getSites(),
     allowForbidden(getAgency()),
-    getAgents(),
-    getCarriers(),
+    // The filters' agents and carriers: empty when the role can't read them.
+    allowForbidden(getAgents()).then((list) => list ?? []),
+    allowForbidden(getCarriers()).then((list) => list ?? []),
   ]);
   // The agency, for its own passwords. A role that can't read the agency still
   // gets it from an agency password it can see.

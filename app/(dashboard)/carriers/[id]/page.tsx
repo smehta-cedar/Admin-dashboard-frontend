@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { NoAccess } from "@/components/no-access";
 import { canViewModule } from "@/lib/access";
 import { getAgents } from "@/lib/agents";
+import { allowForbidden } from "@/lib/api-server";
 import { getCarrierContracts } from "@/lib/carrier-contracts";
 import { getCarrierPolicies } from "@/lib/carrier-policies";
 import { getCarrier } from "@/lib/carriers";
@@ -25,9 +26,10 @@ export default async function CarrierProfilePage(props: PageProps<"/carriers/[id
   if (!carrier) notFound();
 
   const [carrierContracts, passwords, agents, policies, policyTypes] = await Promise.all([
-    getCarrierContracts(),
-    getPasswords(),
-    getAgents(),
+    // Other modules' lists: empty when the role can't read them.
+    allowForbidden(getCarrierContracts()).then((list) => list ?? []),
+    allowForbidden(getPasswords()).then((list) => list ?? []),
+    allowForbidden(getAgents()).then((list) => list ?? []),
     getCarrierPolicies(id),
     getPolicyTypes(),
   ]);

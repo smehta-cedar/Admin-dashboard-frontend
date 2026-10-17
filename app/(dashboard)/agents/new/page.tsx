@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { NoAccess } from "@/components/no-access";
 import { canModule } from "@/lib/access";
+import { allowForbidden } from "@/lib/api-server";
 import { getCarriers } from "@/lib/carriers";
 import { certifiableCarrier } from "@/lib/certification-options";
 import { NewAgentView } from "./new-agent-view";
@@ -18,6 +19,7 @@ export const metadata: Metadata = {
  */
 export default async function NewAgentPage() {
   if (!(await canModule("agents.list", "create"))) return <NoAccess title="Add agent" />;
-  const carriers = await getCarriers();
+  // Empty when the role can't read carriers.
+  const carriers = (await allowForbidden(getCarriers())) ?? [];
   return <NewAgentView carriers={carriers.map(certifiableCarrier)} />;
 }

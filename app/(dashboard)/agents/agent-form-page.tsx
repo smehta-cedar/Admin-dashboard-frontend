@@ -31,6 +31,8 @@ type AgentFormPageProps = {
   initialCertificates?: CertificateDraft[];
   /** Where Cancel and a successful save go. */
   returnTo: string;
+  /** An agent editing their own profile; see ProducerForm. */
+  selfEdit?: boolean;
 };
 
 function sameCertificate(a: CertificateDraft, b: CertificateDraft) {
@@ -52,6 +54,7 @@ export function AgentFormPage({
   agent,
   initialCertificates = [],
   returnTo,
+  selfEdit,
 }: AgentFormPageProps) {
   const router = useRouter();
   const { apply, commit } = useAgentsStore();
@@ -137,6 +140,7 @@ export function AgentFormPage({
         editing={agent}
         layout="page"
         licenceEntry="button"
+        selfEdit={selfEdit}
         onLicencesChange={async (licences) => {
           // Add agent has no row yet; the list is sent with the form.
           const currentId = agentId.current;

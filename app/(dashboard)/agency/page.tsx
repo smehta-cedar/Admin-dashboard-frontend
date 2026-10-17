@@ -19,7 +19,11 @@ export const metadata: Metadata = {
 
 export default async function AgencyPage() {
   if (!(await canViewModule("agencies"))) return <NoAccess title="Agency" />;
-  const [loaded, agents] = await Promise.all([getAgencyWithLicenses(), getAgents()]);
+  // The roster's agents: empty when the role can't read them.
+  const [loaded, agents] = await Promise.all([
+    getAgencyWithLicenses(),
+    allowForbidden(getAgents()).then((list) => list ?? []),
+  ]);
 
   if (!loaded) {
     const user = await getSessionUser();

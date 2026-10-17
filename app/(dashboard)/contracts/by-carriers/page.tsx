@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { NoAccess } from "@/components/no-access";
 import { canViewModule } from "@/lib/access";
 import { getAgents } from "@/lib/agents";
+import { allowForbidden } from "@/lib/api-server";
 import { getCarrierContracts } from "@/lib/carrier-contracts";
 import { getCarriers } from "@/lib/carriers";
 import { CarrierContractsView } from "./carrier-contracts-view";
@@ -14,8 +15,9 @@ export default async function ContractsByCarrierPage() {
   if (!(await canViewModule("contracts.by_carriers"))) return <NoAccess title="Contracts by carrier" />;
   const [contracts, agents, carriers] = await Promise.all([
     getCarrierContracts(),
-    getAgents(),
-    getCarriers(),
+    // Other modules' lists: empty when the role can't read them.
+    allowForbidden(getAgents()).then((list) => list ?? []),
+    allowForbidden(getCarriers()).then((list) => list ?? []),
   ]);
 
   return (
